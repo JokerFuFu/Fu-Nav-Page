@@ -1,0 +1,23 @@
+/* 工具栏收藏弹窗（仿 Infinity 收藏编辑框） */
+html,body{ margin:0; }
+body{ width:368px; background:var(--bg); color:var(--text); }
+.pop{ padding:18px 18px 16px; display:flex; flex-direction:column; gap:14px; }
+.pop-h{ display:flex; align-items:center; gap:10px; }
+.pop-logo{ width:26px; height:26px; border-radius:8px; background:linear-gradient(135deg,var(--accent),#9b6ef3); display:grid; place-items:center; color:#fff; font-weight:800; font-size:13px; flex:0 0 26px; }
+.pop-title{ font-size:15px; font-weight:700; letter-spacing:.2px; }
+.pop-sub{ font-size:11px; color:var(--text-3); margin-left:auto; }
+.pop-row{ display:flex; gap:10px; }
+.pop-row>*{ flex:1; min-width:0; }
+.pop-foot{ display:flex; gap:10px; margin-top:2px; }
+.pop-foot .fn-btn{ flex:1; padding:11px; font-size:14px; }
+.pop-status{ font-size:12px; color:var(--text-3); min-height:16px; text-align:center; }
+.pop-status.ok{ color:#22c55e; } .pop-status.err{ color:#fb7185; }
+.pop-loading{ padding:40px 0; text-align:center; color:var(--text-3); font-size:13px; }
+
+/* 已收藏徽章：实心成功色 pill + 白勾，醒目提示当前页已在导航中，避免重复收藏 */
+.pop-badge{ align-self:flex-start; display:flex; align-items:center; gap:var(--s2);
+  padding:var(--s2) var(--s3); border-radius:999px; background:var(--ok-strong); color:#fff;
+  font-size:12px; font-weight:600; letter-spacing:.01em; }
+.pop-badge-ic{ width:14px; height:14px; flex:0 0 14px; background:currentColor;
+  -webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E");
+  mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E"); }

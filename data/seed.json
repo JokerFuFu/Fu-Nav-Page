@@ -1,0 +1,298 @@
+{
+  "version": 2,
+  "settings": {
+    "title": "Fu.",
+    "theme": "auto",
+    "openIn": "_blank",
+    "searchEngine": "bing",
+    "showClock": true,
+    "showSearch": true,
+    "showStatus": true,
+    "locked": true,
+    "layout": "fusion",
+    "showWeather": true,
+    "agentPort": 7842,
+    "agentToken": "fu-nav-local",
+    "widgets": [
+      {
+        "id": "w-clock",
+        "type": "clock"
+      },
+      {
+        "id": "w-weather",
+        "type": "weather"
+      },
+      {
+        "id": "w-today",
+        "type": "today",
+        "items": [],
+        "countdowns": []
+      },
+      {
+        "id": "w-hw1",
+        "type": "hwmon",
+        "label": "本机硬件",
+        "url": "http://127.0.0.1:7842"
+      }
+    ]
+  },
+  "groups": [
+    {
+      "id": "g01",
+      "name": "常用推荐",
+      "icon": "star",
+      "color": "#4f5bd5",
+      "collapsed": false,
+      "items": [
+        {
+          "id": "i001",
+          "name": "GitHub",
+          "url": "https://github.com/",
+          "note": "",
+          "fav": true
+        },
+        {
+          "id": "i002",
+          "name": "哔哩哔哩",
+          "url": "https://www.bilibili.com/",
+          "note": "",
+          "fav": true
+        },
+        {
+          "id": "i003",
+          "name": "YouTube",
+          "url": "https://www.youtube.com/",
+          "note": "",
+          "fav": true
+        },
+        {
+          "id": "i004",
+          "name": "知乎",
+          "url": "https://www.zhihu.com/",
+          "note": "",
+          "fav": true
+        },
+        {
+          "id": "i005",
+          "name": "微博",
+          "url": "https://weibo.com/",
+          "note": ""
+        },
+        {
+          "id": "i006",
+          "name": "豆瓣",
+          "url": "https://www.douban.com/",
+          "note": ""
+        }
+      ]
+    },
+    {
+      "id": "g02",
+      "name": "家庭网络",
+      "icon": "network",
+      "color": "#2563eb",
+      "collapsed": false,
+      "items": [
+        {
+          "id": "f01",
+          "type": "folder",
+          "name": "NAS",
+          "icon": "hard-drive",
+          "items": [
+            {
+              "id": "i007",
+              "name": "DSM 管理",
+              "url": "https://192.168.1.10:5001/",
+              "note": "群晖/绿联等 NAS 后台，改成你的 IP"
+            },
+            {
+              "id": "i008",
+              "name": "Jellyfin",
+              "url": "http://192.168.1.10:8096/",
+              "note": ""
+            },
+            {
+              "id": "i009",
+              "name": "qBittorrent",
+              "url": "http://192.168.1.10:8080/",
+              "note": ""
+            },
+            {
+              "id": "f02",
+              "type": "folder",
+              "name": "Docker 应用",
+              "icon": "container",
+              "items": [
+                {
+                  "id": "i010",
+                  "name": "Portainer",
+                  "url": "http://192.168.1.10:9000/",
+                  "note": ""
+                },
+                {
+                  "id": "i011",
+                  "name": "Memos",
+                  "url": "http://192.168.1.10:5230/",
+                  "note": ""
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "i012",
+          "name": "主路由器",
+          "url": "http://192.168.1.1/",
+          "note": "改成你的路由器地址"
+        },
+        {
+          "id": "i013",
+          "name": "AdGuard Home",
+          "url": "http://192.168.1.2:3000/",
+          "note": ""
+        }
+      ]
+    },
+    {
+      "id": "g03",
+      "name": "开发工具",
+      "icon": "code",
+      "color": "#059669",
+      "collapsed": false,
+      "page": "工作",
+      "items": [
+        {
+          "id": "i014",
+          "name": "GitHub",
+          "url": "https://github.com/",
+          "note": ""
+        },
+        {
+          "id": "i015",
+          "name": "Stack Overflow",
+          "url": "https://stackoverflow.com/",
+          "note": ""
+        },
+        {
+          "id": "i016",
+          "name": "MDN",
+          "url": "https://developer.mozilla.org/",
+          "note": ""
+        },
+        {
+          "id": "i017",
+          "name": "Can I use",
+          "url": "https://caniuse.com/",
+          "note": ""
+        },
+        {
+          "id": "i018",
+          "name": "Regex101",
+          "url": "https://regex101.com/",
+          "note": ""
+        },
+        {
+          "id": "i019",
+          "name": "npm",
+          "url": "https://www.npmjs.com/",
+          "note": ""
+        }
+      ]
+    },
+    {
+      "id": "g04",
+      "name": "设计灵感",
+      "icon": "palette",
+      "color": "#d946ef",
+      "collapsed": false,
+      "page": "工作",
+      "items": [
+        {
+          "id": "i020",
+          "name": "Dribbble",
+          "url": "https://dribbble.com/",
+          "note": ""
+        },
+        {
+          "id": "i021",
+          "name": "Figma",
+          "url": "https://www.figma.com/",
+          "note": ""
+        },
+        {
+          "id": "i022",
+          "name": "Coolors",
+          "url": "https://coolors.co/",
+          "note": ""
+        },
+        {
+          "id": "i023",
+          "name": "iconfont",
+          "url": "https://www.iconfont.cn/",
+          "note": ""
+        }
+      ]
+    },
+    {
+      "id": "g05",
+      "name": "影音娱乐",
+      "icon": "film",
+      "color": "#ea580c",
+      "collapsed": false,
+      "items": [
+        {
+          "id": "i024",
+          "name": "Netflix",
+          "url": "https://www.netflix.com/",
+          "note": ""
+        },
+        {
+          "id": "i025",
+          "name": "Spotify",
+          "url": "https://open.spotify.com/",
+          "note": ""
+        },
+        {
+          "id": "i026",
+          "name": "Steam",
+          "url": "https://store.steampowered.com/",
+          "note": ""
+        },
+        {
+          "id": "i027",
+          "name": "Bangumi",
+          "url": "https://bgm.tv/",
+          "note": ""
+        }
+      ]
+    },
+    {
+      "id": "g06",
+      "name": "资讯阅读",
+      "icon": "newspaper",
+      "color": "#64748b",
+      "collapsed": false,
+      "archived": true,
+      "items": [
+        {
+          "id": "i028",
+          "name": "少数派",
+          "url": "https://sspai.com/",
+          "note": ""
+        },
+        {
+          "id": "i029",
+          "name": "V2EX",
+          "url": "https://www.v2ex.com/",
+          "note": ""
+        },
+        {
+          "id": "i030",
+          "name": "Hacker News",
+          "url": "https://news.ycombinator.com/",
+          "note": ""
+        }
+      ]
+    }
+  ]
+}

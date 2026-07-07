@@ -1,0 +1,27 @@
+# 系统
+.DS_Store
+*.log
+
+# 依赖/构建（本项目零依赖，无需提交）
+node_modules/
+dist/
+
+# 扩展打包产物 & 私钥（务必不要提交 .pem）
+*.crx
+*.pem
+
+# 编辑器
+.vscode/
+.idea/
+
+# 临时
+tmp/
+*.tmp
+.gstack/
+/*.png   # 根目录临时截图（icons/ 下的图标仍会提交）
+
+# codex-image-gen 的会话工作目录（出图草稿/中间产物，非项目资产）
+codex-image-runs/
+
+# UI loop 截图/脚手架（跨轮工作区，非项目资产）
+scratchpad/
