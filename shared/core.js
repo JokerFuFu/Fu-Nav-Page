@@ -496,8 +496,9 @@ class Core {
     const DAV_HINT='存到你<b>自己的 WebDAV</b>（群晖「WebDAV Server」套件 / Nextcloud / 任意 WebDAV），数据在自己服务器、不靠第三方账号（仿 Floccus）。<br><b>群晖：</b>装 <code>WebDAV Server</code> 套件→启用 HTTPS（默认 5006）→建共享文件夹→URL 填 <code>https://你的DDNS:5006/文件夹/</code>，账号密码用 DSM 账号。首次「测试/备份」会弹授权该网址，点允许。';
     const GD_HINT='存到你的 <b>Google Drive</b>（应用隐藏空间 appData，不占可见文件）。需一次性自建 OAuth：<br>① <a href="https://console.cloud.google.com/" target="_blank">Google Cloud Console</a> 建项目→启用 <b>Google Drive API</b>；② 凭据→创建 OAuth 客户端 ID→类型选 <b>Web 应用</b>；③ 「已获授权的重定向 URI」填 <code id="fn-gdredir"></code>（这是本扩展的回调地址）；④ 把客户端 ID 粘到上面。iCloud 无对扩展开放的接口，做不了，用这两种之一。';
     const davBox=el('div'); const clRow=el('div','fn-row'); const fU=el('div','fn-field'); fU.append(el('label',null,'账号'),clUser); const fP=el('div','fn-field'); fP.append(el('label',null,'密码'),clPass); clRow.append(fU,fP);
-    davBox.append(el('div','fn-sub','WebDAV 地址（填到目录）'), clUrl, clRow);
-    const gdBox=el('div'); gdBox.append(el('div','fn-sub','Google OAuth Client ID'), clCid);
+    const fUrl=el('div','fn-field'); fUrl.appendChild(clUrl);   // 裸 input 需 .fn-field 皮肤（宽度/底色/焦点环）
+    davBox.append(el('div','fn-sub','WebDAV 地址（填到目录）'), fUrl, clRow);
+    const gdBox=el('div'); const fCid=el('div','fn-field'); fCid.appendChild(clCid); gdBox.append(el('div','fn-sub','Google OAuth Client ID'), fCid);
     const clHint=el('div','fn-hint');
     const cfgBox=el('div');
     const showByType=()=>{ cfgBox.hidden=!clToggle.querySelector('input').checked;   // S10: 启用开关驱动配置区显隐
