@@ -44,6 +44,14 @@ python3 -m http.server 8000
 
 浏览器开 `http://localhost:8000/newtab.html`，先 `localStorage.clear()` 再刷新 → 应渲染演示数据、console 无红错。这是改动前的基线。
 
+- [ ] **0.3** 【安全铁律】设置本地 commit 身份为 GitHub noreply，**防止公开仓泄漏真实邮箱**（新 clone 会默认用本机全局 git 身份）
+
+```bash
+git config user.name  "JokerFuFu"
+git config user.email "161151890+JokerFuFu@users.noreply.github.com"
+git config user.email   # 必须回显 noreply，绝不能是真实 gmail
+```
+
 ---
 
 ## Task 1：演示与信任修复（spec 工作包 1；条目 R1/R2/R3/R4/R10/R11/R12）
