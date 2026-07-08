@@ -244,8 +244,13 @@ class Core {
   /* 设为常用：固定到首页 */
   pinFavorite(item){ if(!item)return; item.fav=true; this.save(true); }
   setFavOrder(ids){ this.cfg.favOrder=ids; this.save(true); }
-  moveItemToGroup(iid, toGid){ let it=null,from=null; for(const g of this.groups){ const f=g.items.find(x=>x.id===iid); if(f){it=f;from=g;break;} }
-    const to=this.groups.find(g=>g.id===toGid); if(!it||!to||from===to)return false; from.items=from.items.filter(x=>x!==it); to.items.push(it); this.save(true); return true; }
+  /* 递归定位（任意层级，含文件夹内）后移动到目标分组顶层；同组顶层为无操作，同组文件夹内=移出文件夹 */
+  moveItemToGroup(iid, toGid){ const to=this.groups.find(g=>g.id===toGid); if(!to)return false;
+    for(const g of this.groups){ const hit=this.flatItems(g).find(x=>x.item.id===iid);
+      if(!hit) continue;
+      if(g===to && !hit.folder) return false;
+      this._removeItem(g, hit.item); to.items.push(hit.item); this.save(true); return true; }
+    return false; }
 
   /* ===== 子文件夹（分组 → 文件夹 → 网站，两级）===== */
   isFolder(it){ return !!(it && it.type==='folder'); }
@@ -426,9 +431,10 @@ class Core {
       if(!/^[a-z]+:\/\//i.test(url)&&!/^(javascript|chrome|edge|about):/i.test(url)) url='https://'+url;
       const data={name:nameI.value.trim()||hostOf(url)||url,url,note:noteI.value.trim(),icon:iconEd.getIcon(),fav:favC.querySelector('input').checked?true:undefined,frame:frameC.querySelector('input').checked?true:undefined};
       const tg=this.groups.find(g=>g.id===sel.value);
+      if(!tg){ this.toast('目标分组已不存在','err'); return; }
       if(isNew){ data.id=uid('i'); if(addTo && addTo.gid===tg.id && this.isFolder(addTo.folder)){ (addTo.folder.items||(addTo.folder.items=[])).push(data); } else tg.items.push(data); } else { const keep=item.id; Object.assign(item,data); item.id=keep; const cur=this.groups.find(g=>this._containsItem(g,item)); if(cur&&cur!==tg){ this._removeItem(cur,item); tg.items.push(item); } }
       this.save(true);this.rerender();this.closeModal(); });
-    const foot=[ isNew?null:this.btn('删除','danger',()=>{const g=this.groups.find(x=>x.items.includes(item));if(g)g.items=g.items.filter(x=>x!==item);this.save(true);this.rerender();this.closeModal();}), this.btn('取消','ghost',()=>this.closeModal()), save ];
+    const foot=[ isNew?null:this.btn('删除','danger',()=>{this.deleteItem(item);this.closeModal();}), this.btn('取消','ghost',()=>this.closeModal()), save ];   // deleteItem 递归定位（含文件夹内），与卡片悬停删除同一条路径
     const row=el('div','fn-row'); row.append(this.field('所属分组',sel),this.field('备注',noteI));
     this.openModal(isNew?'添加网站':'编辑网站',[this.field('名称',nameI),this.field('网址',urlI),row,this.field('图标',iconEd.node),favC,frameC],foot.filter(Boolean));
     setTimeout(()=>urlI.focus(),50); }
@@ -565,7 +571,7 @@ class Core {
   exportConfig(){ const b=new Blob([JSON.stringify(this.cfg,null,2)],{type:'application/json'});const a=el('a');a.href=URL.createObjectURL(b);a.download='fu-nav-backup-'+new Date().toISOString().slice(0,10)+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);this.toast('已导出','ok'); }
   importConfig(){ const i=el('input');i.type='file';i.accept='.json,.infinity';i.onchange=()=>{const f=i.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);
     if(d && d.data && d.data.site){ return this._mergeInfinity(d); }   // Infinity 备份 → 合并导入
-    if(!d.groups)throw 0;this.cfg=d;this.migrate();this.applyTheme();this.rerender();this.save(true);this.closeModal();this.toast('已导入','ok');}catch{this.toast('文件格式错误','err');}};r.readAsText(f);};i.click(); }
+    if(!Array.isArray(d.groups))throw 0;this.cfg=d;this.migrate();this.applyTheme();this.rerender();this.save(true);this.closeModal();this.toast('已导入','ok');}catch{this.toast('文件格式错误','err');}};r.readAsText(f);};i.click(); }
   /* 逆向导入 Infinity New Tab 备份（.infinity），文件夹→分组、去重后并入 */
   importInfinity(){ const i=el('input');i.type='file';i.accept='.infinity,.json';i.onchange=()=>{const f=i.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{let d;try{d=JSON.parse(r.result);}catch{this.toast('文件解析失败','err');return;} this._mergeInfinity(d);};r.readAsText(f);};i.click(); }
   _mergeInfinity(d){ const parsed=infinityToGroups(d);
