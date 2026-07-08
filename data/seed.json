@@ -27,12 +27,6 @@
         "type": "today",
         "items": [],
         "countdowns": []
-      },
-      {
-        "id": "w-hw1",
-        "type": "hwmon",
-        "label": "本机硬件",
-        "url": "http://127.0.0.1:7842"
       }
     ]
   },
