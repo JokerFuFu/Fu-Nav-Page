@@ -311,6 +311,7 @@ class Core {
         {ic:'cpu',label:'硬件监控设置',run:()=>{ const w=(this.settings.widgets||[]).find(x=>x.type==='hwmon'); w?this.openHwmonEditor(w):this.addWidget('hwmon'); }},
         {ic:'download',label:'导出备份',run:()=>this.exportConfig()},
         {ic:'upload',label:'导入备份',run:()=>this.importConfig()},
+        {ic:'link',label:'检测失效链接',run:async()=>{ this.toast('检测中…'); await this.checkLinksNow(); this.toast('检测完成','ok'); }},
         {ic:'settings',label:'打开设置',run:()=>this.openSettings()},
         {ic:'sun-moon',label:'切换深浅色',run:()=>{ const seq=['auto','dark','light']; const i=seq.indexOf(this.settings.theme||'auto'); this.settings.theme=seq[(i+1)%3]; this.applyTheme(); this.save(); }},
         {ic:'bookmark',label:'导入浏览器书签',run:()=>this.importBookmarks()},
@@ -414,6 +415,10 @@ class Core {
     else b.textContent=t;
     if(on)b.onclick=on; return b; }
   toggle(label,val,on){ const w=el('label','fn-switch'); const c=el('input'); c.type='checkbox'; c.checked=val; c.onchange=()=>on(c.checked); w.append(el('span',null,label),c); return w; }
+  /* 分段选择（主题/打开方式/云端类型等）*/
+  seg(opts,cur,on){ const w=el('div','fn-seg'); opts.forEach(([v,t])=>{ const b=el('button',null,t); if(v===cur)b.classList.add('on'); b.onclick=()=>{ $$('button',w).forEach(x=>x.classList.remove('on')); b.classList.add('on'); on(v); }; w.appendChild(b); }); return w; }
+  /* 同步类弹层的「按钮行 + 状态行」组合（云 / 书签共用）*/
+  syncActionRow(buttons,status){ const w=el('div'); const row=el('div','fn-wrap'); (buttons||[]).forEach(b=>b&&row.appendChild(b)); w.append(row,status); return w; }
   /* 可折叠分区（设置面板分区用）*/
   sect(title, nodes, open){ const d=el('details','fn-sect'); if(open)d.open=true; const s=el('summary','fn-sect-h'); const ar=el('span','fn-sect-ar lucide-mask'); ar.style.webkitMaskImage=ar.style.maskImage=`url("${lucide('chevron-down')}")`; s.append(el('span',null,title), ar); d.appendChild(s); (nodes||[]).forEach(n=>n&&d.appendChild(n)); return d; }
 
@@ -482,81 +487,94 @@ class Core {
     this.openModal('硬件监控（Glances）',[this.field('名称',labelI),this.field('Glances 端点',urlI),hint],[this.btn('取消','ghost',()=>this.closeModal()),save]); setTimeout(()=>urlI.focus(),50); }
 
 
-  /* 设置 */
-  openSettings(){ const s=this.settings; const titleI=this.inp(s.title||'Fu 导航');
-    const seg=(opts,cur,on)=>{const w=el('div','fn-seg');opts.forEach(([v,t])=>{const b=el('button',null,t);if(v===cur)b.classList.add('on');b.onclick=()=>{$$('button',w).forEach(x=>x.classList.remove('on'));b.classList.add('on');on(v);};w.appendChild(b);});return w;};
-    const engSel=el('select'); Object.entries(ENGINES).forEach(([k,v])=>{const o=el('option',null,v.name);o.value=k;if(k===s.searchEngine)o.selected=true;engSel.appendChild(o);});
-    const accentGrid=el('div','fn-colorgrid');
-    ACCENTS.forEach(a=>{ const b=el('button','fn-colorpick'+(s.accentId===a.id?' sel':'')); b.type='button'; b.title=a.name;
-      b.style.background=a.dark.accent;
-      b.onclick=()=>{ s.accentId=a.id; $$('.fn-colorpick',accentGrid).forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); this.applyAccent(); };
-      accentGrid.appendChild(b); });
-    const dataBtns=el('div','fn-wrap'); dataBtns.append(
-      this.btn('导入浏览器书签','ghost',()=>this.importBookmarks(),'bookmark'),
-      this.btn('导入 Infinity 备份','ghost',()=>this.importInfinity(),'file-down'),
-      this.btn('导出备份','ghost',()=>this.exportConfig(),'download'),
-      this.btn('导入备份','ghost',()=>this.importConfig(),'upload'),
-      this.btn('立即检测失效链接','ghost',async()=>{ this.toast('检测中…'); await this.checkLinksNow(); this.toast('检测完成','ok'); },'link'),
-      this.btn('恢复默认','ghost',async()=>{if(confirm('用内置默认覆盖当前配置？')){this.cfg=await this.fetchSeed();this.migrate();this.applyTheme();this.rerender();this.save(true);this.closeModal();}},'rotate-ccw'));
-    const info=el('div','fn-hint'); info.innerHTML=isExtension?'<b>浏览器账号同步已开启</b>：配置随 Chrome/Edge 账号自动同步到登录同账号的设备。要存到<b>自己的服务器</b>用下方「自托管云同步」。提醒/日历/AI日报 需本机 <code>agent/</code> 服务。':'<b>预览模式</b>：配置仅存本浏览器；装成扩展后启用同步。';
-    // 云同步（WebDAV / Google Drive）
+  /* 云同步（WebDAV / Google Drive）子弹层 —— 从 openSettings 拆出（S1/S4），结构照 openHwmonEditor；关闭/保存回设置 */
+  openCloudEditor(){ const s=this.settings;
     const cl = s.cloud || (s.cloud={enabled:false,type:'webdav',url:'',user:'',pass:'',gdriveClientId:''}); if(!cl.type)cl.type='webdav';
     const clUrl=this.inp(cl.url||'','https://你的群晖DDNS:5006/共享文件夹/'), clUser=this.inp(cl.user||'','WebDAV 账号'), clPass=this.inp(cl.pass||'','密码'); clPass.type='password';
     const clCid=this.inp(cl.gdriveClientId||'','xxxxx.apps.googleusercontent.com');
     const clStatus=el('div','fn-sub','');
-    const clToggle=this.toggle('启用（改动自动备份 + 启动自动拉取最新）', !!cl.enabled, ()=>{});
     const DAV_HINT='存到你<b>自己的 WebDAV</b>（群晖「WebDAV Server」套件 / Nextcloud / 任意 WebDAV），数据在自己服务器、不靠第三方账号（仿 Floccus）。<br><b>群晖：</b>装 <code>WebDAV Server</code> 套件→启用 HTTPS（默认 5006）→建共享文件夹→URL 填 <code>https://你的DDNS:5006/文件夹/</code>，账号密码用 DSM 账号。首次「测试/备份」会弹授权该网址，点允许。';
     const GD_HINT='存到你的 <b>Google Drive</b>（应用隐藏空间 appData，不占可见文件）。需一次性自建 OAuth：<br>① <a href="https://console.cloud.google.com/" target="_blank">Google Cloud Console</a> 建项目→启用 <b>Google Drive API</b>；② 凭据→创建 OAuth 客户端 ID→类型选 <b>Web 应用</b>；③ 「已获授权的重定向 URI」填 <code id="fn-gdredir"></code>（这是本扩展的回调地址）；④ 把客户端 ID 粘到上面。iCloud 无对扩展开放的接口，做不了，用这两种之一。';
     const davBox=el('div'); const clRow=el('div','fn-row'); const fU=el('div','fn-field'); fU.append(el('label',null,'账号'),clUser); const fP=el('div','fn-field'); fP.append(el('label',null,'密码'),clPass); clRow.append(fU,fP);
     davBox.append(el('div','fn-sub','WebDAV 地址（填到目录）'), clUrl, clRow);
     const gdBox=el('div'); gdBox.append(el('div','fn-sub','Google OAuth Client ID'), clCid);
     const clHint=el('div','fn-hint');
-    const showByType=()=>{ davBox.hidden=(cl.type!=='webdav'); gdBox.hidden=(cl.type!=='gdrive'); clHint.innerHTML=(cl.type==='gdrive'?GD_HINT:DAV_HINT);
+    const cfgBox=el('div');
+    const showByType=()=>{ cfgBox.hidden=!clToggle.querySelector('input').checked;   // S10: 启用开关驱动配置区显隐
+      davBox.hidden=(cl.type!=='webdav'); gdBox.hidden=(cl.type!=='gdrive'); clHint.innerHTML=(cl.type==='gdrive'?GD_HINT:DAV_HINT);
       const re=$('#fn-gdredir',clHint); if(re&&isExtension&&chrome.identity){ try{re.textContent=chrome.identity.getRedirectURL();}catch{} } };
-    const typeSeg=seg([['webdav','WebDAV / 群晖'],['gdrive','Google Drive']], cl.type, v=>{ cl.type=v; showByType(); });
+    const clToggle=this.toggle('启用（改动自动备份 + 启动自动拉取最新）', !!cl.enabled, ()=>showByType());
+    const typeSeg=this.seg([['webdav','WebDAV / 群晖'],['gdrive','Google Drive']], cl.type, v=>{ cl.type=v; showByType(); });
     const applyCl=()=>{ cl.url=clUrl.value.trim(); cl.user=clUser.value.trim(); cl.pass=clPass.value; cl.gdriveClientId=clCid.value.trim(); cl.enabled=clToggle.querySelector('input').checked; };
     const missing=()=> cl.type==='webdav' ? !clUrl.value.trim() : !clCid.value.trim();
-    const clBtns=el('div','fn-wrap'); clBtns.append(
+    const clBtns=[
       this.btn('测试连接','ghost',async()=>{ applyCl(); if(missing()){clStatus.textContent='请先填好上面的字段';return;} clStatus.textContent='测试中…'; if(cl.type==='webdav')await this.ensureCloudPermission(cl.url); const r=await this.cloudTest(); clStatus.textContent=(r.ok?'成功：':'失败：')+r.reason; },'plug-zap'),
       this.btn('立即备份到云','ghost',async()=>{ applyCl(); if(missing()){clStatus.textContent='请先填好上面的字段';return;} if(cl.type==='webdav')await this.ensureCloudPermission(cl.url); clStatus.textContent='备份中…'; const r=await cloudPut(this.settings,this.cfg); clStatus.textContent=r.ok?'已备份到云':'失败：'+(r.reason||''); this.save(); },'cloud-upload'),
       this.btn('从云恢复','ghost',async()=>{ applyCl(); if(missing()){clStatus.textContent='请先填好上面的字段';return;} if(!confirm('用云端配置覆盖本机当前配置？'))return; if(cl.type==='webdav')await this.ensureCloudPermission(cl.url); clStatus.textContent='恢复中…'; const ok=await this.cloudRestore(); clStatus.textContent=ok?'已从云恢复':'恢复失败'; if(ok)this.closeModal(); },'cloud-download'),
-    );
-    const clWrap=el('div'); clWrap.append(clToggle, el('div','fn-sub','云端'), typeSeg, davBox, gdBox, clBtns, clStatus, clHint); showByType();
-    // 浏览器书签双向同步
+    ];
+    cfgBox.append(el('div','fn-sub','云端'), typeSeg, davBox, gdBox, this.syncActionRow(clBtns,clStatus), clHint); showByType();
+    this.openModal('云同步（WebDAV / Google Drive）',[clToggle, cfgBox],[
+      this.btn('关闭','ghost',()=>this.openSettings()),
+      this.btn('保存','primary',async()=>{ applyCl(); if(cl.enabled&&cl.url)await this.ensureCloudPermission(cl.url); this.save(true); this.openSettings(); }) ]); }
+
+  /* 浏览器书签双向同步 子弹层 —— 从 openSettings 拆出（S1/S4）；关闭/保存回设置 */
+  openBmEditor(){ const s=this.settings;
     const bmS = s.bmSync || (s.bmSync={enabled:false});
     const bmToggle=this.toggle('启用自动双向同步（导航改动↔浏览器书签实时互通）', !!bmS.enabled, ()=>{});
     const bmStatus=el('div','fn-sub','');
-    const bmBtns=el('div','fn-wrap'); bmBtns.append(
+    const bmBtns=[
       this.btn('立即导出到书签','ghost',async()=>{ bmStatus.textContent='导出中…'; const ok=await this.bmExportNow(); bmStatus.textContent=ok?('已导出到浏览器「'+ROOT_TITLE+'」文件夹'):'导出失败'; },'upload'),
       this.btn('从书签导入','ghost',async()=>{ bmStatus.textContent='导入中…'; const ok=await this.bmImportNow(); bmStatus.textContent=ok?'已从浏览器书签同步':'导入失败'; },'download'),
-    );
+    ];
     const bmHint=el('div','fn-hint'); bmHint.innerHTML='导航的分组/网站 与浏览器「书签栏 / <b>'+ROOT_TITLE+'</b>」文件夹保持一致：导航里增删改写入该文件夹，浏览器里增删改也会同步回导航（其它书签不动）。';
-    const bmWrap=el('div'); bmWrap.append(bmToggle, bmBtns, bmStatus, bmHint);
-    const cardsWrap=(()=>{const w=el('div'); const addRow=el('div','fn-wrap');
-        [['today','今日'],['hwmon','硬件监控'],['weather','天气']].forEach(([t,lb])=>addRow.appendChild(this.btn(lb,'ghost',()=>{ if(t==='hwmon'){this.closeModal();} this.addWidget(t); if(t!=='hwmon')this.toast('已添加「'+lb+'」卡片，首页解锁后可拖拽排序','ok'); },'plus')));
-        w.append(el('div','fn-sub','添加卡片（或在首页解锁后右键卡片区添加）'), addRow,
-          this.toggle('显示时钟与问候',s.showClock,v=>{s.showClock=v;}),
-          this.toggle('显示天气',s.showWeather,v=>{s.showWeather=v;}),
-          this.toggle('内网在线状态探测',s.showStatus,v=>{s.showStatus=v;}));
-        return w;})();
+    this.openModal('浏览器书签同步',[bmToggle, this.syncActionRow(bmBtns,bmStatus), bmHint],[
+      this.btn('关闭','ghost',()=>this.openSettings()),
+      this.btn('保存','primary',async()=>{ const bmWas=!!bmS.enabled; bmS.enabled=bmToggle.querySelector('input').checked; this.save(true); if(bmS.enabled&&!bmWas)await this.bmExportNow(); this.openSettings(); }) ]); }
+
+  /* 设置 —— 常用（默认展开）/ 同步与备份 / 高级 三层（S2/S7/S9）；云与书签同步收成「摘要+按钮→子弹层」（S1） */
+  openSettings(){ const s=this.settings; const titleI=this.inp(s.title||'Fu 导航');
+    const accentGrid=el('div','fn-colorgrid');
+    ACCENTS.forEach(a=>{ const b=el('button','fn-colorpick'+(s.accentId===a.id?' sel':'')); b.type='button'; b.title=a.name;
+      b.style.background=a.dark.accent;
+      b.onclick=()=>{ s.accentId=a.id; $$('.fn-colorpick',accentGrid).forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); this.applyAccent(); };
+      accentGrid.appendChild(b); });
+    const addRow=el('div','fn-wrap');
+    [['today','今日'],['hwmon','硬件监控'],['weather','天气']].forEach(([t,lb])=>addRow.appendChild(this.btn(lb,'ghost',()=>{ if(t==='hwmon'){this.closeModal();} this.addWidget(t); if(t!=='hwmon')this.toast('已添加「'+lb+'」卡片，首页解锁后可拖拽排序','ok'); },'plus')));
+    // 同步摘要（渐进披露：设置里只见状态，配置进子弹层）
+    const cl=s.cloud||{}; const cloudSum= cl.enabled ? ('已启用 '+(cl.type==='gdrive'?'Google Drive':'WebDAV')) : ((cl.url||cl.gdriveClientId)?'已配置，未启用':'未配置');
+    const bmSum=(s.bmSync&&s.bmSync.enabled)?'已启用自动双向同步':'未启用';
+    const cloudWrap=el('div'); cloudWrap.append(el('div','fn-sub',cloudSum), this.btn('设置云同步','ghost',()=>this.openCloudEditor(),'cloud'));
+    const bmWrap=el('div'); bmWrap.append(el('div','fn-sub',bmSum), this.btn('设置书签同步','ghost',()=>this.openBmEditor(),'bookmark'));
+    const backupBtns=el('div','fn-wrap'); backupBtns.append(
+      this.btn('导出备份','ghost',()=>this.exportConfig(),'download'),
+      this.btn('导入备份','ghost',()=>this.importConfig(),'upload'),
+      this.btn('导入浏览器书签','ghost',()=>this.importBookmarks(),'bookmark'));
+    const backupHint=el('div','fn-hint'); backupHint.innerHTML='「导入备份」支持本应用备份与 <b>Infinity</b> 备份（.infinity 自动识别、按 URL 去重并入）；「检测失效链接」在命令面板（⌘K）。';
+    const backupWrap=el('div'); backupWrap.append(backupBtns, backupHint);
+    const info=el('div','fn-hint'); info.innerHTML=isExtension?'<b>浏览器账号同步已开启</b>：配置随 Chrome/Edge 账号自动同步到登录同账号的设备。要存到<b>自己的服务器</b>用上方「云同步」。提醒/日历/AI日报 需本机 <code>agent/</code> 服务。':'<b>预览模式</b>：配置仅存本浏览器；装成扩展后启用同步。';
+    const dangerWrap=el('div','fn-wrap'); dangerWrap.append(
+      this.btn('恢复默认','ghost',async()=>{if(confirm('用内置默认覆盖当前配置？')){this.cfg=await this.fetchSeed();this.migrate();this.applyTheme();this.rerender();this.save(true);this.closeModal();}},'rotate-ccw'));
     this.openModal('设置',[
-      this.sect('外观 & 搜索',[
+      this.sect('常用',[
         this.field('标题',titleI),
-        this.field('主题',seg([['auto','跟随系统'],['dark','深色'],['light','浅色']],s.theme,v=>{s.theme=v;this.applyTheme();})),
-        this.field('打开方式',seg([['_blank','新标签页'],['_self','当前页']],s.openIn,v=>{s.openIn=v;})),
-        this.field('搜索引擎',engSel),
+        this.field('主题',this.seg([['auto','跟随系统'],['dark','深色'],['light','浅色']],s.theme,v=>{s.theme=v;this.applyTheme();})),
         this.field('强调色',accentGrid),
+        this.toggle('显示时钟与问候',s.showClock,v=>{s.showClock=v;}),
+        this.toggle('显示天气',s.showWeather,v=>{s.showWeather=v;}),
+        this.toggle('内网在线状态探测',s.showStatus,v=>{s.showStatus=v;}),
+        el('div','fn-sub','添加卡片（或在首页解锁后右键卡片区添加）'), addRow,
       ], true),
-      this.sect('卡片',[ cardsWrap ]),
-      this.sect('同步（云 + 浏览器书签）',[
-        this.field('云同步（WebDAV / Google Drive）',clWrap),
+      this.sect('同步与备份',[
+        this.field('云同步（WebDAV / Google Drive）',cloudWrap),
         this.field('浏览器书签双向同步',bmWrap),
+        this.field('备份与导入',backupWrap),
+        info,
       ]),
-      this.sect('数据',[ this.field('导入 / 导出 / 恢复默认',dataBtns), info ]),
-    ],[ this.btn('完成','primary',async()=>{s.title=titleI.value.trim()||'Fu 导航';s.searchEngine=engSel.value;applyCl();
-      const bmWas=!!bmS.enabled; bmS.enabled=bmToggle.querySelector('input').checked;
-      if(cl.enabled&&cl.url)await this.ensureCloudPermission(cl.url); this.applyTheme();this.save(true);this.rerender();this.closeModal();
-      if(bmS.enabled && !bmWas) await this.bmExportNow(); }) ]); }
+      this.sect('高级',[
+        this.field('打开方式',this.seg([['_blank','新标签页'],['_self','当前页']],s.openIn,v=>{s.openIn=v;})),
+        this.field('危险操作',dangerWrap),
+      ]),
+    ],[ this.btn('完成','primary',()=>{ s.title=titleI.value.trim()||'Fu 导航'; this.applyTheme(); this.save(true); this.rerender(); this.closeModal(); }) ]); }
 
   /* 书签导入 */
   async importBookmarks(){ const tree=await getBookmarksTree(); if(!tree){this.toast('预览模式无法读取浏览器书签','err');return;}
