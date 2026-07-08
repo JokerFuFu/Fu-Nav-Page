@@ -46,7 +46,8 @@ function buildSidebar(core){
     core.groups.filter(g=>inPage(g)&&!g.archived).forEach(g=> navGroup(core,g).forEach(n=>nav.appendChild(n)));
     const arch=core.groups.filter(g=>inPage(g)&&g.archived);
     if(arch.length) nav.appendChild(buildArchiveSection(core,arch));
-    const addG=el('button','fx-navitem fx-addgroup edit-only'); addG.innerHTML=`<span class="fx-ni-ico lucide-mask" style="-webkit-mask-image:url('${lucide('plus')}');mask-image:url('${lucide('plus')}')"></span><span class="fx-ni-nm">新建分组</span>`; addG.onclick=()=>core.openGroupEditor(null); nav.appendChild(addG);
+    if(!core.groups.length) nav.appendChild(el('div','fx-side-empty','还没有分组 — 从「新建分组」开始'));   // R5 空侧栏引导（下方按钮此时常显）
+    const addG=el('button','fx-navitem fx-addgroup'+(core.groups.length?' edit-only':'')); addG.innerHTML=`<span class="fx-ni-ico lucide-mask" style="-webkit-mask-image:url('${lucide('plus')}');mask-image:url('${lucide('plus')}')"></span><span class="fx-ni-nm">新建分组</span>`; addG.onclick=()=>core.openGroupEditor(null); nav.appendChild(addG);
   }
   wireSidebarDnD(core,nav); side.appendChild(nav);
   const foot=el('div','fx-side-foot');
@@ -159,6 +160,8 @@ function renderHome(core,main){
       if(hidden.length) row.appendChild(moreFavCard(core,hidden));
       wireFavDnD(core,row,hidden.map(x=>x.item.id));
       home.appendChild(row);
+    } else {
+      home.appendChild(el('div','fx-home-empty','还没有常用网站 — 解锁后点「添加网站」，或到 设置 → 导入浏览器书签'));   // R5 空态引导
     } }
   main.appendChild(home);
 }
@@ -349,10 +352,11 @@ function widgetToday(core,w){
   const cdList=el('div','fx-cd-list');
   const renderCd=()=>{ cdList.textContent='';
     w.countdowns.forEach((cd,i)=>{
-      const today=new Date(); today.setHours(0,0,0,0); const tgt=new Date(cd.date+'T00:00:00'); const days=Math.round((tgt-today)/864e5);
+      const today=new Date(); today.setHours(0,0,0,0); const tgt=new Date(cd.date+'T00:00:00');
+      const bad=isNaN(tgt); const days=bad?0:Math.round((tgt-today)/864e5);   // 无效日期守卫：不渲染字面 NaN，留删除钮可清理
       const row=el('div','fx-cd-row');
-      const num=el('span','fx-cd-num', days>0?String(days):(days===0?'今天':String(-days)));
-      const lb=el('span','fx-cd-lb', cd.label+(days>0?' · 天后':days===0?'':' · 天前'));
+      const num=el('span','fx-cd-num', bad?'—':(days>0?String(days):(days===0?'今天':String(-days))));
+      const lb=el('span','fx-cd-lb', cd.label+(bad?' · 日期无效':(days>0?' · 天后':days===0?'':' · 天前')));
       const del=el('button','fx-todo-del'); del.appendChild(mico('x',10)); del.type='button'; del.title='删除'; del.onclick=e=>{e.preventDefault();e.stopPropagation(); w.countdowns.splice(i,1); core.save(); renderCd();};
       row.append(num,lb,del); cdList.appendChild(row);
     }); };

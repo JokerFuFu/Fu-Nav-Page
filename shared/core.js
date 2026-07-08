@@ -136,7 +136,7 @@ class Core {
       try{ const latest=(await loadConfig()).config; if(latest && (latest.savedAt||0)>(this.cfg.savedAt||0)) this._mergeIn(latest); }catch{}
       await this.bmPush();        // 书签双向同步：导航变更 → 镜像到浏览器「Fu 导航」文件夹（内部按结构签名跳过无关变更）
       const r=await saveConfig(this.cfg);
-      if(r.synced) this.flashSync('已同步到所有终端'); else if(r.reason==='too-large') this.flashSync('配置过大，仅存本机'); else if(r.reason==='preview') this.flashSync('（预览：存于本浏览器）'); else this.flashSync('已保存');
+      if(r.synced) this.flashSync('已同步到所有终端'); else if(r.reason==='too-large') this.flashSync('配置过大，仅存本机'); else if(r.reason==='preview') this.flashSync('（预览：存于本浏览器）'); else if(r.reason==='quota') this.toast('配置过大，已仅存本机（跨端同步暂停）','err'); else this.flashSync('已保存');
       this.cloudPush(); };   // 自托管云：改动后自动备份（内部防抖）
     return immediate ? run() : (this._saveT=setTimeout(run,600)); }
 

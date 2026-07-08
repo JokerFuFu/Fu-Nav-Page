@@ -83,7 +83,8 @@ export async function saveConfig(config){
     }
     return { ok:true, synced:true };
   }catch(e){
-    return { ok:true, synced:false, reason:(e && e.message) || 'quota' };
+    console.warn('sync 写入失败（仅存本机）:', e);
+    return { ok:true, synced:false, reason:'quota' };   // 归一化：core.save 据此给明确提示，不再假报「已保存」
   }
 }
 

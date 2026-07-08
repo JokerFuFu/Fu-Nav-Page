@@ -14,7 +14,7 @@ body.bg-photo .lay-fusion .fx-side{
   border-right-color: var(--border-2);
 }
 /* 收折按钮（位于品牌与导航之间，展开时右对齐、收折时居中） */
-.lay-fusion .fx-collapse{ align-self:flex-end; width:24px; height:24px; border-radius:var(--r-sm); display:grid; place-items:center;
+.lay-fusion .fx-collapse{ align-self:flex-end; width:32px; height:32px; border-radius:var(--r-sm); display:grid; place-items:center;
   color:var(--text-3); background:transparent; font-size:12px; line-height:1; margin:-8px 0 4px; transition:var(--t); }
 .lay-fusion .fx-collapse:hover{ background:var(--surface-2); color:var(--text); }
 
@@ -123,6 +123,7 @@ body.bg-photo .lay-fusion .fx-wcard{
 .lay-fusion .fx-wcard:hover{ border-color:var(--border-2); }
 /* 拖拽手柄：hover 才显，不挡交互 */
 .lay-fusion .fx-wgrip{ position:absolute; top:6px; right:6px; width:20px; height:20px; display:grid; place-items:center; color:var(--text-3); cursor:grab; opacity:0; transition:var(--t); font-size:12px; border-radius:var(--r-sm); line-height:1; }
+.lay-fusion .fx-wgrip::after{ content:''; position:absolute; inset:-6px; }   /* 视觉 20px、命中 32px（触控目标硬条） */
 .lay-fusion .fx-wcard:hover .fx-wgrip{ opacity:.6; }
 .lay-fusion .fx-wgrip:hover{ opacity:1; background:var(--surface-2); color:var(--text); }
 .lay-fusion .fx-wgrip:active{ cursor:grabbing; }
@@ -201,11 +202,13 @@ body.editing .lay-fusion .fx-fav{ cursor:grab; }
 /* 卡片 ✎编辑/✕删除 浮层（仅解锁🔓时存在，hover 显示） */
 .lay-fusion .fx-cact{ position:absolute; top:5px; right:5px; display:flex; gap:4px; opacity:0; transition:var(--t); z-index:2; }
 .lay-fusion .fx-fav:hover .fx-cact, .lay-fusion .fx-card:hover .fx-cact{ opacity:1; }
-.lay-fusion .fx-cact-btn{ width:20px; height:20px; border-radius:var(--r-sm); background:var(--surface-3); border:1px solid var(--border); color:var(--text-2); font-size:11px; display:grid; place-items:center; transition:var(--t); }
+.lay-fusion .fx-cact-btn{ position:relative; width:20px; height:20px; border-radius:var(--r-sm); background:var(--surface-3); border:1px solid var(--border); color:var(--text-2); font-size:11px; display:grid; place-items:center; transition:var(--t); }
+.lay-fusion .fx-cact-btn::after{ content:''; position:absolute; inset:-6px; }   /* 命中 32px */
 .lay-fusion .fx-cact-btn:hover{ color:var(--text); background:var(--bg); }
 .lay-fusion .fx-cact-btn.danger:hover{ color:var(--danger); }
 /* 小组件删除 ✕（仅解锁时） */
 .lay-fusion .fx-wdel{ position:absolute; top:6px; left:6px; width:20px; height:20px; border-radius:var(--r-sm); background:var(--surface-2); border:1px solid var(--border); color:var(--text-3); font-size:11px; display:grid; place-items:center; opacity:0; transition:var(--t); z-index:2; }
+.lay-fusion .fx-wdel::after{ content:''; position:absolute; inset:-6px; }   /* 命中 32px */
 .lay-fusion .fx-wcard:hover .fx-wdel{ opacity:.7; }
 .lay-fusion .fx-wdel:hover{ opacity:1; color:var(--danger); }
 .lay-fusion .fx-fav:hover{ background:var(--surface-2); transform:translateY(-2px); box-shadow:var(--shadow); border-color:var(--border-2); }
@@ -258,6 +261,9 @@ body.editing .lay-fusion .fx-card{ cursor:grab; }
 .lay-fusion .fx-dead-badge{ position:absolute; top:5px; left:5px; width:15px; height:15px; border-radius:50%;
   background:var(--warn); color:#2a1c00; font-size:11px; font-weight:700; line-height:1; display:grid; place-items:center; z-index:2; }
 .lay-fusion .fx-empty{ color:var(--text-3); padding:var(--s6); text-align:center; grid-column:1/-1; }
+/* 空态引导：首页无常用 / 侧栏无分组 */
+.lay-fusion .fx-home-empty{ color:var(--text-3); font-size:13px; text-align:center; padding:var(--s5) 0 0; }
+.lay-fusion .fx-side-empty{ color:var(--text-3); font-size:12px; padding:var(--s2) var(--s3) var(--s1); }
 /* 子文件夹卡片 */
 .lay-fusion .fx-card.fx-folder{ text-align:left; cursor:pointer; width:100%; }
 .lay-fusion .fx-card.fx-folder .fx-card-ico{ background:var(--surface-3); }
@@ -288,7 +294,7 @@ body.editing .lay-fusion .fx-card{ cursor:grab; }
 
 /* 视图切换 + 排列方式（列表/大图/详情） */
 .lay-fusion .fx-viewtoggle{ display:flex; gap:var(--s1); background:var(--surface-2); border:1px solid var(--border); border-radius:999px; padding:var(--s1); }   /* DESIGN.md chip: 视图切换=pill */
-.lay-fusion .fx-vbtn{ width:30px; height:30px; border-radius:999px; color:var(--text-3); font-size:14px; display:grid; place-items:center; }
+.lay-fusion .fx-vbtn{ width:32px; height:32px; border-radius:999px; color:var(--text-3); font-size:14px; display:grid; place-items:center; }
 .lay-fusion .fx-vbtn:hover{ color:var(--text); }
 .lay-fusion .fx-vbtn.on{ background:var(--accent-strong); color:#fff; }
 /* 触觉按压：卡片/磁贴/导航/视图钮点按下压（design-taste 4.5）；编辑态(拖拽)不加，避免与拖影冲突 */
