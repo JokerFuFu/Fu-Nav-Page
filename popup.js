@@ -69,7 +69,8 @@ function render(cfg, ctx){
   pop.textContent='';
   // 头部
   const head=E('div','pop-h');
-  head.append(E('div','pop-logo','Fu.'), E('div','pop-title', ctx.existing?'编辑收藏':'收藏到 Fu.'));
+  const logo=E('div','pop-logo'); const logoImg=new Image(); logoImg.src='icons/icon32.png'; logoImg.alt=''; logo.appendChild(logoImg);
+  head.append(logo, E('div','pop-title', ctx.existing?'编辑收藏':'收藏到 Fu.'));
   if(!ctx.existing) head.appendChild(E('div','pop-sub','当前网页'));
   pop.appendChild(head);
   if(ctx.existing){
@@ -99,7 +100,7 @@ function render(cfg, ctx){
   const sel=E('select');
   cfg.groups.forEach(g=>{ const o=E('option',null,g.name); o.value=g.id; if(ctx.existingGroup&&g.id===ctx.existingGroup.id)o.selected=true; sel.appendChild(o); });
   if(!ctx.existingGroup){ const fav=cfg.groups.find(g=>/收藏|常用|favorite|book/i.test(g.name)); if(fav)sel.value=fav.id; }
-  const newOpt=E('option',null,'＋ 新建「收藏」分组'); newOpt.value='__new__'; sel.appendChild(newOpt);
+  const newOpt=E('option',null,'新建「收藏」分组…'); newOpt.value='__new__'; sel.appendChild(newOpt);
   const row=E('div','pop-row'); row.append(field('网址', urlI), field('分组', sel)); pop.appendChild(row);
 
   const status=E('div','pop-status'); pop.appendChild(status);
@@ -141,9 +142,9 @@ function footRow(btns){ const f=E('div','pop-foot'); btns.forEach(b=>f.appendChi
 
 async function persist(cfg, status, okMsg){
   status.className='pop-status'; status.textContent='保存中…';
-  try{ await saveConfig(cfg); status.className='pop-status ok'; status.textContent='✓ '+okMsg+'，已同步到首页';
+  try{ await saveConfig(cfg); status.className='pop-status ok'; status.textContent=okMsg+'，已同步到首页';
     setTimeout(()=>window.close(), 650);
-  }catch(e){ status.className='pop-status err'; status.textContent='✗ 保存失败：'+(e&&e.message||e); }
+  }catch(e){ status.className='pop-status err'; status.textContent='保存失败：'+(e&&e.message||e); }
 }
 
 init();

@@ -20,6 +20,7 @@ colors:
   success-strong: "#16a34a"
   warning: "#f5b454"
   danger: "#fb7185"
+  scrim: "rgba(6,9,18,0.58)"
 typography:
   display:
     fontFamily: Inter
@@ -147,9 +148,10 @@ components:
 - **ring `rgba(110,123,255,.28)`** — 焦点/激活的柔光环。
 - **success `#34d399` / warning `#f5b454` / danger `#fb7185`** — 状态色，仅状态点、警示文案、删除按钮，绝不滥用。
 - **overlay-bg**（深 `#0a0a0c` / 浅 `#ffffff`）— 大居中浮层（模态、命令面板、iframe/背景面板、toast、搜索下拉）的底色，同一语义 token 双主题各取其值（深=最深画布、浅=纯白），配 shadow-lg + 1px border 抬升；不硬编码 `#fff`，避免 auto/显式浅色两条路径分叉。
+- **scrim**（深 `rgba(6,9,18,.58)` / 浅 `rgba(23,25,35,.38)`）— 全屏浮层遮罩（模态背板、命令面板背板、iframe 面板背板）唯一底色 token：同一层级动作共用一档不透明度，浅色主题用更轻的一档，不各处手写 rgba。
 
 **浅色（镜像，同语义）**
-background `#fafafb` · surface `#ffffff` · surface-raised `#f4f4f6` · surface-overlay `#ebebef` · text `#1a1b22` · text-muted `#565a68` · text-subtle `#6b6f80` · primary `#4a55f3` · border `rgba(20,25,50,.09)` · ring `rgba(74,85,243,.22)`。浅色主题里 primary 本身即 `#4a55f3`（白字过 AA），primary-strong 可等同之。
+background `#fafafb` · surface `#ffffff` · surface-raised `#f4f4f6` · surface-overlay `#ebebef` · text `#1a1b22` · text-muted `#565a68` · text-subtle `#6b6f80` · primary `#4a55f3` · border `rgba(20,25,50,.09)` · ring `rgba(74,85,243,.22)` · scrim `rgba(23,25,35,.38)`。浅色主题里 primary 本身即 `#4a55f3`（白字过 AA），primary-strong 可等同之。
 
 ## Typography
 

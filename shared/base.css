@@ -10,6 +10,7 @@
   --accent:#6e7bff; --accent-strong:#4a55f3; --ring:rgba(110,123,255,.28);  /* accent-strong 用于承载白字的实心填充(主按钮/激活段)，白字过 WCAG AA 5.41:1 */
   --ok:#34d399; --ok-strong:#16a34a; --warn:#f5b454; --danger:#fb7185;  /* ok-strong: 承载白字的成功实心填充(已收藏徽章/工具栏角标)，白字过 AA；深浅共用，不用像 accent 分深浅两套 */
   /* 阴影只在 hover/浮层出现 */ --shadow:0 12px 32px rgba(0,0,0,.45); --shadow-lg:0 28px 80px rgba(0,0,0,.55); --overlay-bg:#0a0a0c;
+  --scrim:rgba(6,9,18,.58);   /* 全屏浮层遮罩（模态/命令面板/iframe 面板共用），深浅各一档 */
   /* 间距阶 4/8/12/16/24/32/48 */ --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px; --s7:48px;
   /* 圆角只此三档 */ --r-sm:8px; --r-md:12px; --r-lg:16px;
   /* 动效 */ --t:130ms ease;
@@ -26,6 +27,7 @@ body[data-theme="light"]{
   --text:#1a1b22; --text-2:#565a68; --text-3:#6b6f80;  /* text-3 加深以过 WCAG AA(原 #8b8f9c 仅 2.9:1) */
   --accent:#4a55f3; --accent-strong:#4a55f3; --ring:rgba(74,85,243,.22);  /* accent 微调以让激活文字过 AA(原 #4f5bff 4.47:1) */
   --shadow:0 12px 30px rgba(40,50,90,.12); --shadow-lg:0 28px 80px rgba(40,50,90,.22); --overlay-bg:#ffffff;
+  --scrim:rgba(23,25,35,.38);
   --surface-glass: rgba(255,255,255,.55);
   --scheme:light;
   --caret:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23565a68' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
@@ -37,6 +39,7 @@ body[data-theme="light"]{
   --text:#1a1b22; --text-2:#565a68; --text-3:#6b6f80;  /* text-3 加深以过 WCAG AA(原 #8b8f9c 仅 2.9:1) */
   --accent:#4a55f3; --accent-strong:#4a55f3; --ring:rgba(74,85,243,.22);  /* accent 微调以让激活文字过 AA(原 #4f5bff 4.47:1) */
   --shadow:0 12px 30px rgba(40,50,90,.12); --shadow-lg:0 28px 80px rgba(40,50,90,.22); --overlay-bg:#ffffff;
+  --scrim:rgba(23,25,35,.38);
   --surface-glass: rgba(255,255,255,.55);
   --scheme:light;
   --caret:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23565a68' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
@@ -86,7 +89,7 @@ img{display:block}
 .layout-switch button:not(.on):hover{ color:var(--text); background:var(--surface-3); }
 
 /* ===== 模态 ===== */
-.fn-backdrop{ position:fixed; inset:0; z-index:60; background:rgba(6,9,18,.58); display:grid; place-items:center;
+.fn-backdrop{ position:fixed; inset:0; z-index:60; background:var(--scrim); display:grid; place-items:center;
   padding:var(--s4); backdrop-filter:blur(5px); animation:fnFade .14s ease; }
 @keyframes fnFade{from{opacity:0}}
 .fn-modal{ width:min(540px,100%); max-height:88vh; overflow:auto; background:var(--overlay-bg);
@@ -108,7 +111,7 @@ img{display:block}
 .fn-sect > :not(summary):last-child{ margin-bottom:var(--s3); }
 
 /* ===== 命令面板（⌘K / ）===== */
-.fn-pal-back{ position:fixed; inset:0; z-index:80; background:rgba(6,9,18,.55); display:flex; justify-content:center; align-items:flex-start; padding:12vh var(--s4) var(--s4); backdrop-filter:blur(6px); animation:fnFade .12s ease; }
+.fn-pal-back{ position:fixed; inset:0; z-index:80; background:var(--scrim); display:flex; justify-content:center; align-items:flex-start; padding:12vh var(--s4) var(--s4); backdrop-filter:blur(6px); animation:fnFade .12s ease; }
 .fn-pal{ width:min(640px,100%); max-height:64vh; display:flex; flex-direction:column; background:var(--overlay-bg); border:1px solid var(--border-2); border-radius:var(--r-lg); box-shadow:var(--shadow-lg); overflow:hidden; animation:fnPop .14s ease; }
 .fn-pal-inp{ border:none; outline:none; background:none; color:var(--text); font-size:17px; padding:var(--s4) var(--s5); border-bottom:1px solid var(--border); }
 .fn-pal-inp::placeholder{ color:var(--text-3); }
@@ -126,9 +129,10 @@ img{display:block}
 .fn-pal-sub{ font-size:11px; color:var(--text-3); flex:0 0 auto; max-width:40%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-variant-numeric:tabular-nums; }
 .fn-pal-empty{ padding:var(--s5); text-align:center; color:var(--text-3); font-size:13px; }
 .fn-pal-foot{ display:flex; gap:var(--s4); padding:var(--s2) var(--s4); border-top:1px solid var(--border); font-size:11px; color:var(--text-3); }
+.fn-pal-foot span{ display:inline-flex; align-items:center; gap:var(--s1); }
 
 /* ===== 面板内打开（iframe）===== */
-.fn-frame-back{ position:fixed; inset:0; z-index:75; background:rgba(6,9,18,.6); display:grid; place-items:center; padding:var(--s5); backdrop-filter:blur(5px); animation:fnFade .12s ease; }
+.fn-frame-back{ position:fixed; inset:0; z-index:75; background:var(--scrim); display:grid; place-items:center; padding:var(--s5); backdrop-filter:blur(5px); animation:fnFade .12s ease; }
 .fn-frame{ width:min(1200px,100%); height:min(86vh,100%); display:flex; flex-direction:column; background:var(--overlay-bg); border:1px solid var(--border-2); border-radius:var(--r-lg); overflow:hidden; box-shadow:var(--shadow-lg); }
 .fn-frame-head{ display:flex; align-items:center; gap:var(--s3); padding:var(--s2) var(--s3) var(--s2) var(--s4); border-bottom:1px solid var(--border); }
 .fn-frame-ttl{ flex:1; font-size:14px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -226,7 +230,9 @@ input[type="date"]::-webkit-calendar-picker-indicator{ opacity:.55; cursor:point
 @keyframes fnSlide{from{transform:translateX(20px);opacity:0}}
 .fn-pill{ position:fixed; left:50%; bottom:58px; transform:translateX(-50%); z-index:25; background:var(--surface-2);
   border:1px solid var(--border); border-radius:999px; padding:var(--s2) var(--s4); font-size:12px; color:var(--text-2);
-  box-shadow:var(--shadow); backdrop-filter:blur(10px); }
+  box-shadow:var(--shadow); }
+/* 磨砂玻璃仅背景图模式（DESIGN.md），纯色模式回退不透明表层 */
+body.bg-photo .fn-pill{ background:var(--surface-glass); backdrop-filter:blur(10px); }
 
 /* 通用：编辑模式下显隐 */
 body:not(.editing) .edit-only{ display:none !important; }

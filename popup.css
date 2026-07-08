@@ -1,17 +1,18 @@
 /* 工具栏收藏弹窗（仿 Infinity 收藏编辑框） */
 html,body{ margin:0; }
 body{ width:368px; background:var(--bg); color:var(--text); }
-.pop{ padding:18px 18px 16px; display:flex; flex-direction:column; gap:14px; }
-.pop-h{ display:flex; align-items:center; gap:10px; }
-.pop-logo{ width:26px; height:26px; border-radius:8px; background:linear-gradient(135deg,var(--accent),#9b6ef3); display:grid; place-items:center; color:#fff; font-weight:800; font-size:13px; flex:0 0 26px; }
-.pop-title{ font-size:15px; font-weight:700; letter-spacing:.2px; }
+.pop{ padding:var(--s4); display:flex; flex-direction:column; gap:var(--s3); }
+.pop-h{ display:flex; align-items:center; gap:var(--s2); }
+.pop-logo{ width:26px; height:26px; border-radius:var(--r-sm); overflow:hidden; flex:0 0 26px; }
+.pop-logo img{ width:100%; height:100%; display:block; }
+.pop-title{ font-size:15px; font-weight:700; }
 .pop-sub{ font-size:11px; color:var(--text-3); margin-left:auto; }
-.pop-row{ display:flex; gap:10px; }
+.pop-row{ display:flex; gap:var(--s3); }
 .pop-row>*{ flex:1; min-width:0; }
-.pop-foot{ display:flex; gap:10px; margin-top:2px; }
-.pop-foot .fn-btn{ flex:1; padding:11px; font-size:14px; }
+.pop-foot{ display:flex; gap:var(--s3); margin-top:2px; }
+.pop-foot .fn-btn{ flex:1; padding:var(--s3); font-size:14px; }
 .pop-status{ font-size:12px; color:var(--text-3); min-height:16px; text-align:center; }
-.pop-status.ok{ color:#22c55e; } .pop-status.err{ color:#fb7185; }
+.pop-status.ok{ color:var(--ok); } .pop-status.err{ color:var(--danger); }
 .pop-loading{ padding:40px 0; text-align:center; color:var(--text-3); font-size:13px; }
 
 /* 已收藏徽章：实心成功色 pill + 白勾，醒目提示当前页已在导航中，避免重复收藏 */

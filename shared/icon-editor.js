@@ -76,8 +76,8 @@ export function createIconEditor(opts={}){
   const upBtn = E('button','fn-btn ghost','选择本地图片…'); upBtn.type='button';
   const upErr = E('div','fn-sub','');
   upBtn.onclick = ()=>{ const f=E('input'); f.type='file'; f.accept='image/*';
-    f.onchange=()=>{ const file=f.files[0]; if(!file)return; if(file.size>200*1024){ upErr.textContent='⚠ 图片请小于 200KB'; return; }
-      const r=new FileReader(); r.onload=()=>{ icon=r.result; upErr.textContent='✓ 已选择'; drawPrev(); emit(); }; r.readAsDataURL(file); }; f.click(); };
+    f.onchange=()=>{ const file=f.files[0]; if(!file)return; if(file.size>200*1024){ upErr.textContent='图片请小于 200KB'; return; }
+      const r=new FileReader(); r.onload=()=>{ icon=r.result; upErr.textContent='已选择'; drawPrev(); emit(); }; r.readAsDataURL(file); }; f.click(); };
   pLocal.append(E('div','fn-sub','上传图片做图标（建议 <200KB，随配置同步/备份）'), upBtn, upErr);
 
   // ── 自动 ──

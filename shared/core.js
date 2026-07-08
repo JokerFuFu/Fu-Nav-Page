@@ -136,7 +136,7 @@ class Core {
       try{ const latest=(await loadConfig()).config; if(latest && (latest.savedAt||0)>(this.cfg.savedAt||0)) this._mergeIn(latest); }catch{}
       await this.bmPush();        // 书签双向同步：导航变更 → 镜像到浏览器「Fu 导航」文件夹（内部按结构签名跳过无关变更）
       const r=await saveConfig(this.cfg);
-      if(r.synced) this.flashSync('✓ 已同步到所有终端'); else if(r.reason==='too-large') this.flashSync('⚠ 配置过大，仅存本机'); else if(r.reason==='preview') this.flashSync('（预览：存于本浏览器）'); else this.flashSync('✓ 已保存');
+      if(r.synced) this.flashSync('已同步到所有终端'); else if(r.reason==='too-large') this.flashSync('配置过大，仅存本机'); else if(r.reason==='preview') this.flashSync('（预览：存于本浏览器）'); else this.flashSync('已保存');
       this.cloudPush(); };   // 自托管云：改动后自动备份（内部防抖）
     return immediate ? run() : (this._saveT=setTimeout(run,600)); }
 
@@ -157,7 +157,7 @@ class Core {
 
   /* ---- 自托管云同步（WebDAV）---- */
   cloudPush(immediate){ if(!isExtension || !cloudEnabled(this.settings)) return; clearTimeout(this._cloudT);
-    const run=async()=>{ const r=await cloudPut(this.settings, this.cfg); this.flashSync(r.ok?'☁ 已备份到云':'☁ 云备份失败：'+(r.reason||'')); };
+    const run=async()=>{ const r=await cloudPut(this.settings, this.cfg); this.flashSync(r.ok?'已备份到云':'云备份失败：'+(r.reason||'')); };
     return immediate ? run() : (this._cloudT=setTimeout(run, 3500)); }
   /* 启动后台拉取：仅当云端 savedAt 严格更新时才覆盖本地 */
   async cloudPull(){ if(!isExtension || !cloudEnabled(this.settings)) return;
@@ -382,7 +382,7 @@ class Core {
     <div class="fn-pal-back" id="fnPalBack" hidden><div class="fn-pal" role="dialog" aria-modal="true">
       <input class="fn-pal-inp" id="fnPalInp" placeholder="搜索网站 / 分组 / 操作…" autocomplete="off" spellcheck="false" />
       <div class="fn-pal-list" id="fnPalList"></div>
-      <div class="fn-pal-foot"><span>↑↓ 选择</span><span>↵ 打开</span><span>esc 关闭</span></div></div></div>
+      <div class="fn-pal-foot"><span>↑↓ 选择</span><span><span class="lucide-mask" style="-webkit-mask-image:url('${lucide('corner-down-left')}');mask-image:url('${lucide('corner-down-left')}');width:11px;height:11px"></span> 打开</span><span>esc 关闭</span></div></div></div>
     <div class="fn-frame-back" id="fnFrameBack" hidden><div class="fn-frame">
       <div class="fn-frame-head"><span class="fn-frame-ttl" id="fnFrameTtl"></span>
         <a class="fn-frame-ext" id="fnFrameExt" target="_blank" rel="noopener"><span class="lucide-mask" style="-webkit-mask-image:url('${lucide('external-link')}');mask-image:url('${lucide('external-link')}');width:12px;height:12px"></span>新标签打开</a>
@@ -492,8 +492,8 @@ class Core {
       this.btn('导入备份','ghost',()=>this.importConfig(),'upload'),
       this.btn('立即检测失效链接','ghost',async()=>{ this.toast('检测中…'); await this.checkLinksNow(); this.toast('检测完成','ok'); },'link'),
       this.btn('恢复默认','ghost',async()=>{if(confirm('用内置默认覆盖当前配置？')){this.cfg=await this.fetchSeed();this.migrate();this.applyTheme();this.rerender();this.save(true);this.closeModal();}},'rotate-ccw'));
-    const info=el('div','fn-hint'); info.innerHTML=isExtension?'☁️ <b>浏览器账号同步已开启</b>：配置随 Chrome/Edge 账号自动同步到登录同账号的设备。要存到<b>自己的服务器</b>用下方「自托管云同步」。提醒/日历/AI日报 需本机 <code>agent/</code> 服务。':'<b>预览模式</b>：配置仅存本浏览器；装成扩展后启用同步。';
-    // ☁️ 云同步（WebDAV / Google Drive）
+    const info=el('div','fn-hint'); info.innerHTML=isExtension?'<b>浏览器账号同步已开启</b>：配置随 Chrome/Edge 账号自动同步到登录同账号的设备。要存到<b>自己的服务器</b>用下方「自托管云同步」。提醒/日历/AI日报 需本机 <code>agent/</code> 服务。':'<b>预览模式</b>：配置仅存本浏览器；装成扩展后启用同步。';
+    // 云同步（WebDAV / Google Drive）
     const cl = s.cloud || (s.cloud={enabled:false,type:'webdav',url:'',user:'',pass:'',gdriveClientId:''}); if(!cl.type)cl.type='webdav';
     const clUrl=this.inp(cl.url||'','https://你的群晖DDNS:5006/共享文件夹/'), clUser=this.inp(cl.user||'','WebDAV 账号'), clPass=this.inp(cl.pass||'','密码'); clPass.type='password';
     const clCid=this.inp(cl.gdriveClientId||'','xxxxx.apps.googleusercontent.com');
@@ -511,24 +511,24 @@ class Core {
     const applyCl=()=>{ cl.url=clUrl.value.trim(); cl.user=clUser.value.trim(); cl.pass=clPass.value; cl.gdriveClientId=clCid.value.trim(); cl.enabled=clToggle.querySelector('input').checked; };
     const missing=()=> cl.type==='webdav' ? !clUrl.value.trim() : !clCid.value.trim();
     const clBtns=el('div','fn-wrap'); clBtns.append(
-      this.btn('测试连接','ghost',async()=>{ applyCl(); if(missing()){clStatus.textContent='✗ 请先填好上面的字段';return;} clStatus.textContent='测试中…'; if(cl.type==='webdav')await this.ensureCloudPermission(cl.url); const r=await this.cloudTest(); clStatus.textContent=(r.ok?'✓ ':'✗ ')+r.reason; },'plug-zap'),
-      this.btn('立即备份到云','ghost',async()=>{ applyCl(); if(missing()){clStatus.textContent='✗ 请先填好上面的字段';return;} if(cl.type==='webdav')await this.ensureCloudPermission(cl.url); clStatus.textContent='备份中…'; const r=await cloudPut(this.settings,this.cfg); clStatus.textContent=r.ok?'✓ 已备份到云':'✗ '+(r.reason||''); this.save(); },'cloud-upload'),
-      this.btn('从云恢复','ghost',async()=>{ applyCl(); if(missing()){clStatus.textContent='✗ 请先填好上面的字段';return;} if(!confirm('用云端配置覆盖本机当前配置？'))return; if(cl.type==='webdav')await this.ensureCloudPermission(cl.url); clStatus.textContent='恢复中…'; const ok=await this.cloudRestore(); clStatus.textContent=ok?'✓ 已从云恢复':'✗ 恢复失败'; if(ok)this.closeModal(); },'cloud-download'),
+      this.btn('测试连接','ghost',async()=>{ applyCl(); if(missing()){clStatus.textContent='请先填好上面的字段';return;} clStatus.textContent='测试中…'; if(cl.type==='webdav')await this.ensureCloudPermission(cl.url); const r=await this.cloudTest(); clStatus.textContent=(r.ok?'成功：':'失败：')+r.reason; },'plug-zap'),
+      this.btn('立即备份到云','ghost',async()=>{ applyCl(); if(missing()){clStatus.textContent='请先填好上面的字段';return;} if(cl.type==='webdav')await this.ensureCloudPermission(cl.url); clStatus.textContent='备份中…'; const r=await cloudPut(this.settings,this.cfg); clStatus.textContent=r.ok?'已备份到云':'失败：'+(r.reason||''); this.save(); },'cloud-upload'),
+      this.btn('从云恢复','ghost',async()=>{ applyCl(); if(missing()){clStatus.textContent='请先填好上面的字段';return;} if(!confirm('用云端配置覆盖本机当前配置？'))return; if(cl.type==='webdav')await this.ensureCloudPermission(cl.url); clStatus.textContent='恢复中…'; const ok=await this.cloudRestore(); clStatus.textContent=ok?'已从云恢复':'恢复失败'; if(ok)this.closeModal(); },'cloud-download'),
     );
     const clWrap=el('div'); clWrap.append(clToggle, el('div','fn-sub','云端'), typeSeg, davBox, gdBox, clBtns, clStatus, clHint); showByType();
-    // 🔖 浏览器书签双向同步
+    // 浏览器书签双向同步
     const bmS = s.bmSync || (s.bmSync={enabled:false});
     const bmToggle=this.toggle('启用自动双向同步（导航改动↔浏览器书签实时互通）', !!bmS.enabled, ()=>{});
     const bmStatus=el('div','fn-sub','');
     const bmBtns=el('div','fn-wrap'); bmBtns.append(
-      this.btn('立即导出到书签','ghost',async()=>{ bmStatus.textContent='导出中…'; const ok=await this.bmExportNow(); bmStatus.textContent=ok?('✓ 已导出到浏览器「'+ROOT_TITLE+'」文件夹'):'✗ 导出失败'; },'upload'),
-      this.btn('从书签导入','ghost',async()=>{ bmStatus.textContent='导入中…'; const ok=await this.bmImportNow(); bmStatus.textContent=ok?'✓ 已从浏览器书签同步':'✗ 导入失败'; },'download'),
+      this.btn('立即导出到书签','ghost',async()=>{ bmStatus.textContent='导出中…'; const ok=await this.bmExportNow(); bmStatus.textContent=ok?('已导出到浏览器「'+ROOT_TITLE+'」文件夹'):'导出失败'; },'upload'),
+      this.btn('从书签导入','ghost',async()=>{ bmStatus.textContent='导入中…'; const ok=await this.bmImportNow(); bmStatus.textContent=ok?'已从浏览器书签同步':'导入失败'; },'download'),
     );
     const bmHint=el('div','fn-hint'); bmHint.innerHTML='导航的分组/网站 与浏览器「书签栏 / <b>'+ROOT_TITLE+'</b>」文件夹保持一致：导航里增删改写入该文件夹，浏览器里增删改也会同步回导航（其它书签不动）。';
     const bmWrap=el('div'); bmWrap.append(bmToggle, bmBtns, bmStatus, bmHint);
     const cardsWrap=(()=>{const w=el('div'); const addRow=el('div','fn-wrap');
-        [['today','今日'],['hwmon','硬件监控'],['weather','天气']].forEach(([t,lb])=>addRow.appendChild(this.btn(lb,'ghost',()=>{ if(t==='hwmon'){this.closeModal();} this.addWidget(t); if(t!=='hwmon')this.toast('已添加「'+lb+'」卡片，首页解锁🔓可拖拽排序','ok'); },'plus')));
-        w.append(el('div','fn-sub','添加卡片（或在首页解锁🔓后右键卡片区添加）'), addRow,
+        [['today','今日'],['hwmon','硬件监控'],['weather','天气']].forEach(([t,lb])=>addRow.appendChild(this.btn(lb,'ghost',()=>{ if(t==='hwmon'){this.closeModal();} this.addWidget(t); if(t!=='hwmon')this.toast('已添加「'+lb+'」卡片，首页解锁后可拖拽排序','ok'); },'plus')));
+        w.append(el('div','fn-sub','添加卡片（或在首页解锁后右键卡片区添加）'), addRow,
           this.toggle('显示时钟与问候',s.showClock,v=>{s.showClock=v;}),
           this.toggle('显示天气',s.showWeather,v=>{s.showWeather=v;}),
           this.toggle('内网在线状态探测',s.showStatus,v=>{s.showStatus=v;}));
