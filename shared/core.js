@@ -53,7 +53,7 @@ const LUCIDE_GROUP_OPTS=['server','hard-drive','network','router','shield-check'
 const COLORS=['#2563eb','#0891b2','#16a34a','#7c3aed','#64748b','#ef4444','#0ea5e9','#f59e0b','#14b8a6','#ec4899','#8b5cf6','#f43f5e','#6366f1','#22c55e','#eab308','#fb7185'];
 
 class Core {
-  constructor(){ this.cfg=null; this.layout=null; this.layoutMod=null; this.root=null; this.editing=false; this.agentData=null; this._saveT=null; this._pendingSave=null; this._listeners=[]; }
+  constructor(){ this.cfg=null; this.layout=null; this.layoutMod=null; this.root=null; this.editing=false; this.agentData=null; this._saveT=null; this._pendingSave=null; this._quotaWarned=false; this._listeners=[]; }
   get settings(){ return this.cfg.settings; }
   get groups(){ return this.cfg.groups; }
 
@@ -138,7 +138,16 @@ class Core {
       try{ const latest=(await loadConfig()).config; if(latest && (latest.savedAt||0)>(this.cfg.savedAt||0)) this._mergeIn(latest); }catch{}
       await this.bmPush();        // 书签双向同步：导航变更 → 镜像到浏览器「Fu 导航」文件夹（内部按结构签名跳过无关变更）
       const r=await saveConfig(this.cfg);
-      if(r.synced) this.flashSync('已同步到所有终端'); else if(r.reason==='too-large') this.flashSync('配置过大，仅存本机'); else if(r.reason==='preview') this.flashSync('（预览：存于本浏览器）'); else if(r.reason==='quota') this.toast('配置过大，已仅存本机（跨端同步暂停）','err'); else this.flashSync('已保存');
+      if(r.synced){ this.flashSync('已同步到所有终端'); this._quotaWarned=false; }
+      else if(r.reason==='preview') this.flashSync('（预览：存于本浏览器）');
+      else if(r.reason==='quota' || r.reason==='too-large'){
+        // 超浏览器账号同步配额：本机 local 已存好。配了 WebDAV(不受 100KB 限制、在做跨端)就无需打扰；
+        // 否则只在首次提示一次引导开 WebDAV，之后低调收尾，不再每次删改都弹红字。
+        if(cloudEnabled(this.settings)) this.flashSync('已保存（跨端走云同步）');
+        else if(!this._quotaWarned){ this._quotaWarned=true; this.toast('收藏较多，已超浏览器账号同步上限，现仅存本机；要跨设备同步请到 设置 → 同步与备份 开启 WebDAV 云同步','err'); }
+        else this.flashSync('已保存（仅本机）');
+      }
+      else this.flashSync('已保存');
       this.cloudPush();           // 自托管云：改动后自动备份（内部防抖）
       if(this._pendingSave===run) this._pendingSave=null; };   // 落盘完成才清(且只清自己，不误清后来的 save)
     return immediate ? run() : (this._saveT=setTimeout(run,600)); }
