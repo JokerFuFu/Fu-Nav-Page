@@ -53,7 +53,7 @@ const LUCIDE_GROUP_OPTS=['server','hard-drive','network','router','shield-check'
 const COLORS=['#2563eb','#0891b2','#16a34a','#7c3aed','#64748b','#ef4444','#0ea5e9','#f59e0b','#14b8a6','#ec4899','#8b5cf6','#f43f5e','#6366f1','#22c55e','#eab308','#fb7185'];
 
 class Core {
-  constructor(){ this.cfg=null; this.layout=null; this.layoutMod=null; this.root=null; this.editing=false; this.agentData=null; this._saveT=null; this._listeners=[]; }
+  constructor(){ this.cfg=null; this.layout=null; this.layoutMod=null; this.root=null; this.editing=false; this.agentData=null; this._saveT=null; this._pendingSave=null; this._listeners=[]; }
   get settings(){ return this.cfg.settings; }
   get groups(){ return this.cfg.groups; }
 
@@ -68,7 +68,8 @@ class Core {
     if(!config) await this.save(true);
     await this.mountLayout(this.settings.layout || 'classic');
     // 远端变更：仅在 savedAt 严格更新时才回灌，杜绝"自己写入→读到旧/中间态覆盖内存→下次存旧值"的丢失循环
-    onRemoteChange(async ()=>{ const r=await loadConfig();
+    onRemoteChange(async ()=>{ await this.flushSave();   // 先落盘本地未保存的防抖改动，避免被远端旧快照整体覆盖(吞掉刚删的卡片)
+      const r=await loadConfig();
       if(r.config && (r.config.savedAt||0) > (this.cfg.savedAt||0)){ this.cfg=r.config; this.migrate();
         this._lastBmCfgSig=undefined;   // 换了一份新 cfg，旧的书签结构签名缓存已经不对应它了；不重置的话
                                          // 下次 save() 里 bmPush() 会误判"结构又变了"，白白再导出一次到书签，
@@ -130,15 +131,21 @@ class Core {
     } }
 
   /* ---- 持久化 ---- */
-  save(immediate){ clearTimeout(this._saveT);
-    const run=async()=>{
+  save(immediate){ clearTimeout(this._saveT); this._saveT=null;
+    // 提为实例字段(run)，便于 onRemoteChange 回灌前 flush（否则防抖窗口内未落盘的改动会被远端旧快照整体覆盖→删除复活）
+    const run=this._pendingSave=async()=>{
       // 存前若存储已有更新版本(如工具栏收藏 SW 写入)，先并集合并，杜绝覆盖丢失
       try{ const latest=(await loadConfig()).config; if(latest && (latest.savedAt||0)>(this.cfg.savedAt||0)) this._mergeIn(latest); }catch{}
       await this.bmPush();        // 书签双向同步：导航变更 → 镜像到浏览器「Fu 导航」文件夹（内部按结构签名跳过无关变更）
       const r=await saveConfig(this.cfg);
       if(r.synced) this.flashSync('已同步到所有终端'); else if(r.reason==='too-large') this.flashSync('配置过大，仅存本机'); else if(r.reason==='preview') this.flashSync('（预览：存于本浏览器）'); else if(r.reason==='quota') this.toast('配置过大，已仅存本机（跨端同步暂停）','err'); else this.flashSync('已保存');
-      this.cloudPush(); };   // 自托管云：改动后自动备份（内部防抖）
+      this.cloudPush();           // 自托管云：改动后自动备份（内部防抖）
+      if(this._pendingSave===run) this._pendingSave=null; };   // 落盘完成才清(且只清自己，不误清后来的 save)
     return immediate ? run() : (this._saveT=setTimeout(run,600)); }
+
+  /* 把排队中的防抖保存立即落盘——远端回灌(onRemoteChange)前必须调用，
+     否则防抖窗口内未落盘的改动(如刚删的卡片)会被远端旧快照整体覆盖，刷新后"复活"。 */
+  async flushSave(){ const p=this._pendingSave; if(this._saveT){ clearTimeout(this._saveT); this._saveT=null; } if(p) await p(); }
 
   /* ---- 浏览器书签双向同步 ---- */
   bmOn(){ return !!(this.settings.bmSync && this.settings.bmSync.enabled); }
@@ -478,7 +485,7 @@ class Core {
     if(type==='today'){ w.items=[]; w.countdowns=[]; } if(type==='hwmon')w.url='';
     if(type==='clock')this.settings.showClock=true; if(type==='weather')this.settings.showWeather=true;   // 加时钟/天气同时确保未被隐藏
     ws.push(w); this.save(); this.rerender(); if(type==='hwmon') this.openHwmonEditor(w); }   // 硬件监控加完即弹端点设置
-  removeWidget(id){ this.settings.widgets=(this.settings.widgets||[]).filter(x=>x.id!==id); this.save(); this.rerender(); }
+  removeWidget(id){ this.settings.widgets=(this.settings.widgets||[]).filter(x=>x.id!==id); this.save(true); this.rerender(); }
 
   /* 硬件监控卡片编辑（Glances 端点）*/
   openHwmonEditor(w){ const labelI=this.inp(w.label||'硬件监控','名称'); const urlI=this.inp(w.url||'','http://127.0.0.1:7842（本机）或 http://服务器IP:61208');

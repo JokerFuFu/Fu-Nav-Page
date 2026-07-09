@@ -340,7 +340,7 @@ function widgetToday(core,w){
     w.items.forEach((t,i)=>{ const row=el('label','fx-todo-item'+(t.done?' done':''));
       const cb=el('input'); cb.type='checkbox'; cb.checked=!!t.done; cb.onchange=()=>{ t.done=cb.checked; row.classList.toggle('done',t.done); core.save(); };
       const sp=el('span','fx-todo-tx',t.text);
-      const del=el('button','fx-todo-del'); del.appendChild(mico('x',10)); del.type='button'; del.title='删除'; del.onclick=e=>{e.preventDefault();e.stopPropagation(); w.items.splice(i,1); core.save(); renderTodo();};
+      const del=el('button','fx-todo-del'); del.appendChild(mico('x',10)); del.type='button'; del.title='删除'; del.onclick=e=>{e.preventDefault();e.stopPropagation(); w.items.splice(i,1); core.save(true); renderTodo();};
       row.append(cb,sp,del); todoList.appendChild(row); }); };
   renderTodo();
   const todoForm=el('form','fx-todo-add'); const todoInp=el('input'); todoInp.placeholder='加一条待办，回车…'; todoForm.appendChild(todoInp);
@@ -357,7 +357,7 @@ function widgetToday(core,w){
       const row=el('div','fx-cd-row');
       const num=el('span','fx-cd-num', bad?'—':(days>0?String(days):(days===0?'今天':String(-days))));
       const lb=el('span','fx-cd-lb', cd.label+(bad?' · 日期无效':(days>0?' · 天后':days===0?'':' · 天前')));
-      const del=el('button','fx-todo-del'); del.appendChild(mico('x',10)); del.type='button'; del.title='删除'; del.onclick=e=>{e.preventDefault();e.stopPropagation(); w.countdowns.splice(i,1); core.save(); renderCd();};
+      const del=el('button','fx-todo-del'); del.appendChild(mico('x',10)); del.type='button'; del.title='删除'; del.onclick=e=>{e.preventDefault();e.stopPropagation(); w.countdowns.splice(i,1); core.save(true); renderCd();};
       row.append(num,lb,del); cdList.appendChild(row);
     }); };
   renderCd();
