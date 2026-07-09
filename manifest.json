@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Fu 导航",
-  "version": "3.18.0",
+  "version": "3.19.0",
   "description": "浏览器首页导航 · 极简AI搜索/分组 · 真实图标 · 时钟天气 · 一键收藏当前页(已收藏角标提示) · 书签双向同步 · 多端同步 · homelab 面板。",
   "chrome_url_overrides": {
     "newtab": "newtab.html"
