@@ -333,7 +333,7 @@ function decorateWidget(core, card, w){
     grip.addEventListener('dragstart',e=>{ drag={type:'widget',wid:w.id}; card.classList.add('fx-dragging'); e.dataTransfer.effectAllowed='move'; try{e.dataTransfer.setData('text/plain',w.id);}catch{} });
     grip.addEventListener('dragend',()=>{ card.classList.remove('fx-dragging'); drag=null; });
     const del=el('button','fx-wdel'); del.type='button'; del.title='移除卡片'; del.appendChild(mico('x',11));
-    del.onclick=e=>{e.preventDefault();e.stopPropagation(); core.settings.widgets=(core.settings.widgets||[]).filter(x=>x.id!==w.id); core.save(); core.rerender();};
+    del.onclick=e=>{e.preventDefault();e.stopPropagation(); core.removeWidget(w.id);};   // 走 removeWidget(save(true) 立即落盘)，不再用防抖 save() 留删除丢失窗口
     card.append(grip, del);
   }
   card.addEventListener('contextmenu',e=>widgetMenu(core,e,w));
@@ -397,7 +397,7 @@ function widgetMenu(core,e,w){ e.preventDefault(); e.stopPropagation();
   if(!core.editing){ showCtx(e.clientX,e.clientY,[{ic:'lock-open', label:'解锁后可移除/编辑卡片', on:()=>{ core.editing=true; document.body.classList.add('editing'); core.rerender(); }}]); return; }
   const items=[];
   if(w.type==='hwmon') items.push({ic:'pencil', label:'设置监控端点', on:()=>core.openHwmonEditor(w)});
-  items.push({ic:'trash-2', label:'移除卡片', danger:true, on:()=>{ core.settings.widgets=(core.settings.widgets||[]).filter(x=>x.id!==w.id); core.save(); core.rerender(); }});
+  items.push({ic:'trash-2', label:'移除卡片', danger:true, on:()=>{ core.removeWidget(w.id); }});
   showCtx(e.clientX,e.clientY,items); }
 function addWidgetMenu(core,e){ const types=[['today','今日'],['hwmon','硬件监控'],['weather','天气']];
   const items=types.map(([t,label])=>({ic:'plus', label:label, on:()=>core.addWidget(t)}));
