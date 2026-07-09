@@ -302,7 +302,22 @@ function buildWidgetCards(core, priv){
     }
     if(card) row.appendChild(decorateWidget(core,card,w));
   });
-  if(!priv){ buildAgentCards(core).forEach(c=>row.appendChild(c)); resourceCards(core).forEach(c=>row.appendChild(c)); }
+  if(!priv){
+    const hidden=core.settings.hiddenAgentCards||[];
+    [...buildAgentCards(core), ...resourceCards(core)].forEach(card=>{
+      const kind=card.dataset.agentKind;
+      if(kind && hidden.includes(kind)) return;                       // 用户已隐藏的本机服务卡 → 不渲染
+      if(core.editing && kind){                                        // 编辑态给本机服务卡加「隐藏」钮（它们不在 widgets 数组，需单独处理，否则删不掉）
+        card.style.position='relative';
+        const del=el('button','fx-wdel'); del.type='button'; del.title='隐藏此卡'; del.appendChild(mico('x',11));
+        del.onclick=e=>{ e.preventDefault(); e.stopPropagation();
+          core.settings.hiddenAgentCards=[...(core.settings.hiddenAgentCards||[]), kind];
+          core.save(true); core.rerender(); core.toast('已隐藏（解锁态右键卡片区可恢复）','ok'); };
+        card.appendChild(del);
+      }
+      row.appendChild(card);
+    });
+  }
   // 加卡片不再占首页位置：解锁🔓 时右键卡片区空白处添加；或到 设置→小组件 管理
   if(!priv) row.addEventListener('contextmenu',e=>{ if(e.target.closest('.fx-wcard'))return;   // 点在卡片上交给卡片自身菜单
     e.preventDefault(); if(core.editing) addWidgetMenu(core,e);
@@ -385,13 +400,15 @@ function widgetMenu(core,e,w){ e.preventDefault(); e.stopPropagation();
   items.push({ic:'trash-2', label:'移除卡片', danger:true, on:()=>{ core.settings.widgets=(core.settings.widgets||[]).filter(x=>x.id!==w.id); core.save(); core.rerender(); }});
   showCtx(e.clientX,e.clientY,items); }
 function addWidgetMenu(core,e){ const types=[['today','今日'],['hwmon','硬件监控'],['weather','天气']];
-  showCtx(e.clientX,e.clientY, types.map(([t,label])=>({ic:'plus', label:label, on:()=>core.addWidget(t)}))); }
+  const items=types.map(([t,label])=>({ic:'plus', label:label, on:()=>core.addWidget(t)}));
+  if((core.settings.hiddenAgentCards||[]).length) items.push('-', {ic:'eye', label:'恢复隐藏的本机服务卡片', on:()=>{ core.settings.hiddenAgentCards=[]; core.save(true); core.rerender(); core.toast('已恢复本机服务卡片','ok'); }});
+  showCtx(e.clientX,e.clientY, items); }
 function wireWidgetDnD(core,row){
   row.addEventListener('dragover',e=>{ if(!drag||drag.type!=='widget')return; e.preventDefault(); const after=afterEl(row,'.fx-wcard[data-wid]',e.clientX,e.clientY); const d=row.querySelector('.fx-wcard.fx-dragging'); if(!d)return; if(after==null) row.appendChild(d); else row.insertBefore(d,after); });
   row.addEventListener('drop',e=>{ if(!drag||drag.type!=='widget')return; e.preventDefault(); const order=$$('.fx-wcard[data-wid]',row).map(c=>c.dataset.wid); core.settings.widgets.sort((a,b)=>order.indexOf(a.id)-order.indexOf(b.id)); drag=null; core.save(true); }); }
 /* 本机/NAS 硬件容量卡（需伴随服务上报 agentData.resources，有则显示）*/
 function resourceCards(core){ const d=core.agentData; const out=[]; if(!d||!d.resources)return out;
-  (d.resources||[]).slice(0,4).forEach(r=>{ const c=el('div','fx-wcard fx-wc-res'); c.append(agentHead(core, r.icon||'hard-drive', r.name||'存储'));
+  (d.resources||[]).slice(0,4).forEach(r=>{ const c=el('div','fx-wcard fx-wc-res'); c.dataset.agentKind='resources'; c.append(agentHead(core, r.icon||'hard-drive', r.name||'存储'));
     const pct=Math.max(0,Math.min(100, r.percent||0)); const bar=el('div','fx-res-bar'); const fill=el('div','fx-res-barfill'); fill.style.width=pct+'%'; if(pct>88)fill.style.background='var(--danger)'; bar.appendChild(fill);
     c.append(bar, el('div','fx-res-txt', `${r.used||'?'} / ${r.total||'?'} · ${pct}%`)); out.push(c); });
   return out; }
@@ -434,10 +451,10 @@ function fillWeather(core,card){
 }
 function wcIcon(core,name){ const s=el('span','fx-wcw-ico lucide-mask'); s.style.webkitMaskImage=s.style.maskImage=`url("${core.lucide(name)}")`; s.style.background='currentColor'; return s; }
 function buildAgentCards(core){ const d=core.agentData; const out=[]; if(!d)return out;
-  if(d.report){ const c=el('div','fx-wcard fx-wc-agent'); c.append(agentHead(core,'sparkles','AI 日报')); const r=typeof d.report==='string'?safe(d.report):d.report;
+  if(d.report){ const c=el('div','fx-wcard fx-wc-agent'); c.dataset.agentKind='report'; c.append(agentHead(core,'sparkles','AI 日报')); const r=typeof d.report==='string'?safe(d.report):d.report;
     if(r&&r.summary){ c.append(el('div','fx-wca-main',r.summary)); if(r.focus){ const sub=el('div','fx-wca-sub'); sub.append(mico('chevron-right',12), el('span',null,r.focus)); c.append(sub); } } out.push(c); }
-  if(d.reminders&&d.reminders.length){ const c=el('div','fx-wcard fx-wc-agent'); c.append(agentHead(core,'check-square','今日提醒')); d.reminders.slice(0,4).forEach(r=>c.append(el('div','fx-wca-li','• '+r.name))); out.push(c); }
-  if(d.calendar&&d.calendar.length){ const c=el('div','fx-wcard fx-wc-agent'); c.append(agentHead(core,'calendar','今日日程')); d.calendar.slice(0,4).forEach(e=>c.append(el('div','fx-wca-li','• '+(e.title||e.when)))); out.push(c); }
+  if(d.reminders&&d.reminders.length){ const c=el('div','fx-wcard fx-wc-agent'); c.dataset.agentKind='reminders'; c.append(agentHead(core,'check-square','今日提醒')); d.reminders.slice(0,4).forEach(r=>c.append(el('div','fx-wca-li','• '+r.name))); out.push(c); }
+  if(d.calendar&&d.calendar.length){ const c=el('div','fx-wcard fx-wc-agent'); c.dataset.agentKind='calendar'; c.append(agentHead(core,'calendar','今日日程')); d.calendar.slice(0,4).forEach(e=>c.append(el('div','fx-wca-li','• '+(e.title||e.when)))); out.push(c); }
   return out;
 }
 function agentHead(core,icon,title){ const h=el('div','fx-wca-h'); const i=el('span','fx-wca-ico lucide-mask'); i.style.webkitMaskImage=i.style.maskImage=`url("${core.lucide(icon)}")`; i.style.background='currentColor'; h.append(i,el('span',null,title)); return h; }
