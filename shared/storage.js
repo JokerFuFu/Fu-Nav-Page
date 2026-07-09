@@ -36,23 +36,19 @@ function sliceUtf8(str, max){
 
 export async function loadConfig(){
   if(isExtension){
-    let syncCfg=null, localCfg=null;
+    // local 是唯一权威源：只要本机有配置就用它，杜绝跨设备/跨上下文的旧 sync 快照把本地改动(尤其删除)覆盖掉。
+    try{ const localCfg = (await lGet(LOCAL))[LOCAL] || null; if(localCfg) return { config: localCfg, source:'local' }; }catch(e){}
+    // 本机为空(首次安装 / 新设备)才从 sync 引导一次
     try{
       const meta = (await sGet(META))[META];
       if(meta && meta.chunks){
         const keys = Array.from({length:meta.chunks},(_,i)=>CHUNK+i);
         const parts = await sGet(keys);
         let s=''; for(let i=0;i<meta.chunks;i++) s += parts[CHUNK+i] || '';
-        if(s) syncCfg = JSON.parse(s);
+        if(s) return { config: JSON.parse(s), source:'sync' };
       }
-    }catch(e){ console.warn('sync 读取失败', e); }
-    try{ localCfg = (await lGet(LOCAL))[LOCAL] || null; }catch(e){}
-    // 取 savedAt 更新的一份（修复：重载后若读到旧 sync 会丢失改动）
-    let pick=null, src=null;
-    if(!syncCfg){ pick=localCfg; src='local'; }
-    else if(!localCfg){ pick=syncCfg; src='sync'; }
-    else { pick=((localCfg.savedAt||0)>=(syncCfg.savedAt||0))?localCfg:syncCfg; src=(pick===localCfg)?'local':'sync'; }
-    return { config: pick||null, source: pick?src:null };
+    }catch(e){ console.warn('sync 引导读取失败', e); }
+    return { config:null, source:null };
   }
   const s = localStorage.getItem(LOCAL);
   return { config: s ? JSON.parse(s) : null, source: s ? 'local' : null };
@@ -95,9 +91,10 @@ export function onRemoteChange(cb){
   if(!isExtension || !chrome.storage.onChanged) return;
   let t=null;
   chrome.storage.onChanged.addListener((changes, area)=>{
-    const relevant = (area==='sync'  && (changes[META] || Object.keys(changes).some(k=>k.startsWith(CHUNK))))
-                  || (area==='local' && changes[LOCAL]);
-    if(relevant){ clearTimeout(t); t=setTimeout(cb, 200); }  // 合并抖动
+    // 只响应本机 local 变化(同浏览器另一上下文，如工具栏一键收藏的 SW 写入)——用于刷新 UI；
+    // 不再响应跨设备 sync 推送，杜绝远端旧快照在后台覆盖本地(那是幽灵复活的根源)。
+    const relevant = (area==='local' && changes[LOCAL]);
+    if(relevant){ clearTimeout(t); t=setTimeout(cb, 200); }
   });
 }
 

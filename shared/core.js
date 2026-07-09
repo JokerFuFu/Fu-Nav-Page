@@ -74,11 +74,10 @@ class Core {
         this._lastBmCfgSig=undefined;   // 换了一份新 cfg，旧的书签结构签名缓存已经不对应它了；不重置的话
                                          // 下次 save() 里 bmPush() 会误判"结构又变了"，白白再导出一次到书签，
                                          // 又触发 chrome.bookmarks.onChanged 唤醒 SW，形成第二条循环路径。
-        this.applyTheme(); this.rerender(); this.toast('已从其他终端同步'); } });
+        this.applyTheme(); this.rerender(); this.toast('已更新'); } });
     // 本机 agent 数据（提醒/日历/AI日报）
     this.refreshAgent();
-    // 自托管云同步：启动后台拉取，云端更新则覆盖本地
-    this.cloudPull();
+    // 不再开机自动从云拉取覆盖本地(会用云端旧快照冲掉本地改动)；跨设备同步改为设置里手动「从云恢复」
     // 跟随系统(auto)时，操作系统深浅色实时切换也要跟着换背景图（不用等用户手动点一次主题按钮）
     try{ matchMedia('(prefers-color-scheme: light)').addEventListener('change', ()=>{ if((this.settings.theme||'auto')==='auto') this.applyTheme(); }); }catch{}
     maybeAutoCheck(this);   // 距上次探测超 24 小时才会真的跑，不阻塞首屏渲染
@@ -101,7 +100,7 @@ class Core {
         if(existing){ existing.items=[...(existing.items||[]),...mergedItems]; existing.countdowns=[...(existing.countdowns||[]),...mergedCountdowns]; }
         else s.widgets.push({id:'w-today',type:'today',items:mergedItems,countdowns:mergedCountdowns});
       }
-      if(!s.widgets.some(w=>w.type==='today')) s.widgets.push({id:'w-today',type:'today',items:[],countdowns:[]}); }
+    }   // 注意：不再"没 today 就强制补 today"——那会让用户删掉的今日卡每次 migrate 又复活（今日卡与其他卡一视同仁，可删可加）
     if(s.layout==='classic'||s.layout==='homepage') s.layout='fusion'; // 旧布局并入融合版
     if(s.background && s.background.onlineCacheUrl!==undefined){   // 旧字段是"会重定向的原始地址"，语义已变，不能留着误用
       delete s.background.onlineCacheUrl;
@@ -134,8 +133,7 @@ class Core {
   save(immediate){ clearTimeout(this._saveT); this._saveT=null;
     // 提为实例字段(run)，便于 onRemoteChange 回灌前 flush（否则防抖窗口内未落盘的改动会被远端旧快照整体覆盖→删除复活）
     const run=this._pendingSave=async()=>{
-      // 存前若存储已有更新版本(如工具栏收藏 SW 写入)，先并集合并，杜绝覆盖丢失
-      try{ const latest=(await loadConfig()).config; if(latest && (latest.savedAt||0)>(this.cfg.savedAt||0)) this._mergeIn(latest); }catch{}
+      // local 是唯一权威：直接存当前内存，不再做「防丢合并」(那个只加不删的合并正是删除被复活的元凶)
       await this.bmPush();        // 书签双向同步：导航变更 → 镜像到浏览器「Fu 导航」文件夹（内部按结构签名跳过无关变更）
       const r=await saveConfig(this.cfg);
       if(r.synced){ this.flashSync('已同步到所有终端'); this._quotaWarned=false; }
