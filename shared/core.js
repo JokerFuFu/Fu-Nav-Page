@@ -230,6 +230,13 @@ class Core {
     if(r.ok && r.config && r.config.groups){ this.cfg=r.config; this.migrate(); this.applyTheme(); this.rerender(); await this.save(true); this.toast('已从云端恢复','ok'); return true; }
     this.toast('恢复失败：'+(r.reason||'云端无备份'),'err'); return false; }
   cloudTest(){ return cloudTest(this.settings); }
+  /* 通用单输入弹层（替代原生 prompt，R7）：确定时回调非空值 */
+  promptModal(title, ph, onOk){ const i=this.inp('',ph); const f=el('div','fn-field'); f.appendChild(i);
+    const ok=()=>{ const v=i.value.trim(); if(!v)return; this.closeModal(); onOk(v); };
+    i.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); ok(); } });
+    this.openModal(title,[f],[this.btn('取消','ghost',()=>this.closeModal()), this.btn('确定','primary',ok)]);
+    setTimeout(()=>i.focus(),60); }
+
   /* 申请目标主机的跨域授权（在设置保存按钮的用户手势里调用）*/
   async ensureCloudPermission(url){ try{ if(!chrome.permissions||!url) return true; const o=new URL(url).origin+'/*';
     return await new Promise(res=>chrome.permissions.request({origins:[o]}, res)); }catch{ return true; } }
@@ -335,8 +342,7 @@ class Core {
       if(isNew){ const arr = container || (this.groups.find(x=>x.id===gid)||{}).items; if(arr) arr.push({ id:uid('f'), type:'folder', name, icon:'folder', items:[] }); }
       else { folder.name=name; }
       this.save(true); this.rerender(); this.closeModal(); });
-    const del = isNew ? null : this.btn('删除文件夹','danger',()=>{ if((folder.items||[]).length&&!confirm(`「${folder.name}」及其中条目将被删除，可在 5 秒内撤销。确认？`))return;
-      if(this.deleteItem(folder))this.closeModal(); });
+    const del = isNew ? null : this.btn('删除文件夹','danger',()=>{ if(this.deleteItem(folder))this.closeModal(); });   // R7: 已有 5 秒撤销兜底，去掉双重 confirm
     this.openModal(isNew?'新建文件夹':'重命名文件夹',[this.field('名称',nameI)],[del,this.btn('取消','ghost',()=>this.closeModal()),save].filter(Boolean)); setTimeout(()=>nameI.focus(),50); }
 
   /* ---- 跳转分组（命令面板/外部调用，布局 mount 读 _navTo）---- */
@@ -358,9 +364,9 @@ class Core {
       const open=it=>{ this.recordVisit(it); window.open(it.url, this.settings.openIn==='_self'?'_self':'_blank'); this.closePalette(); };
       const actions=[
         {ic:'plus',label:'新建网站',run:()=>this.openItemEditor(null, this.groups[0]&&this.groups[0].id)},
-        {ic:'layout-grid',label:'新建工作区',run:()=>{ const n=prompt('新工作区名称（如 运维 / 影音）'); if(!n||!n.trim())return;
-          const g={id:uid('g'),name:'新分组',icon:'server',color:COLORS[0],collapsed:false,items:[],page:n.trim()};
-          this.groups.push(g); this.save(true); this.rerender(); this.openGroupEditor(g); }},
+        {ic:'layout-grid',label:'新建工作区',run:()=>this.promptModal('新建工作区','工作区名称，如 运维 / 影音',n=>{
+          const g={id:uid('g'),name:'新分组',icon:'server',color:COLORS[0],collapsed:false,items:[],page:n};
+          this.groups.push(g); this.save(true); this.rerender(); this.openGroupEditor(g); })},
         {ic:'cpu',label:'硬件监控设置',run:()=>{ const w=(this.settings.widgets||[]).find(x=>x.type==='hwmon'); w?this.openHwmonEditor(w):this.addWidget('hwmon'); }},
         {ic:'download',label:'导出备份',run:()=>this.exportConfig()},
         {ic:'upload',label:'导入备份',run:()=>this.importConfig()},
@@ -513,7 +519,7 @@ class Core {
     const archC=this.toggle('归档此分组（从侧栏隐藏，可在设置中管理）', group?.archived===true, ()=>{});
     const save=this.btn(isNew?'创建':'保存','primary',()=>{const name=nameI.value.trim()||'新分组'; const icon=urlI.value.trim()||lucideSel; const archived=archC.querySelector('input').checked||undefined;
       if(isNew)this.groups.push({id:uid('g'),name,icon,color,collapsed:false,items:[],archived}); else{group.name=name;group.icon=icon;group.color=color;group.emoji='';group.archived=archived;} this.save(true);this.rerender();this.closeModal();});   // 工作区(page)不在此编辑，改由侧栏右键分组指定
-    const foot=[ isNew?null:this.btn('删除分组','danger',()=>{ if(group.items.length&&!confirm(`「${group.name}」内有 ${group.items.length} 个网站，确认删除整组？`))return; this.deleteGroup(group); this.closeModal(); }), this.btn('取消','ghost',()=>this.closeModal()), save ];
+    const foot=[ isNew?null:this.btn('删除分组','danger',()=>{ this.deleteGroup(group); this.closeModal(); }), this.btn('取消','ghost',()=>this.closeModal()), save ];   // R7: 已有 5 秒撤销兜底，去掉双重 confirm
     this.openModal(isNew?'新建分组':'编辑分组',[this.field('名称',nameI),this.field('图标',iconWrap),this.field('强调色',cg),archC],foot.filter(Boolean));
     setTimeout(()=>{nameI.focus();markLucide();renderSug();},50); }
 

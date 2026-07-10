@@ -6,7 +6,7 @@ import { PRESETS } from '../shared/bg-presets.js';
 import { effectiveTheme, ONLINE_SOURCES, DEFAULT_ONLINE_SOURCE } from '../shared/background.js';
 const DI = s => `https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons@main/svg/${s}.svg`;
 const picon = p => (p.icon && p.icon.startsWith('http')) ? p.icon : DI(p.icon);
-let active='home', clockTimer=null, drag=null, clockEls=null, ctxMenu=null;
+let active='home', clockTimer=null, drag=null, clockEls=null, ctxMenu=null, askOutsideHandler=null;
 
 document.addEventListener('click', hideCtx);
 document.addEventListener('scroll', hideCtx, true);
@@ -14,6 +14,8 @@ document.addEventListener('scroll', hideCtx, true);
 export function mount(root, core){
   root.className='lay-fusion'+(core.settings.sideCollapsed?' side-collapsed':'');
   if(clockTimer){ clearInterval(clockTimer); clockTimer=null; } clockEls=null;
+  hideCtx();                                                     // D8: 右键菜单随重渲染清理，防残留 body
+  if(bgPanelEl){ bgPanelEl.remove(); bgPanelEl=null; }           // D8: 背景面板锚点已随旧树销毁，面板不清会滞留
   if(core._navTo!==undefined){ active=core._navTo; core._navTo=undefined; }   // 命令面板/外部跳转分组
   if(active!=='home' && !findNode(core,active)) active='home';
   const wrap=el('div','fx-wrap');
@@ -82,7 +84,7 @@ function navItem(core,key,icon,name,count,on,group){
   a.onclick=on; if(group) a.oncontextmenu=e=>{ e.preventDefault();
     const menu=[{ic:'pencil', label:'编辑分组', on:()=>core.openGroupEditor(group)}];
     derivePages(core).filter(p=>p!=='全部'&&p!==group.page).forEach(w=> menu.push({ic:'layers', label:'移到工作区「'+w+'」', on:()=>{ group.page=w; core.save(true); core.rerender(); core.toast('已移到工作区「'+w+'」','ok'); }}));
-    menu.push({ic:'plus', label:'新建工作区…', on:()=>{ const n=prompt('新工作区名称（如 运维 / 影音）'); if(n&&n.trim()){ group.page=n.trim(); core.save(true); core.rerender(); core.toast('已加入工作区「'+n.trim()+'」','ok'); } }});
+    menu.push({ic:'plus', label:'新建工作区…', on:()=>core.promptModal('新建工作区','工作区名称，如 运维 / 影音',n=>{ group.page=n; core.save(true); core.rerender(); core.toast('已加入工作区「'+n+'」','ok'); })});   // R7: 原生 prompt → 自定义弹层
     if(group.page) menu.push({ic:'corner-up-left', label:'移出工作区「'+group.page+'」', on:()=>{ group.page=undefined; core.save(true); core.rerender(); }});
     menu.push('-', {ic: group.archived?'archive-restore':'archive', label: group.archived?'取消归档':'归档分组', on:()=>{ group.archived=group.archived?undefined:true; core.save(true); core.rerender(); core.toast(group.archived?'已归档，可在设置中管理':'已取消归档','ok'); }});
     showCtx(e.clientX,e.clientY,menu); };
@@ -100,7 +102,7 @@ function openModeMenu(core,e){
   const priv=!!core.settings.privacy, ap=core.settings.activePage||'全部';
   const items=[{ic:'layout-grid', sel:!priv&&ap==='全部', label:'全部收藏', on:()=>{ core.settings.privacy=false; core.settings.activePage='全部'; core.save(); core.rerender(); }}];
   derivePages(core).filter(p=>p!=='全部').forEach(w=>{ items.push({ic:'layers', sel:!priv&&ap===w, label:w, on:()=>{ core.settings.privacy=false; core.settings.activePage=w; core.save(); core.rerender(); }}); });
-  items.push('-', {ic:'eye-off', sel:priv, label:'隐私模式（只留搜索/天气）', on:()=>{ core.settings.privacy=true; core.save(); core.rerender(); }});
+  items.push('-', {ic:'eye-off', sel:priv, label:'隐私模式（只留搜索/天气）', on:()=>{ core.settings.privacy=true; active='home'; core.save(); core.rerender(); }});   // D5: 归位 home，否则分组页内容在隐私模式下仍被渲染
   const x=(e&&e.clientX)||120, y=(e&&e.clientY)||innerHeight-40; showCtx(x,y,items);
 }
 /* 侧栏点分组 → 进该分组页 */
@@ -264,7 +266,10 @@ function buildAsk(core){
     results.hidden=false; });
   inp.addEventListener('keydown',e=>{ if(e.key==='Escape'){inp.value='';results.hidden=true;closeMenu();} });
   box.addEventListener('submit',e=>{e.preventDefault();core.ask(core.activeProvider(),inp.value);});
-  document.addEventListener('click',e=>{ if(!wrap.contains(e.target)){ results.hidden=true; closeMenu(); } });
+  // D4: 单例外点监听——重挂前先解绑旧的，否则每次 rerender 累积一个持有游离 DOM 的监听器（泄漏）
+  if(askOutsideHandler) document.removeEventListener('click', askOutsideHandler);
+  askOutsideHandler = e=>{ if(!wrap.contains(e.target)){ results.hidden=true; closeMenu(); } };
+  document.addEventListener('click', askOutsideHandler);
   wrap.append(box,menu,results); setTimeout(()=>inp.focus(),60);
   return wrap;
 }
