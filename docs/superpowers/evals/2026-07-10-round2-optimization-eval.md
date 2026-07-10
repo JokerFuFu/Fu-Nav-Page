@@ -18,11 +18,11 @@
 
 ## W3 · 常用区
 
-- [ ] **W3-1** `passes:false` 〔预览〕断言：默认网格 8×2；设置切 6×3 后首屏常用区列数=6 且最多 18 个，刷新后保持。验证：DevTools 数 DOM + `getComputedStyle` 列数。
-- [ ] **W3-2** `passes:false` 〔预览〕断言：对某非锁定站连点 5 次（每次都真打开），刷新后它在自动段排位早于点击 0 次的站；且其 `freq>0`、`lastVisit` 为近时间戳（立即落盘，无需等防抖）。验证：操作 + localStorage 查 item 字段。
-- [ ] **W3-3** `passes:false` 〔预览〕断言：右键卡片「锁定到常用」→ 卡片出现 pin 角标且固定在锁定段；「取消锁定」后角标消失并按 frecency 归位。验证：操作观察。
-- [ ] **W3-4** `passes:false` 〔预览〕断言：`grep -rn "moreFav\|更多常用" layouts/ shared/ popup.js` 零命中；常用超过一屏规格时不出现折叠卡。验证：grep + 界面。
-- [ ] **W3-5** `passes:false` 〔预览〕断言：390px 宽下常用区自动降列不横向溢出。验证：DevTools 响应式模式。
+- [ ] **W3-1** `passes:true` 〔预览〕断言：默认网格 8×2；设置切 6×3 后首屏常用区列数=6 且最多 18 个，刷新后保持。验证：DevTools 数 DOM + `getComputedStyle` 列数。
+- [ ] **W3-2** `passes:true` 〔预览〕断言：对某非锁定站连点 5 次（每次都真打开），刷新后它在自动段排位早于点击 0 次的站；且其 `freq>0`、`lastVisit` 为近时间戳（立即落盘，无需等防抖）。验证：操作 + localStorage 查 item 字段。
+- [ ] **W3-3** `passes:true` 〔预览〕断言：右键卡片「锁定到常用」→ 卡片出现 pin 角标且固定在锁定段；「取消锁定」后角标消失并按 frecency 归位。验证：操作观察。
+- [ ] **W3-4** `passes:true` 〔预览〕断言：`grep -rn "moreFav\|更多常用" layouts/ shared/ popup.js` 零命中；常用超过一屏规格时不出现折叠卡。验证：grep + 界面。
+- [ ] **W3-5** `passes:true` 〔预览〕断言：390px 宽下常用区自动降列不横向溢出。验证：DevTools 响应式模式。
 
 ## W4 · 归档
 

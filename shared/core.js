@@ -12,6 +12,7 @@ import { applyBackground, refreshOnlineBackground, effectiveTheme } from './back
 import { ACCENTS, DEFAULT_ACCENT_ID } from './accent-presets.js';
 import { checkAllLinks as runLinkCheck, maybeAutoCheck } from './link-check.js';
 import { putBgImage, deleteBgImage } from './bg-storage.js';
+import { readFavGrid, rankFavorites, visitItem } from './favorites.js';
 
 export const $  = (s,r=document)=>r.querySelector(s);
 export const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
@@ -79,7 +80,7 @@ class Core {
   async fetchSeed(){ try{ return await (await fetch('data/seed.json')).json(); }catch{ return {version:2,settings:this.defaults(),groups:[]}; } }
   defaults(){ return { title:'Fu.', layout:'fusion', theme:'auto', openIn:'_blank', searchEngine:'bing', askProvider:'bing', showClock:true, showWeather:true, showStatus:true, locked:true, cardView:'grid', privacy:false, sideCollapsed:false, agentPort:7842, agentToken:'fu-nav-local', cloud:{ enabled:false, type:'webdav', url:'', user:'', pass:'', gdriveClientId:'' }, bmSync:{ enabled:false }, bmSig:'',
       background:{ enabled:true, mode:'preset', presetId:'p01', onlineSource:'bing', onlineImageId:'', localImageId:'', scrimOpacity:0.55 },
-      accentId: 'indigo', lastDeadCheck: 0,
+      accentId: 'indigo', favGrid:{cols:8,rows:2}, lastDeadCheck: 0,
       widgets:[{id:'w-clock',type:'clock'},{id:'w-weather',type:'weather'},{id:'w-today',type:'today',items:[],countdowns:[]}] }; }
   migrate(){ const s=this.cfg.settings||(this.cfg.settings=this.defaults()); for(const[k,v]of Object.entries(this.defaults())) if(s[k]===undefined)s[k]=v;
     if(s.title==='Fu 导航') s.title='Fu.';   // 品牌重塑：旧默认标题自动升级，用户自定义过的标题不动
@@ -107,7 +108,8 @@ class Core {
       this.groups.forEach(g=>clr(g.items)); }
     // 旧 emoji 分组图标 → 推断 lucide；文件夹条目补 items 数组
     for(const g of this.groups){ if(g.icon && /^[\x00-\x7f]+$/.test(g.icon)===false && !g.emoji){ g.emoji=g.icon; }
-      const normF=arr=>(arr||[]).forEach(it=>{ if(it && it.type==='folder'){ if(!Array.isArray(it.items))it.items=[]; normF(it.items); } }); normF(g.items); } }
+      const normF=arr=>(arr||[]).forEach(it=>{ if(it && it.type==='folder'){ if(!Array.isArray(it.items))it.items=[]; normF(it.items); }
+        else if(it && it.freq===undefined && it.clicks>0) it.freq=it.clicks; }); normF(g.items); } }
 
   async refreshAgent(){
     if(!isExtension){ this.agentData=null; return; }
@@ -269,23 +271,16 @@ class Core {
   clearBackground(){ const bg=this.settings.background; bg.mode='none'; this.save(true); this.applyBackground(true); }
 
   openUrl(item, ev){ const t=this.settings.openIn==='_self'?'_self':'_blank'; if(ev){ev.preventDefault();} window.open(item.url, t, 'noopener'); }
-  /* 首页常用（最多一排 12 个，超出自动换行）。fav 三态：true=固定 / false=排除(永不自动上首页) / 空=按点击自动。
-     优先级：手动拖拽顺序(favOrder) → 显式固定(fav===true) → 访问次数(clicks) → 兜底「常用」分组。
-     任何来源都跳过 fav===false（这正是“取消常用”能真正把卡片移出首页的关键）。 */
-  favorites(){ const all=this.allItems();   // 含文件夹内的网站，文件夹本身不入常用
-    const byId=id=>all.find(x=>x.item.id===id);
-    const out=[], seen=new Set();
-    const add=x=>{ if(x&&out.length<12&&!seen.has(x.item.id)&&x.item.fav!==false){ out.push(x); seen.add(x.item.id); } };
-    (this.cfg.favOrder||[]).forEach(id=>add(byId(id)));
-    all.filter(x=>x.item.fav===true).forEach(add);
-    all.filter(x=>x.item.clicks>0).sort((a,b)=>(b.item.clicks||0)-(a.item.clicks||0)||(b.item.lastVisit||0)-(a.item.lastVisit||0)).forEach(add);
-    const cm=this.groups.find(g=>/常用|收藏|favorite|book/i.test(g.name)); if(cm) cm.items.forEach(i=>add({item:i,group:cm}));
-    return out.slice(0,12); }
+  /* 首页常用：锁定段按 favOrder，自动段按 7 天半衰期 frecency；容量由用户选择的网格规格决定。 */
+  favGrid(){ return readFavGrid(this.settings); }
+  favorites(){ const all=this.allItems(), {cols,rows}=this.favGrid();
+    const cm=this.groups.find(g=>/常用|收藏|favorite|book/i.test(g.name));
+    return rankFavorites(all,this.cfg.favOrder,cm?this.flatItems(cm):[],cols*rows); }
   /* 该项当前是否显示在首页常用里（不论靠固定还是点击次数） */
   isFavored(item){ return !!item && this.favorites().some(x=>x.item.id===item.id); }
-  /* 取消常用：硬排除(fav=false) + 从拖拽顺序里剔除，保证立刻离开首页且不会被点击次数带回来 */
-  unfavorite(item){ if(!item)return; item.fav=false; if(Array.isArray(this.cfg.favOrder)) this.cfg.favOrder=this.cfg.favOrder.filter(id=>id!==item.id); this.save(true); }
-  /* 设为常用：固定到首页 */
+  /* 取消锁定后回到 frecency 自动段；历史 fav=false 排除语义仍由排序层尊重。 */
+  unfavorite(item){ if(!item)return; delete item.fav; if(Array.isArray(this.cfg.favOrder)) this.cfg.favOrder=this.cfg.favOrder.filter(id=>id!==item.id); this.save(true); }
+  /* 锁定到常用区 */
   pinFavorite(item){ if(!item)return; item.fav=true; this.save(true); }
   setFavOrder(ids){ this.cfg.favOrder=ids; this.save(true); }
   /* 递归定位（任意层级，含文件夹内）后移动到目标分组顶层；同组顶层为无操作，同组文件夹内=移出文件夹 */
@@ -419,7 +414,7 @@ class Core {
       if(p.q) this.toast(`已在 ${p.name} 打开`+(copied?'（若没自动填入，内容已复制可 ⌘V 粘贴）':''), 'ok');
       else    this.toast(copied?`内容已复制 → 在 ${p.name} 按 ⌘V 粘贴发送`:`请在 ${p.name} 手动输入`, 'ok');
     } else { window.open(p.q+encodeURIComponent(q), tgt); } }
-  recordVisit(item){ if(!item)return; item.clicks=(item.clicks||0)+1; item.lastVisit=Date.now(); this.save(); }
+  recordVisit(item){ if(!item)return; visitItem(item); this.save(true); }
   iconSuggestions(name,url){ return iconSearch(name,url).filter(u=>u&&u!=='__letter__').slice(0,10); }
 
   /* ====== 模态 ====== */
@@ -589,6 +584,7 @@ class Core {
 
   /* 设置 —— 常用（默认展开）/ 同步与备份 / 高级 三层（S2/S7/S9）；云与书签同步收成「摘要+按钮→子弹层」（S1） */
   openSettings(){ const s=this.settings; const titleI=this.inp(s.title||'Fu 导航');
+    const favGrid=this.favGrid(), favGridSeg=this.seg([['6x2','6×2'],['8x2','8×2'],['6x3','6×3'],['8x3','8×3']],`${favGrid.cols}x${favGrid.rows}`,v=>{ const [cols,rows]=v.split('x').map(Number); s.favGrid={cols,rows}; this.save(true); this.rerender(); });
     const accentGrid=el('div','fn-colorgrid');
     ACCENTS.forEach(a=>{ const b=el('button','fn-colorpick'+(s.accentId===a.id?' sel':'')); b.type='button'; b.title=a.name;
       b.style.background=a.dark.accent;
@@ -615,6 +611,7 @@ class Core {
         this.field('标题',titleI),
         this.field('主题',this.seg([['auto','跟随系统'],['dark','深色'],['light','浅色']],s.theme,v=>{s.theme=v;this.applyTheme();})),
         this.field('强调色',accentGrid),
+        this.field('常用区布局',favGridSeg),
         this.toggle('显示时钟与问候',s.showClock,v=>{s.showClock=v;}),
         this.toggle('显示天气',s.showWeather,v=>{s.showWeather=v;}),
         this.toggle('内网在线状态探测',s.showStatus,v=>{s.showStatus=v;}),

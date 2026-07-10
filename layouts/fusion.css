@@ -193,14 +193,14 @@ body.bg-photo .lay-fusion .fx-hero-greet{ color:rgba(255,255,255,.72); text-shad
 .lay-fusion .fx-cd-addbtn{ flex:0 0 auto; color:var(--text-3); padding:0 var(--s1); font-size:15px; }
 .lay-fusion .fx-cd-addbtn:hover{ color:var(--accent); }
 
-/* 常用行：与上方搜索框(.fx-ask)、小组件行(.fx-wcards)统一 max-width:900px 对齐成同一列，
-   不再逐段变宽显得头重脚轻。配合 Task 6 常用行默认只显示 8 个 + "更多"入口，900px 足够一排排下。 */
-.lay-fusion .fx-fav-row{ display:flex; flex-wrap:wrap; gap:var(--s3); justify-content:center; max-width:900px; margin:0 auto; }
-.lay-fusion .fx-fav{ position:relative; width:100px; display:flex; flex-direction:column; align-items:center; gap:var(--s3); padding:var(--s3); border-radius:var(--r-md); background:var(--surface); border:1px solid var(--border); transition:var(--t); cursor:pointer; }
-body.editing .lay-fusion .fx-fav{ cursor:grab; }
+/* 常用网格：列数由设置中的 6/8 × 2/3 规格驱动；锁定段与自动段同网格，pin 角标标识固定项。 */
+.lay-fusion .fx-favs{ display:grid; grid-template-columns:repeat(var(--fav-cols,8),minmax(0,1fr)); gap:var(--s3); max-width:900px; margin:0 auto; }
+.lay-fusion .fx-fav{ position:relative; width:100%; min-width:0; display:flex; flex-direction:column; align-items:center; gap:var(--s3); padding:var(--s3); border-radius:var(--r-md); background:var(--surface); border:1px solid var(--border); transition:var(--t); cursor:pointer; }
+body.editing .lay-fusion .fx-fav[data-pinned="true"]{ cursor:grab; }
 .lay-fusion .fx-fav.fx-dragging{ opacity:.4; }
 /* 卡片 ✎编辑/✕删除 浮层（仅解锁🔓时存在，hover 显示） */
 .lay-fusion .fx-cact{ position:absolute; top:5px; right:5px; display:flex; gap:4px; opacity:0; transition:var(--t); z-index:2; }
+.lay-fusion .fx-fav .fx-cact{ left:5px; right:auto; }
 .lay-fusion .fx-fav:hover .fx-cact, .lay-fusion .fx-card:hover .fx-cact{ opacity:1; }
 .lay-fusion .fx-cact-btn{ position:relative; width:20px; height:20px; border-radius:var(--r-sm); background:var(--surface-3); border:1px solid var(--border); color:var(--text-2); font-size:11px; display:grid; place-items:center; transition:var(--t); }
 .lay-fusion .fx-cact-btn::after{ content:''; position:absolute; inset:-6px; }   /* 命中 32px */
@@ -216,15 +216,7 @@ body.editing .lay-fusion .fx-fav{ cursor:grab; }
 .lay-fusion .fx-fav-ico img{ width:100%; height:100%; object-fit:contain; padding:var(--s2); }
 .lay-fusion .fx-fav-ico.is-letter{ color:#fff; font-weight:700; font-size:20px; }
 .lay-fusion .fx-fav-nm{ font-size:12px; color:var(--text-2); text-align:center; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%; }
-/* "更多常用"折叠入口 + 面板 */
-.lay-fusion .fx-fav-more-ico{ font-size:15px; font-weight:700; color:var(--text-2); background:var(--surface-3); }
-.fx-more-fav-panel{ width:240px; }
-.fx-more-fav-list{ display:flex; flex-direction:column; gap:2px; max-height:280px; overflow:auto; }
-.fx-more-fav-row{ display:flex; align-items:center; gap:var(--s2); padding:var(--s2); border-radius:var(--r-sm); }
-.fx-more-fav-row:hover{ background:var(--surface-2); }
-.fx-more-fav-ico{ width:24px; height:24px; flex:0 0 24px; border-radius:var(--r-sm); overflow:hidden; display:grid; place-items:center; background:var(--surface-2); }
-.fx-more-fav-ico img{ width:100%; height:100%; object-fit:contain; padding:3px; }
-.fx-more-fav-nm{ font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.lay-fusion .fx-fav-pin{ position:absolute; top:var(--s2); right:var(--s2); width:16px; height:16px; display:grid; place-items:center; color:var(--text-3); background:var(--surface-2); border:1px solid var(--border); border-radius:var(--r-sm); }
 
 /* ===== 分组视图 ===== */
 .lay-fusion .fx-gtop{ display:flex; align-items:center; gap:var(--s4); padding-top:var(--s6); margin-bottom:var(--s4); flex-wrap:wrap; }
@@ -341,6 +333,7 @@ body:not(.editing) .lay-fusion .fx-card:active{ transform:translateY(0) scale(.9
   .lay-fusion .fx-navfolder{ display:none; }                                   /* 子文件夹树桌面专属，移动端点进分组后再进 */
   .lay-fusion .fx-side-foot{ width:100%; justify-content:space-around; }      /* 底部按钮整行排底，不再浮在导航右侧 */
   .lay-fusion .fx-wcard{ flex:1 1 100%; }                                     /* 小组件卡满宽堆叠，宽度一致 */
+  .lay-fusion .fx-favs{ --fav-cols:4 !important; width:100%; }                /* 390px 下自动降列，不横向溢出 */
 }
 
 /* 首页背景切换：悬浮入口 + 快捷面板 */

@@ -152,47 +152,16 @@ function renderHome(core,main){
   if(core.settings.showClock) home.appendChild(buildHeroClock(core));   // 时钟+日期 固定 Hero，放在搜索框上方
   home.appendChild(buildAsk(core));               // 输入框（AI/搜索/收藏检索）
   home.appendChild(buildWidgetCards(core,priv));   // 时钟/天气/(本机)卡片
-  if(!priv){ const favs=core.favorites();          // 常用：最多 12 个，默认只显示 8 个 + "更多"入口
+  if(!priv){ const favs=core.favorites(), grid=core.favGrid();
     if(favs.length){
-      const visible=favs.slice(0,8), hidden=favs.slice(8);
-      const row=el('div','fx-fav-row');
-      visible.forEach(({item,group})=>row.appendChild(favCard(core,item,group)));
-      if(hidden.length) row.appendChild(moreFavCard(core,hidden));
-      wireFavDnD(core,row,hidden.map(x=>x.item.id));
+      const row=el('div','fx-favs'); row.style.setProperty('--fav-cols',grid.cols);
+      favs.forEach(({item,group,pinned})=>row.appendChild(favCard(core,item,group,pinned)));
+      wireFavDnD(core,row);
       home.appendChild(row);
     } else {
       home.appendChild(el('div','fx-home-empty','还没有常用网站 — 解锁后点「添加网站」，或到 设置 → 导入浏览器书签'));   // R5 空态引导
     } }
   main.appendChild(home);
-}
-
-/* "更多常用"入口：常用超过 8 个时，第 9 格是这个折叠入口，点开轻量面板列出剩下的 */
-function moreFavCard(core, hidden){
-  const a=el('button','fx-fav fx-fav-more'); a.type='button'; a.title='还有 '+hidden.length+' 个常用网站';
-  const ico=el('span','fx-fav-ico fx-fav-more-ico','+'+hidden.length);
-  a.append(ico, el('span','fx-fav-nm','更多常用'));
-  a.onclick=e=>{ e.stopPropagation(); toggleMoreFavPanel(core, a, hidden); };
-  return a;
-}
-let moreFavPanelEl=null;
-function toggleMoreFavPanel(core, anchor, hidden){
-  if(moreFavPanelEl){ moreFavPanelEl.remove(); moreFavPanelEl=null; return; }
-  const panel=el('div','fx-bg-panel fx-more-fav-panel');
-  const list=el('div','fx-more-fav-list');
-  (hidden||[]).forEach(({item,group})=>{
-    const row=el('a','fx-more-fav-row'); row.href=item.url; row.target=core.settings.openIn==='_self'?'_self':'_blank'; row.rel='noopener';
-    const ico=el('span','fx-more-fav-ico'); core.mountIcon(ico,item,32);
-    row.append(ico, el('span','fx-more-fav-nm',item.name));
-    row.addEventListener('click',()=>{ core.recordVisit(item); toggleMoreFavPanel(core); });
-    list.appendChild(row);
-  });
-  panel.appendChild(list);
-  document.body.appendChild(panel);
-  const r=anchor.getBoundingClientRect();
-  panel.style.top=(r.bottom+8)+'px'; panel.style.left=Math.max(8, r.left)+'px';
-  moreFavPanelEl=panel;
-  const closeOnOutside=e=>{ if(!panel.contains(e.target) && e.target!==anchor){ panel.remove(); moreFavPanelEl=null; document.removeEventListener('click',closeOnOutside); } };
-  setTimeout(()=>document.addEventListener('click',closeOnOutside),0);
 }
 
 /* ---------- 首页背景切换（悬浮入口 + 快捷面板）---------- */
@@ -506,14 +475,15 @@ function cardActions(core, it, g){
   del.onclick=e=>{e.preventDefault();e.stopPropagation(); core.deleteItem(it);};
   box.append(ed,del); return box;
 }
-function favCard(core,it,g){
-  const a=el('a','fx-fav'+(it.deadSince?' fx-fav-dead':'')); a.href=it.url; a.target=core.settings.openIn==='_self'?'_self':'_blank'; a.rel='noopener'; a.title=it.url+(it.deadSince?'（最近探测不可达）':''); a.dataset.iid=it.id; a.draggable=!!core.editing;
+function favCard(core,it,g,pinned){
+  const a=el('a','fx-fav'+(it.deadSince?' fx-fav-dead':'')); a.href=it.url; a.target=core.settings.openIn==='_self'?'_self':'_blank'; a.rel='noopener'; a.title=it.url+(it.deadSince?'（最近探测不可达）':''); a.dataset.iid=it.id; a.dataset.pinned=pinned?'true':'false'; a.draggable=!!core.editing&&!!pinned;
   const ico=el('span','fx-fav-ico'); core.mountIcon(ico,it,128);
+  const pin=pinned?el('span','fx-fav-pin'):null; if(pin)pin.appendChild(mico('pin',10));
   const dead=el('span','fx-dead-badge'); dead.hidden=!it.deadSince; dead.appendChild(mico('alert-triangle',9));
-  a.append(ico, el('span','fx-fav-nm',it.name), dead, cardActions(core,it,g));
+  a.append(ico, el('span','fx-fav-nm',it.name)); if(pin)a.appendChild(pin); a.append(dead, cardActions(core,it,g));
   a.addEventListener('contextmenu',e=>cardMenu(core,e,it,g));
   a.addEventListener('click',e=>{ if(core.editing){e.preventDefault();core.openItemEditor(it,g&&g.id);} else if(it.frame){e.preventDefault();core.openFrame(it);} else core.recordVisit(it); });
-  a.addEventListener('dragstart',e=>{ if(!core.editing){e.preventDefault();return;} drag={type:'fav',iid:it.id}; a.classList.add('fx-dragging'); e.dataTransfer.effectAllowed='move'; });
+  a.addEventListener('dragstart',e=>{ if(!core.editing||!pinned){e.preventDefault();return;} drag={type:'fav',iid:it.id}; a.classList.add('fx-dragging'); e.dataTransfer.effectAllowed='move'; });
   a.addEventListener('dragend',()=>{a.classList.remove('fx-dragging');drag=null;});
   return a;
 }
@@ -588,9 +558,9 @@ function cardMenu(core,e,it,g){
   ];
   // 编辑/常用/删除 只在解锁🔓时给（锁定时只读，防误操作）
   if(core.editing){
-    const onHome=core.isFavored(it);
+    const pinned=it.fav===true;
     items.unshift({ic:'pencil', label:'编辑', on:()=>core.openItemEditor(it, g&&g.id)});
-    items.push({ic: onHome?'star-off':'star', label: onHome?'取消常用（移出首页）':'设为常用（固定首页）', on:()=>{ onHome?core.unfavorite(it):core.pinFavorite(it); core.toast(onHome?'已移出首页':'已固定到首页','ok'); core.rerender(); }});
+    items.push({ic:pinned?'pin-off':'pin', label:pinned?'取消锁定':'锁定到常用', on:()=>{ pinned?core.unfavorite(it):core.pinFavorite(it); core.toast(pinned?'已取消锁定':'已锁定到常用','ok'); core.rerender(); }});
     // 文件夹移动（递归列出各层文件夹，缩进标示层级）
     if(g){ const inFolder=core._itemFolder(g,it);
       if(inFolder) items.push({ic:'corner-up-left', label:'移出到分组', on:()=>core.moveItemOutOfFolder(it,inFolder,g)});
@@ -620,14 +590,13 @@ function wireGridDnD(core,grid,g,arr){ arr=arr||g.items;
   grid.addEventListener('dragover',e=>{ if(!drag||drag.type!=='card'||drag.gid!==g.id)return; e.preventDefault(); const after=afterEl(grid,'.fx-card',e.clientX,e.clientY); const d=grid.querySelector('.fx-card.fx-dragging'); if(!d)return; if(after==null)grid.appendChild(d); else grid.insertBefore(d,after); });
   grid.addEventListener('drop',e=>{ if(!drag||drag.type!=='card')return; e.preventDefault(); const order=$$('.fx-card',grid).map(c=>c.dataset.iid); arr.sort((a,b)=>order.indexOf(a.id)-order.indexOf(b.id)); drag=null; core.save(true); });
 }
-function wireFavDnD(core,row,hiddenIds){
-  hiddenIds = hiddenIds || [];
+function wireFavDnD(core,row){
   row.addEventListener('dragover',e=>{ if(!drag||drag.type!=='fav')return; e.preventDefault();
-    const after=afterEl(row,'.fx-fav:not(.fx-fav-more)',e.clientX,e.clientY); const d=row.querySelector('.fx-fav.fx-dragging'); if(!d)return;
-    if(after==null){ const more=row.querySelector('.fx-fav-more'); if(more) row.insertBefore(d,more); else row.appendChild(d); } else row.insertBefore(d,after); });
+    const after=afterEl(row,'.fx-fav[data-pinned="true"]',e.clientX,e.clientY); const d=row.querySelector('.fx-fav.fx-dragging'); if(!d)return;
+    if(after==null) row.insertBefore(d,row.querySelector('.fx-fav[data-pinned="false"]')); else row.insertBefore(d,after); });
   row.addEventListener('drop',e=>{ if(!drag||drag.type!=='fav')return; e.preventDefault();
-    const visibleIds=$$('.fx-fav:not(.fx-fav-more)',row).map(c=>c.dataset.iid);
-    core.setFavOrder([...visibleIds, ...hiddenIds]);   // 隐藏的那部分顺序原样接在后面，不会因为只拖了前 8 个就丢失
+    const visibleIds=$$('.fx-fav[data-pinned="true"]',row).map(c=>c.dataset.iid);
+    core.setFavOrder(visibleIds);
     drag=null; });
 }
 function wireSidebarDnD(core,nav){
