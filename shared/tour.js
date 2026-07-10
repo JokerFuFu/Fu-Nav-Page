@@ -2,8 +2,12 @@ const STEPS=[
   {sel:'.fx-side',title:'欢迎使用 Fu 导航',text:'左侧是分组导航：分组即页面，点击切换；常用操作也在这里。'},
   {sel:'.fx-ask',title:'搜索与 AI',text:'输入关键词回车即搜；点左侧图标可切换搜索引擎或 AI（Kimi/ChatGPT 等）。'},
   {sel:'[data-tour="lock"]',title:'编辑锁',text:'日常保持锁定防误改；解锁后才可拖拽排序、编辑与删除。'},
-  {sel:'.fx-side-foot',title:'快捷入口',text:'命令面板、添加网站、场景切换、主题都在这排按钮里。'},
-  {sel:'[data-tour="settings"]',title:'设置与同步',text:'外观、常用区布局、云同步与备份、归档管理都在设置里。'},
+  {sel:'[data-tour="mode"]',title:'场景模式',text:'按场景切换首屏：全部、自定义模式与隐私。在这里也能进入模式管理。'},
+  {sel:'[data-tour="settings"]',title:'设置入口',text:'外观、常用区布局、归档与模式管理都在设置里。'},
+  {sel:'[data-tour="sync-sect"]',title:'云同步与备份',text:'WebDAV 自托管云备份、多份历史备份与书签双向同步都在这一区。',
+    before:async core=>{ core.openSettings(); const node=await waitFor('[data-tour="sync-sect"]'); node?.setAttribute('open',''); },
+    cleanup:async(core)=>{ core.closeModal(); }},
+  {sel:null,title:'开始使用吧',text:'随时可在 设置 → 高级 → 重看新手引导，再次打开本引导。'},
 ];
 
 const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));

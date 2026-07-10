@@ -675,6 +675,12 @@ class Core {
     const archiveWrap=el('div','fn-wrap'); archiveWrap.append(this.btn('归档管理','ghost',()=>this.openArchiveManager(),'archive'));
     const modeWrap=el('div','fn-wrap'); modeWrap.append(this.btn('管理模式','ghost',()=>this.openModeManager(),'layers'));
     const tourWrap=el('div','fn-wrap'); tourWrap.append(this.btn('重看新手引导','ghost',()=>import('./tour.js').then(m=>m.startTour(this)),'graduation-cap'));
+    const syncSect=this.sect('同步与备份',[
+      this.field('云同步（WebDAV / Google Drive）',cloudWrap),
+      this.field('浏览器书签双向同步',bmWrap),
+      this.field('备份与导入',backupWrap),
+      info,
+    ]); syncSect.dataset.tour='sync-sect';
     this.openModal('设置',[
       this.sect('常用',[
         this.field('标题',titleI),
@@ -686,12 +692,7 @@ class Core {
         this.toggle('内网在线状态探测',s.showStatus,v=>{s.showStatus=v;}),
         el('div','fn-sub','添加卡片（或在首页解锁后右键卡片区添加）'), addRow,
       ], true),
-      this.sect('同步与备份',[
-        this.field('云同步（WebDAV / Google Drive）',cloudWrap),
-        this.field('浏览器书签双向同步',bmWrap),
-        this.field('备份与导入',backupWrap),
-        info,
-      ]),
+      syncSect,
       this.sect('高级',[
         this.field('打开方式',this.seg([['_blank','新标签页'],['_self','当前页']],s.openIn,v=>{s.openIn=v;})),
         this.field('归档分组',archiveWrap),
