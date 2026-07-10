@@ -1,3 +1,45 @@
-const STEPS=[['.fx-side','欢迎使用 Fu 导航','左侧是分组导航：分组即页面，点击切换；常用操作也在这里。'],['.fx-ask','搜索与 AI','输入关键词回车即搜；点左侧图标可切换搜索引擎或 AI（Kimi/ChatGPT 等）。'],['[data-tour="lock"]','编辑锁','日常保持锁定防误改；解锁后才可拖拽排序、编辑与删除。'],['.fx-side-foot','快捷入口','命令面板（⌘K）、添加网站、视图切换、主题都在这排按钮里。'],['[data-tour="settings"]','设置与同步','外观、常用区布局、云同步与备份、归档管理都在设置里。']];
-export function startTour(core){ document.querySelector('.fn-tour-mask')?.remove(); let i=0; const mask=document.createElement('div'),spot=document.createElement('div'),pop=document.createElement('section'); mask.className='fn-tour-mask';spot.className='fn-tour-spot';pop.className='fn-tour-pop';
-  const done=()=>{mask.remove();window.removeEventListener('resize',draw);document.removeEventListener('keydown',key);core.settings.onboarded=true;core.save(true);}; const key=e=>{if(e.key==='Escape')done();}; const draw=()=>{const [sel,ttl,text]=STEPS[i],r=document.querySelector(sel)?.getBoundingClientRect(); if(r)spot.style.cssText=`left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px`;pop.innerHTML=`<strong>${ttl}</strong><p>${text}</p><div><button class="fn-tour-prev" ${i?'':'disabled'}>上一步</button><button class="fn-tour-skip">跳过</button><button class="fn-tour-next">${i===4?'完成':'下一步'}</button></div>`; if(r){ const w=pop.offsetWidth||320,h=pop.offsetHeight||140,left=Math.max(16,Math.min(innerWidth-w-16,r.left)),top=r.bottom+12+h<innerHeight?r.bottom+12:Math.max(16,r.top-h-12); pop.style.left=left+'px';pop.style.top=top+'px';pop.style.bottom='auto'; } pop.querySelector('.fn-tour-prev').onclick=()=>{if(i){i--;draw();}};pop.querySelector('.fn-tour-skip').onclick=done;pop.querySelector('.fn-tour-next').onclick=()=>++i===5?done():draw();}; mask.append(spot,pop);document.body.appendChild(mask);window.addEventListener('resize',draw);document.addEventListener('keydown',key);draw(); }
+const STEPS=[
+  {sel:'.fx-side',title:'欢迎使用 Fu 导航',text:'左侧是分组导航：分组即页面，点击切换；常用操作也在这里。'},
+  {sel:'.fx-ask',title:'搜索与 AI',text:'输入关键词回车即搜；点左侧图标可切换搜索引擎或 AI（Kimi/ChatGPT 等）。'},
+  {sel:'[data-tour="lock"]',title:'编辑锁',text:'日常保持锁定防误改；解锁后才可拖拽排序、编辑与删除。'},
+  {sel:'.fx-side-foot',title:'快捷入口',text:'命令面板、添加网站、场景切换、主题都在这排按钮里。'},
+  {sel:'[data-tour="settings"]',title:'设置与同步',text:'外观、常用区布局、云同步与备份、归档管理都在设置里。'},
+];
+
+const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+export async function waitFor(sel,ms=3000){ const started=Date.now(); while(Date.now()-started<ms){ const node=document.querySelector(sel); if(node)return node; await wait(120); } return null; }
+
+function position(pop,target){
+  const pad=16, margin=12, w=pop.offsetWidth||320, h=pop.offsetHeight||160;
+  if(!target){ pop.style.left=Math.max(pad,(innerWidth-w)/2)+'px'; pop.style.top=Math.max(pad,(innerHeight-h)/2)+'px'; return; }
+  const r=target.getBoundingClientRect();
+  const candidates=[
+    {left:r.left,top:r.bottom+margin},
+    {left:r.left,top:r.top-h-margin},
+    {left:r.right+margin,top:r.top},
+    {left:r.left-w-margin,top:r.top},
+  ];
+  const place=candidates.find(c=>c.left>=pad&&c.top>=pad&&c.left+w<=innerWidth-pad&&c.top+h<=innerHeight-pad)||candidates[0];
+  pop.style.left=Math.max(pad,Math.min(innerWidth-w-pad,place.left))+'px';
+  pop.style.top=Math.max(pad,Math.min(innerHeight-h-pad,place.top))+'px';
+}
+
+export function startTour(core){
+  core.closeModal();
+  document.querySelector('.fn-tour-mask')?.remove(); document.querySelector('.fn-tour-pop')?.remove();
+  document.querySelectorAll('.fn-tour-hl').forEach(node=>node.classList.remove('fn-tour-hl'));
+  document.querySelectorAll('.fn-tour-elevated').forEach(node=>node.classList.remove('fn-tour-elevated'));
+  let index=0, current=null, finished=false;
+  const mask=document.createElement('div'),pop=document.createElement('section'); mask.className='fn-tour-mask'; pop.className='fn-tour-pop';
+  const clearStep=async()=>{ if(!current)return; current.el?.classList.remove('fn-tour-hl'); current.el?.closest('.fn-backdrop')?.classList.remove('fn-tour-elevated'); if(current.step.cleanup)await current.step.cleanup(core); current=null; };
+  const done=async()=>{ if(finished)return; finished=true; await clearStep(); mask.remove(); pop.remove(); window.removeEventListener('resize',draw); document.removeEventListener('keydown',key); core.settings.onboarded=true; core.save(true); };
+  const key=e=>{ if(e.key==='Escape')done(); };
+  const advance=async delta=>{ index=Math.max(0,Math.min(STEPS.length-1,index+delta)); await draw(); };
+  const draw=async()=>{ if(finished)return; await clearStep(); const step=STEPS[index]; if(step.before)await step.before(core); const target=step.sel?await waitFor(step.sel):null;
+    if(step.sel&&!target){ if(index<STEPS.length-1)return advance(1); return done(); }
+    if(target){ target.classList.add('fn-tour-hl'); target.closest('.fn-backdrop')?.classList.add('fn-tour-elevated'); }
+    current={el:target,step};
+    pop.innerHTML=`<div class="fn-tour-dots">${STEPS.map((_,i)=>`<i class="${i===index?'on':''}"></i>`).join('')}</div><strong>${step.title}</strong><p>${step.text}</p><div><button class="fn-tour-prev" ${index?'':'disabled'}>上一步</button><button class="fn-tour-skip">跳过</button><button class="fn-tour-next">${index===STEPS.length-1?'完成':'下一步'}</button></div>`;
+    position(pop,target); pop.querySelector('.fn-tour-prev').onclick=()=>advance(-1); pop.querySelector('.fn-tour-skip').onclick=done; pop.querySelector('.fn-tour-next').onclick=()=>index===STEPS.length-1?done():advance(1); };
+  document.body.append(mask,pop); window.addEventListener('resize',draw); document.addEventListener('keydown',key); draw();
+}
