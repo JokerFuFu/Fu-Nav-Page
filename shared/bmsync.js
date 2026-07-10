@@ -14,6 +14,9 @@ const GROUP_COLORS=['#2563eb','#0891b2','#16a34a','#7c3aed','#64748b','#ef4444',
 const uid = p => p + Math.random().toString(36).slice(2,7) + Date.now().toString(36).slice(-3);
 const S1='', S2='', S3='', S4='', S5='';   // 签名分隔符
 const isFolder = it => !!(it && it.type==='folder');
+const BM_LOCK='bm_lock', BM_LOCK_TTL=30000;
+const CONTEXT_ID=Math.random().toString(36).slice(2,9);
+let _exporting=null;
 
 export function bmAvailable(){ return isExtension && typeof chrome!=='undefined' && !!(chrome.bookmarks); }
 
@@ -28,17 +31,42 @@ const B = {
   removeTree:id=>new Promise(r=>chrome.bookmarks.removeTree(id,()=>{ void chrome.runtime.lastError; r(); })),
 };
 
+const lockGet=()=>new Promise(r=>chrome.storage.local.get(BM_LOCK,o=>{ void chrome.runtime.lastError; r((o&&o[BM_LOCK])||null); }));
+const lockSet=v=>new Promise(r=>chrome.storage.local.set({[BM_LOCK]:v},()=>{ void chrome.runtime.lastError; r(); }));
+const lockDel=()=>new Promise(r=>chrome.storage.local.remove(BM_LOCK,()=>{ void chrome.runtime.lastError; r(); }));
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+
+/* chrome.storage 没有原子 compare-and-set：写入后短暂让出并回读，只有最终持有者进入导出。 */
+export async function acquireBmLock(kind='newtab'){
+  if(!bmAvailable()) return null;
+  const now=Date.now(), current=await lockGet();
+  if(current && now-(current.ts||0)<BM_LOCK_TTL) return null;
+  const token=`${kind}:${CONTEXT_ID}:${now.toString(36)}:${Math.random().toString(36).slice(2,7)}`;
+  await lockSet({ts:now,owner:token});
+  await wait(40+Math.floor(Math.random()*40));
+  const held=await lockGet();
+  return held && held.owner===token ? token : null;
+}
+
+export async function releaseBmLock(token){
+  if(!token || !bmAvailable()) return;
+  const held=await lockGet();
+  if(held && held.owner===token) await lockDel();   // 不得误删已被超时接管的新锁
+}
+
 /* 书签栏节点 id（根的第一个文件夹） */
 async function barId(){ const tree=await B.getTree(); const roots=(tree[0]&&tree[0].children)||[]; return (roots[0]&&roots[0].id)||'1'; }
 
-/* 找到/创建 根文件夹「Fu 导航」，返回其 id */
+/* 找到/创建根文件夹「Fu 导航」；历史重复根保留最早一份，其余镜像树清掉。 */
 async function ensureRoot(){
   const bar=await barId();
-  const kids=await B.getChildren(bar);
-  const hit=kids.find(c=>!c.url && c.title===ROOT_TITLE);
-  if(hit) return hit.id;
-  const node=await B.create({ parentId:bar, title:ROOT_TITLE });
-  return node && node.id;
+  let roots=(await B.getChildren(bar)).filter(c=>!c.url && c.title===ROOT_TITLE);
+  if(!roots.length){ await B.create({ parentId:bar, title:ROOT_TITLE }); roots=(await B.getChildren(bar)).filter(c=>!c.url && c.title===ROOT_TITLE); }
+  roots.sort((a,b)=>(a.dateAdded||0)-(b.dateAdded||0)||String(a.id).localeCompare(String(b.id)));
+  const keep=roots[0];
+  for(const extra of roots.slice(1)) await B.removeTree(extra.id);
+  if(roots.length>1) console.info(`书签同步：已清理 ${roots.length-1} 个重复「${ROOT_TITLE}」根文件夹`);
+  return keep && keep.id;
 }
 
 /* 子树 → 稳定签名（递归一层子文件夹；文件夹名 + 书签[标题|URL]，排序无关） */
@@ -58,8 +86,9 @@ export async function rootSignature(){ if(!bmAvailable())return''; const id=awai
 /* 把一个父书签节点对齐到一组导航条目（递归子文件夹一层；多删少补） */
 async function reconcileInto(parentId, items){
   const kids=await B.getChildren(parentId);
-  const byUrl=new Map(kids.filter(k=>k.url).map(k=>[normUrl(k.url),k]));
-  const subByTitle=new Map(kids.filter(k=>!k.url).map(k=>[k.title,k]));
+  const byUrl=new Map(), subByTitle=new Map();
+  kids.filter(k=>k.url).forEach(k=>{ const key=normUrl(k.url); if(!byUrl.has(key)) byUrl.set(key,k); });
+  kids.filter(k=>!k.url).forEach(k=>{ if(!subByTitle.has(k.title)) subByTitle.set(k.title,k); });
   const wantUrl=new Set(), wantSub=new Set();
   for(const it of (items||[])){
     if(isFolder(it)){
@@ -79,23 +108,44 @@ async function reconcileInto(parentId, items){
     if(k.url){ if(!wantUrl.has(normUrl(k.url))) await B.remove(k.id); }      // 多余书签
     else { if(!wantSub.has(k.title)) await B.removeTree(k.id); }            // 多余子文件夹
   }
+  // 收尾清扫：Map 只能选出一个匹配项，不能自动删除存量重复；每层都要显式收敛。
+  const fresh=await B.getChildren(parentId), seenUrl=new Set(), seenFolder=new Set();
+  for(const k of fresh){
+    const key=k.url?normUrl(k.url):(k.title||'');
+    const seen=k.url?seenUrl:seenFolder;
+    if(seen.has(key)){ if(k.url) await B.remove(k.id); else await B.removeTree(k.id); }
+    else seen.add(key);
+  }
 }
 
-/* 导出：让「Fu 导航」文件夹等于当前导航（多删少补），返回新签名 */
-export async function exportConfig(cfg){
-  if(!bmAvailable()) return '';
+async function runExport(cfg, options){
+  let token=options&&options.lockToken, ownLock=false;
+  if(!token){ token=await acquireBmLock((options&&options.owner)||'newtab'); if(!token) return null; ownLock=true; }
+  try{
   const rootId=await ensureRoot(); if(!rootId) return '';
   const folders=(await B.getChildren(rootId)).filter(c=>!c.url);
-  const byTitle=new Map(folders.map(f=>[f.title,f]));
+  const byTitle=new Map(); folders.forEach(f=>{ if(!byTitle.has(f.title)) byTitle.set(f.title,f); });
+  const wanted=new Set((cfg.groups||[]).map(g=>g.name));
   for(const g of (cfg.groups||[])){
     let folder=byTitle.get(g.name);
-    if(folder) byTitle.delete(g.name);
-    else folder=await B.create({ parentId:rootId, title:g.name });
+    if(!folder) folder=await B.create({ parentId:rootId, title:g.name });
     if(!folder) continue;
     await reconcileInto(folder.id, g.items||[]);
   }
-  for(const f of byTitle.values()) await B.removeTree(f.id);   // 导航已删的分组 → 删对应文件夹
+  for(const f of folders) if(!wanted.has(f.title)) await B.removeTree(f.id);   // 导航已删的分组 → 删对应文件夹
+  // 根下也可能有并发生成的同名分组镜像，按标题保留第一份。
+  const fresh=await B.getChildren(rootId), seen=new Set();
+  for(const f of fresh.filter(c=>!c.url)){ if(seen.has(f.title)) await B.removeTree(f.id); else seen.add(f.title); }
   const node=await B.getSubTree(rootId); return sigOf(node);
+  }finally{ if(ownLock) await releaseBmLock(token); }
+}
+
+/* 导出：让「Fu 导航」文件夹等于当前导航（多删少补）。同上下文复用 in-flight，跨上下文由 storage 锁互斥。 */
+export async function exportConfig(cfg, options){
+  if(!bmAvailable()) return '';
+  if(_exporting) return _exporting;
+  _exporting=runExport(cfg,options);
+  try{ return await _exporting; }finally{ _exporting=null; }
 }
 
 /* 导入：把「Fu 导航」文件夹的增/删/改名/子文件夹并回导航，返回 { added, removed, sig } */

@@ -195,10 +195,10 @@ class Core {
   /* 导航 → 浏览器（仅在分组/网站结构真的变了时才导出，避免每次点击都重做） */
   async bmPush(){ if(!isExtension || !this.bmOn() || !bmAvailable()) return;
     try{ const sig=bmCfgSig(this.cfg); if(sig===this._lastBmCfgSig) return;
-      const newSig=await bmExport(this.cfg); this.settings.bmSig=newSig; this._lastBmCfgSig=sig; }catch(e){ console.warn('书签导出失败',e); } }
+      const newSig=await bmExport(this.cfg); if(newSig==null) return; this.settings.bmSig=newSig; this._lastBmCfgSig=sig; }catch(e){ console.warn('书签导出失败',e); } }
   /* 手动：立即导出（导航→浏览器） */
   async bmExportNow(){ if(!bmAvailable()){ this.toast('预览模式无法访问浏览器书签','err'); return false; }
-    try{ const sig=await bmExport(this.cfg); this.settings.bmSig=sig; this._lastBmCfgSig=bmCfgSig(this.cfg); await this.save(true);
+    try{ const sig=await bmExport(this.cfg); if(sig==null){ this.toast('书签同步正忙，请稍后再试','err'); return false; } this.settings.bmSig=sig; this._lastBmCfgSig=bmCfgSig(this.cfg); await this.save(true);
       this.toast(`已导出到浏览器「${ROOT_TITLE}」文件夹`,'ok'); return true; }catch(e){ this.toast('导出失败：'+(e&&e.message||e),'err'); return false; } }
   /* 手动：立即导入（浏览器→导航） */
   async bmImportNow(){ if(!bmAvailable()){ this.toast('预览模式无法访问浏览器书签','err'); return false; }

@@ -5,7 +5,7 @@
  *   2) 已收藏角标：当前标签页若已在导航中，工具栏图标显示绿色 ✓，不点开就知道，避免重复收藏。
  */
 import { loadConfig, saveConfig } from './shared/storage.js';
-import { exportConfig as bmExport, importConfig as bmImport, rootSignature, bmAvailable, cfgSignature } from './shared/bmsync.js';
+import { exportConfig as bmExport, importConfig as bmImport, rootSignature, bmAvailable, cfgSignature, acquireBmLock, releaseBmLock } from './shared/bmsync.js';
 import { normUrl } from './shared/icon-map.js';
 
 function badge(text, color){
@@ -57,11 +57,14 @@ function schedule(){ clearTimeout(timer); timer=setTimeout(reconcile, 900); }
 async function reconcile(){
   if(busy){ pending=true; return; }
   busy=true;
+  let lockToken=null;
   try{
     const { config:cfg } = await loadConfig();
     if(!cfg || !Array.isArray(cfg.groups) || !cfg.settings) return;
     const bm=cfg.settings.bmSync;
     if(!bm || !bm.enabled || !bmAvailable()) return;
+    lockToken=await acquireBmLock('sw');
+    if(!lockToken) return;                                  // 另一上下文正在导出，下轮书签/storage 事件自然补齐
 
     let changed=false;
     const prev=cfg.settings.bmSig || '';
@@ -70,12 +73,12 @@ async function reconcile(){
       const r=await bmImport(cfg);
       changed = changed || r.added>0 || r.removed>0;
     }
-    const newSig=await bmExport(cfg);                      // 导航 → 浏览器（令两边一致）
+    const newSig=await bmExport(cfg,{lockToken});          // 导航 → 浏览器（令两边一致；复用本轮 SW 锁）
     if(newSig !== (cfg.settings.bmSig||'')){ cfg.settings.bmSig=newSig; changed=true; }
 
     if(changed){ await saveConfig(cfg); badge('↺','#6e7bff'); }   // 打开的首页经 storage.onChanged 自动刷新
   }catch(e){ console.warn('书签同步失败', e); }
-  finally{ busy=false; if(pending){ pending=false; schedule(); } }
+  finally{ if(lockToken) await releaseBmLock(lockToken); busy=false; if(pending){ pending=false; schedule(); } }
 }
 
 // 书签四类变更 → 一定要重新对一遍（浏览器侧改动的唯一入口，事件量小，不用过滤）
