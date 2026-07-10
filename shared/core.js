@@ -3,7 +3,7 @@ import { isExtension, loadConfig, saveConfig, onRemoteChange, getBookmarksTree, 
 import { mountItemIcon, mountGroupIcon } from './icons.js';
 import { getWeather, preciseLocate, wmo } from './weather.js';
 import { fetchAgentData, agentProbe } from './agent.js';
-import { cloudEnabled, cloudGet, cloudPut, cloudTest } from './cloud.js';
+import { cloudEnabled, cloudGet, cloudPut, cloudTest, cloudPutBackup, cloudListBackups, cloudGetFile } from './cloud.js';
 import { lucide, hostOf, isPrivateHost, brandIcon, faviconCandidates, iconSearch } from './icon-map.js';
 import { createIconEditor } from './icon-editor.js';
 import { infinityToGroups, mergeInfinity } from './import-infinity.js';
@@ -210,7 +210,7 @@ class Core {
     const run=async()=>{ const r=await cloudPut(this.settings, this.cfg); this.flashSync(r.ok?'已备份到云':'云备份失败：'+(r.reason||'')); };
     return immediate ? run() : (this._cloudT=setTimeout(run, 3500)); }
   /* 手动：一键从云恢复（无条件覆盖本地）——跨设备同步的唯一"拉取"入口；不做后台自动拉取（会覆盖本机改动） */
-  async cloudRestore(){ const r=await cloudGet(this.settings);
+  async cloudRestore(name){ const r=name ? await cloudGetFile(this.settings,name) : await cloudGet(this.settings);
     if(r.ok && r.config && r.config.groups){ this.cfg=r.config; this.migrate(); this.applyTheme(); this.rerender(); await this.save(true); this.toast('已从云端恢复','ok'); return true; }
     this.toast('恢复失败：'+(r.reason||'云端无备份'),'err'); return false; }
   cloudTest(){ return cloudTest(this.settings); }
@@ -537,7 +537,7 @@ class Core {
     const clUrl=this.inp(cl.url||'','https://你的群晖DDNS:5006/共享文件夹/'), clUser=this.inp(cl.user||'','WebDAV 账号'), clPass=this.inp(cl.pass||'','密码'); clPass.type='password';
     const clCid=this.inp(cl.gdriveClientId||'','xxxxx.apps.googleusercontent.com');
     const clStatus=el('div','fn-sub','');
-    const DAV_HINT='存到你<b>自己的 WebDAV</b>（群晖「WebDAV Server」套件 / Nextcloud / 任意 WebDAV），数据在自己服务器、不靠第三方账号（仿 Floccus）。<br><b>群晖：</b>装 <code>WebDAV Server</code> 套件→启用 HTTPS（默认 5006）→建共享文件夹→URL 填 <code>https://你的DDNS:5006/文件夹/</code>，账号密码用 DSM 账号。首次「测试/备份」会弹授权该网址，点允许。<br><b>跨设备</b>：另一台设备填同一地址后点「从云恢复」手动拉取——不做后台自动覆盖，本机改动永远优先、不会被云端旧数据冲掉。';
+    const DAV_HINT='存到你<b>自己的 WebDAV</b>（群晖「WebDAV Server」套件 / Nextcloud / 任意 WebDAV），数据在自己服务器、不靠第三方账号（仿 Floccus）。<br><b>群晖：</b>装 <code>WebDAV Server</code> 套件→启用 HTTPS（默认 5006）→建共享文件夹→URL 填 <code>https://你的DDNS:5006/文件夹/</code>，账号密码用 DSM 账号。首次「测试/备份」会弹授权该网址，点允许。<br><b>备份策略</b>：自动备份覆盖固定文件；手动备份每次生成一份时间戳文件并保留最近 10 份，可从列表选择历史版本。<br><b>跨设备</b>：另一台设备填同一地址后点「从云恢复」手动拉取——不做后台自动覆盖，本机改动永远优先、不会被云端旧数据冲掉。';
     const GD_HINT='存到你的 <b>Google Drive</b>（应用隐藏空间 appData，不占可见文件）。需一次性自建 OAuth：<br>① <a href="https://console.cloud.google.com/" target="_blank">Google Cloud Console</a> 建项目→启用 <b>Google Drive API</b>；② 凭据→创建 OAuth 客户端 ID→类型选 <b>Web 应用</b>；③ 「已获授权的重定向 URI」填 <code id="fn-gdredir"></code>（这是本扩展的回调地址）；④ 把客户端 ID 粘到上面。iCloud 无对扩展开放的接口，做不了，用这两种之一。<br>跨设备同步同样通过「从云恢复」手动拉取，不做后台自动覆盖。';
     const davBox=el('div'); const clRow=el('div','fn-row'); const fU=el('div','fn-field'); fU.append(el('label',null,'账号'),clUser); const fP=el('div','fn-field'); fP.append(el('label',null,'密码'),clPass); clRow.append(fU,fP);
     const fUrl=el('div','fn-field'); fUrl.appendChild(clUrl);   // 裸 input 需 .fn-field 皮肤（宽度/底色/焦点环）
@@ -554,8 +554,19 @@ class Core {
     const missing=()=> cl.type==='webdav' ? !clUrl.value.trim() : !clCid.value.trim();
     const clBtns=[
       this.btn('测试连接','ghost',async()=>{ applyCl(); if(missing()){clStatus.textContent='请先填好上面的字段';return;} clStatus.textContent='测试中…'; if(cl.type==='webdav')await this.ensureCloudPermission(cl.url); const r=await this.cloudTest(); clStatus.textContent=(r.ok?'成功：':'失败：')+r.reason; },'plug-zap'),
-      this.btn('立即备份到云','ghost',async()=>{ applyCl(); if(missing()){clStatus.textContent='请先填好上面的字段';return;} if(cl.type==='webdav')await this.ensureCloudPermission(cl.url); clStatus.textContent='备份中…'; const r=await cloudPut(this.settings,this.cfg); clStatus.textContent=r.ok?'已备份到云':'失败：'+(r.reason||''); this.save(); },'cloud-upload'),
-      this.btn('从云恢复','ghost',async()=>{ applyCl(); if(missing()){clStatus.textContent='请先填好上面的字段';return;} if(!confirm('用云端配置覆盖本机当前配置？'))return; if(cl.type==='webdav')await this.ensureCloudPermission(cl.url); clStatus.textContent='恢复中…'; const ok=await this.cloudRestore(); clStatus.textContent=ok?'已从云恢复':'恢复失败'; if(ok)this.closeModal(); },'cloud-download'),
+      this.btn('立即备份到云','ghost',async()=>{ applyCl(); if(missing()){clStatus.textContent='请先填好上面的字段';return;} if(cl.type==='webdav')await this.ensureCloudPermission(cl.url); clStatus.textContent='备份中…'; const r=cl.type==='webdav'?await cloudPutBackup(this.settings,this.cfg):await cloudPut(this.settings,this.cfg); clStatus.textContent=r.ok?(r.name?'已生成 '+r.name:'已备份到云'):'失败：'+(r.reason||''); this.save(); },'cloud-upload'),
+      this.btn('从云恢复','ghost',async()=>{ applyCl(); if(missing()){clStatus.textContent='请先填好上面的字段';return;} if(cl.type==='webdav')await this.ensureCloudPermission(cl.url);
+        if(cl.type==='gdrive'){ if(!confirm('用云端配置覆盖本机当前配置？'))return; clStatus.textContent='恢复中…'; const ok=await this.cloudRestore(); clStatus.textContent=ok?'已从云恢复':'恢复失败'; if(ok)this.closeModal(); return; }
+        clStatus.textContent='正在读取备份列表…'; const listed=await cloudListBackups(this.settings);
+        if(!listed.ok){ if(!confirm('无法列出历史备份，将尝试恢复固定的自动备份。继续？')){clStatus.textContent='已取消恢复';return;} const ok=await this.cloudRestore(); clStatus.textContent=ok?'无法列目录，已恢复自动备份':'恢复失败'; if(ok)this.closeModal(); return; }
+        if(!listed.files.length){ clStatus.textContent='云端暂无备份'; return; }
+        let selected=listed.files[0].name; const list=el('div','fn-bmtree');
+        const fmtSize=n=>n<1024?n+' B':n<1048576?(n/1024).toFixed(1)+' KB':(n/1048576).toFixed(1)+' MB';
+        const fmtTime=f=>{ const m=f.name.match(/(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})/); if(m)return `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}:${m[6]}`; const d=new Date(f.mtime); return Number.isNaN(d.getTime())?'时间未知':d.toLocaleString(); };
+        const rows=[]; listed.files.forEach((file,i)=>{ const row=el('button','fn-pal-row'+(i===0?' sel':'')); const label=file.name==='fu-nav-config.json'?'自动备份（固定文件）':file.name; row.append(el('span','fn-pal-nm',label),el('span','fn-pal-sub',fmtTime(file)+' · '+fmtSize(file.size))); row.onclick=()=>{ selected=file.name; rows.forEach(r=>r.classList.remove('sel')); row.classList.add('sel'); }; rows.push(row); list.appendChild(row); });
+        const restore=this.btn('恢复此份','danger',async()=>{ if(!confirm('用所选云端备份覆盖本机当前配置？'))return; const ok=await this.cloudRestore(selected); if(ok)this.closeModal(); },'history');
+        this.openModal('选择云端备份',[el('div','fn-hint','固定文件是自动备份；时间戳文件来自手动备份。请选择要恢复的一份。'),list],[this.btn('返回','ghost',()=>this.openCloudEditor(),'arrow-left'),restore]);
+      },'cloud-download'),
     ];
     cfgBox.append(el('div','fn-sub','云端'), typeSeg, davBox, gdBox, this.syncActionRow(clBtns,clStatus), clHint); showByType();
     this.openModal('云同步（WebDAV / Google Drive）',[clToggle, cfgBox],[
