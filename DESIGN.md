@@ -178,6 +178,7 @@ background `#fafafb` · surface `#ffffff` · surface-raised `#f4f4f6` · surface
 - 卡片网格自适应列宽，行/列间距统一 md(12)–lg(16)。
 - 侧栏定宽，可折叠到仅图标（236px ↔ 64px）。
 - 触控/点击目标 ≥ 32px（含模态关闭钮、强调色swatch、分段按钮等小控件，均须 ≥32px 命中区）。
+- **首页单屏自适应（`--home-scale`）**：首页三行（时钟英雄区/小组件行/常用网格）的尺寸与间距统一乘以 `--home-scale` 变量（由常用区规格等内容密度决定，取值 ≤1），保证内容多时整页仍一屏放下——被乘数**仍必须取自上表 token**（`calc(token × var(--home-scale))`），缩放不豁免栅格纪律；`@media 760` 下强制 `--home-scale:1` 并允许纵向滚动。仅首页使用，弹层/分组页/设置不缩放。
 
 ## Elevation & Depth
 
