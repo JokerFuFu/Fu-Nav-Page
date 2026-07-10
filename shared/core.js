@@ -61,13 +61,13 @@ class Core {
   async boot(){
     const { config, source } = await loadConfig();
     this.cfg = (config && config.groups) ? config : await this.fetchSeed();
-    this.migrate();
+    const migrated=this.migrate();   // 返回是否发生一次性迁移(如工作区→模式)，据此决定是否落盘
     try{ if(await this._applyInbox()) await this.save(true); }catch{}   // 兑现 popup 在没有新标签页打开时留下的增删
     const ql=new URLSearchParams(location.search).get('layout'); if(ql) this.settings.layout=ql; // 预览/截图用
     this.buildModalHost();
     this.wireChrome();
     this.applyTheme();
-    if(!config || source==='sync') await this.save(true);   // 无配置或刚从 sync 引导 → 立即落成本机权威副本
+    if(!config || source==='sync' || migrated) await this.save(true);   // 无配置/从 sync 引导/发生迁移 → 立即落成本机权威副本
     await this.mountLayout(this.settings.layout || 'classic');
     if(!this.settings.onboarded) import('./tour.js').then(m=>m.startTour(this));
     // 远端变更：仅在 savedAt 严格更新时才回灌，杜绝"自己写入→读到旧/中间态覆盖内存→下次存旧值"的丢失循环
@@ -86,7 +86,7 @@ class Core {
       background:{ enabled:true, mode:'preset', presetId:'p01', onlineSrc:{id:DEFAULT_ONLINE_SOURCE}, onlineImageId:'', localImageId:'', refreshEvery:0, lastFetchAt:0, scrimOpacity:0.55 },
       accentId: 'indigo', favGrid:{cols:8,rows:2}, lastDeadCheck: 0,
       widgets:[{id:'w-clock',type:'clock'},{id:'w-weather',type:'weather'},{id:'w-today',type:'today',items:[],countdowns:[]}] }; }
-  migrate(){ const s=this.cfg.settings||(this.cfg.settings=this.defaults()); const needsModeMigration=!Array.isArray(s.modes); for(const[k,v]of Object.entries(this.defaults())) if(s[k]===undefined)s[k]=v;
+  migrate(){ let dirty=false; const s=this.cfg.settings||(this.cfg.settings=this.defaults()); const needsModeMigration=!Array.isArray(s.modes); for(const[k,v]of Object.entries(this.defaults())) if(s[k]===undefined)s[k]=v;
     if(s.title==='Fu 导航') s.title='Fu.';   // 品牌重塑：旧默认标题自动升级，用户自定义过的标题不动
     if(s.cloud && !s.cloud.type){ s.cloud.type='webdav'; if(s.cloud.gdriveClientId===undefined)s.cloud.gdriveClientId=''; } // 旧 cloud 配置补后端字段
     if(Array.isArray(s.widgets)){ s.widgets=s.widgets.filter(w=>w&&w.type!=='note'&&w.type!=='hitokoto'); // 移除已废弃的便签/一言
@@ -115,6 +115,7 @@ class Core {
     }
     // 工作区/隐私 → 场景模式（2026-07：一次性迁移，清掉旧字段避免双源）
     if(needsModeMigration){
+      dirty=true;   // 迁移生成 uid + 删旧字段，必须落盘（否则每次 boot 内存重迁、id 漂移、不持久）
       s.modes=[];
       const byPage=new Map();
       for(const g of (this.cfg.groups||[])){ if(g.page){ if(!byPage.has(g.page))byPage.set(g.page,[]); byPage.get(g.page).push(g.id); } }
@@ -131,7 +132,7 @@ class Core {
     // 旧 emoji 分组图标 → 推断 lucide；文件夹条目补 items 数组
     for(const g of this.groups){ if(g.icon && /^[\x00-\x7f]+$/.test(g.icon)===false && !g.emoji){ g.emoji=g.icon; }
       const normF=arr=>(arr||[]).forEach(it=>{ if(it && it.type==='folder'){ if(!Array.isArray(it.items))it.items=[]; normF(it.items); }
-        else if(it && it.freq===undefined && it.clicks>0) it.freq=it.clicks; }); normF(g.items); } }
+        else if(it && it.freq===undefined && it.clicks>0) it.freq=it.clicks; }); normF(g.items); } return dirty; }
 
   async refreshAgent(){
     if(!isExtension){ this.agentData=null; return; }
