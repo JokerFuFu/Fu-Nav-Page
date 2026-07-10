@@ -1,5 +1,5 @@
 /* ============ 融合布局 v3.1：极简AI首页 + 时钟/天气卡 + 右键编辑 + 拖拽 ============ */
-import { $, $$, el } from '../shared/core.js';
+import { $, $$, el, safeHref } from '../shared/core.js';
 import { lucide } from '../shared/icon-map.js';
 import { fetchGlances } from '../shared/hwmon.js';
 import { PRESETS } from '../shared/bg-presets.js';
@@ -261,7 +261,7 @@ function buildAsk(core){
     const ms=[]; core.allItems().forEach(({item,group})=>{ if((item.name+' '+item.url+' '+(item.note||'')).toLowerCase().includes(q)) ms.push({it:item,g:group}); });
     if(!ms.length){results.hidden=true;return;}
     results.appendChild(el('div','fx-res-h','我的收藏 · 点击打开'));
-    ms.slice(0,7).forEach(({it,g})=>{ const r=el('a','fx-res'); r.href=it.url; r.target=core.settings.openIn==='_self'?'_self':'_blank'; r.rel='noopener';
+    ms.slice(0,7).forEach(({it,g})=>{ const r=el('a','fx-res'); r.href=safeHref(it.url); r.target=core.settings.openIn==='_self'?'_self':'_blank'; r.rel='noopener';
       const ico=el('span','fx-res-ico'); core.mountIcon(ico,it,32); r.append(ico, el('span','fx-res-nm',it.name), el('span','fx-res-g',g.name)); r.addEventListener('click',()=>core.recordVisit(it)); results.appendChild(r); });
     results.hidden=false; });
   inp.addEventListener('keydown',e=>{ if(e.key==='Escape'){inp.value='';results.hidden=true;closeMenu();} });
@@ -496,7 +496,7 @@ function cardActions(core, it, g){
   box.append(ed,del); return box;
 }
 function favCard(core,it,g,pinned){
-  const a=el('a','fx-fav'+(it.deadSince?' fx-fav-dead':'')); a.href=it.url; a.target=core.settings.openIn==='_self'?'_self':'_blank'; a.rel='noopener'; a.title=it.url+(it.deadSince?'（最近探测不可达）':''); a.dataset.iid=it.id; a.dataset.pinned=pinned?'true':'false'; a.draggable=!!core.editing&&!!pinned;
+  const a=el('a','fx-fav'+(it.deadSince?' fx-fav-dead':'')); a.href=safeHref(it.url); a.target=core.settings.openIn==='_self'?'_self':'_blank'; a.rel='noopener'; a.title=it.url+(it.deadSince?'（最近探测不可达）':''); a.dataset.iid=it.id; a.dataset.pinned=pinned?'true':'false'; a.draggable=!!core.editing&&!!pinned;
   const ico=el('span','fx-fav-ico'); core.mountIcon(ico,it,128);
   const pin=pinned?el('span','fx-fav-pin'):null; if(pin)pin.appendChild(mico('pin',10));
   const dead=el('span','fx-dead-badge'); dead.hidden=!it.deadSince; dead.appendChild(mico('alert-triangle',9));
@@ -509,7 +509,7 @@ function favCard(core,it,g,pinned){
 }
 function card(core,g,it,depth){
   if(core.isFolder(it)) return folderCard(core,g,it,depth||0);
-  const a=el('a','fx-card'+(it.deadSince?' fx-card-dead':'')); a.href=it.url; a.target=core.settings.openIn==='_self'?'_self':'_blank'; a.rel='noopener'; a.title=it.url+(it.deadSince?'（最近探测不可达）':''); a.dataset.iid=it.id; a.draggable=!!core.editing;
+  const a=el('a','fx-card'+(it.deadSince?' fx-card-dead':'')); a.href=safeHref(it.url); a.target=core.settings.openIn==='_self'?'_self':'_blank'; a.rel='noopener'; a.title=it.url+(it.deadSince?'（最近探测不可达）':''); a.dataset.iid=it.id; a.draggable=!!core.editing;
   const ico=el('span','fx-card-ico'); core.mountIcon(ico,it,64);
   const meta=el('span','fx-card-meta'); meta.append(el('span','fx-card-nm',it.name)); if(it.note)meta.append(el('span','fx-card-note',it.note)); meta.append(el('span','fx-card-url',it.url));
   const dot=el('span','fx-dot'); dot.hidden=true;

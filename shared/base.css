@@ -1,5 +1,6 @@
 /* ============ Fu 导航 · 基础样式（两套布局共用）============ */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400..800&display=swap');
+/* Inter 字体本地自托管（不再向 Google Fonts 外链——隐私：避免每次开新标签页把用户 IP 发给 Google）*/
+@font-face{ font-family:'Inter'; font-style:normal; font-weight:400 800; font-display:swap; src:url('../assets/fonts/inter-var.woff2') format('woff2'); }
 
 :root{
   /* ===== 配色 · 深色(默认) — Raycast/Arc 近单色 + 单一靛蓝强调 ===== */

@@ -19,6 +19,9 @@ export const $  = (s,r=document)=>r.querySelector(s);
 export const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
 export const uid = p => p + Math.random().toString(36).slice(2,7) + Date.now().toString(36).slice(-3);
 export function el(tag, cls, txt){ const e=document.createElement(tag); if(cls)e.className=cls; if(txt!=null)e.textContent=txt; return e; }
+/* URL 清洗：挡 javascript:/data:/vbscript: 等可执行伪协议——渲染 <a href>/iframe src 前统一过一遍，
+   兜底导入备份/云恢复等任意来源的脏数据在扩展特权页构成存储型 XSS/提权（安全审计发现）。*/
+export function safeHref(u){ const s=String(u==null?'':u).trim(); return /^(javascript|data|vbscript):/i.test(s) ? 'about:blank#blocked' : s; }
 
 /* 同步复制到剪贴板（execCommand）：用户手势内即时完成，不受紧随其后的 window.open 抢焦点影响。
    navigator.clipboard.writeText 是异步的，开新标签会打断它导致复制失败——AI 发送场景必须用同步版。 */
@@ -417,8 +420,8 @@ class Core {
   /* ====== 面板内打开（iframe，仿 Sun-Panel，homelab 后台不跳页）====== */
   openFrame(item){ const back=$('#fnFrameBack'), ttl=$('#fnFrameTtl'), ext=$('#fnFrameExt'), body=$('#fnFrameBody');
     if(!back){ window.open(item.url, '_blank'); return; }
-    ttl.textContent=item.name||item.url; ext.href=item.url; body.textContent='';
-    const fr=el('iframe','fn-frame-if'); fr.src=item.url; fr.setAttribute('referrerpolicy','no-referrer'); fr.setAttribute('allow','fullscreen');
+    ttl.textContent=item.name||item.url; ext.href=safeHref(item.url); body.textContent='';
+    const fr=el('iframe','fn-frame-if'); fr.src=safeHref(item.url); fr.setAttribute('referrerpolicy','no-referrer'); fr.setAttribute('allow','fullscreen');
     body.appendChild(fr); back.hidden=false; this.recordVisit(item); }
   closeFrame(){ const b=$('#fnFrameBack'); if(b){ b.hidden=true; const body=$('#fnFrameBody'); if(body)body.textContent=''; } }
 
@@ -506,7 +509,8 @@ class Core {
     nameI.addEventListener('input',()=>iconEd.setContext(nameI.value, urlI.value));
     urlI.addEventListener('input',()=>iconEd.setContext(nameI.value, urlI.value));
     const save=this.btn(isNew?'添加':'保存','primary',()=>{ let url=urlI.value.trim(); if(!url){this.toast('请填写网址','err');return;}
-      if(!/^[a-z]+:\/\//i.test(url)&&!/^(javascript|chrome|edge|about):/i.test(url)) url='https://'+url;
+      if(/^\s*(javascript|data|vbscript):/i.test(url)){ this.toast('不支持 javascript:/data: 等协议','err'); return; }   // 拒绝可执行伪协议(存储型 XSS 防护)
+      if(!/^[a-z]+:\/\//i.test(url)&&!/^(chrome|edge|about):/i.test(url)) url='https://'+url;
       const data={name:nameI.value.trim()||hostOf(url)||url,url,note:noteI.value.trim(),icon:iconEd.getIcon(),fav:favC.querySelector('input').checked?true:undefined,frame:frameC.querySelector('input').checked?true:undefined};
       const tg=this.groups.find(g=>g.id===sel.value);
       if(!tg){ this.toast('目标分组已不存在','err'); return; }
