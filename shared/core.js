@@ -82,11 +82,11 @@ class Core {
     maybeAutoCheck(this);   // 距上次探测超 24 小时才会真的跑，不阻塞首屏渲染
   }
   async fetchSeed(){ try{ return await (await fetch('data/seed.json')).json(); }catch{ return {version:2,settings:this.defaults(),groups:[]}; } }
-  defaults(){ return { title:'Fu.', layout:'fusion', theme:'auto', openIn:'_blank', searchEngine:'bing', askProvider:'bing', showClock:true, showWeather:true, showStatus:true, locked:true, cardView:'grid', privacy:false, sideCollapsed:false, agentPort:7842, agentToken:'fu-nav-local', cloud:{ enabled:false, type:'webdav', url:'', user:'', pass:'', gdriveClientId:'' }, bmSync:{ enabled:false }, bmSig:'',
+  defaults(){ return { title:'Fu.', layout:'fusion', theme:'auto', openIn:'_blank', searchEngine:'bing', askProvider:'bing', showClock:true, showWeather:true, showStatus:true, locked:true, cardView:'grid', modes:[], activeMode:null, sideCollapsed:false, agentPort:7842, agentToken:'fu-nav-local', cloud:{ enabled:false, type:'webdav', url:'', user:'', pass:'', gdriveClientId:'' }, bmSync:{ enabled:false }, bmSig:'',
       background:{ enabled:true, mode:'preset', presetId:'p01', onlineSrc:{id:DEFAULT_ONLINE_SOURCE}, onlineImageId:'', localImageId:'', refreshEvery:0, lastFetchAt:0, scrimOpacity:0.55 },
       accentId: 'indigo', favGrid:{cols:8,rows:2}, lastDeadCheck: 0,
       widgets:[{id:'w-clock',type:'clock'},{id:'w-weather',type:'weather'},{id:'w-today',type:'today',items:[],countdowns:[]}] }; }
-  migrate(){ const s=this.cfg.settings||(this.cfg.settings=this.defaults()); for(const[k,v]of Object.entries(this.defaults())) if(s[k]===undefined)s[k]=v;
+  migrate(){ const s=this.cfg.settings||(this.cfg.settings=this.defaults()); const needsModeMigration=!Array.isArray(s.modes); for(const[k,v]of Object.entries(this.defaults())) if(s[k]===undefined)s[k]=v;
     if(s.title==='Fu 导航') s.title='Fu.';   // 品牌重塑：旧默认标题自动升级，用户自定义过的标题不动
     if(s.cloud && !s.cloud.type){ s.cloud.type='webdav'; if(s.cloud.gdriveClientId===undefined)s.cloud.gdriveClientId=''; } // 旧 cloud 配置补后端字段
     if(Array.isArray(s.widgets)){ s.widgets=s.widgets.filter(w=>w&&w.type!=='note'&&w.type!=='hitokoto'); // 移除已废弃的便签/一言
@@ -112,6 +112,18 @@ class Core {
       delete s.background.onlineSource;
       if(s.background.refreshEvery===undefined)s.background.refreshEvery=0;
       if(s.background.lastFetchAt===undefined)s.background.lastFetchAt=0;
+    }
+    // 工作区/隐私 → 场景模式（2026-07：一次性迁移，清掉旧字段避免双源）
+    if(needsModeMigration){
+      s.modes=[];
+      const byPage=new Map();
+      for(const g of (this.cfg.groups||[])){ if(g.page){ if(!byPage.has(g.page))byPage.set(g.page,[]); byPage.get(g.page).push(g.id); } }
+      for(const [name,groupIds] of byPage) s.modes.push({id:uid('m'),name,groupIds,hiddenWidgets:[],showFavs:true});
+      if(s.privacy===true) s.activeMode='privacy';
+      else if(s.activePage&&s.activePage!=='全部'){ const mode=s.modes.find(x=>x.name===s.activePage); s.activeMode=mode?mode.id:null; }
+      else s.activeMode=null;
+      for(const g of (this.cfg.groups||[])) delete g.page;
+      delete s.activePage; delete s.privacy;
     }
     if(!s.deadCheckV2){ s.deadCheckV2=true; s.lastDeadCheck=0;   // 可达检测升级：清掉旧 favicon 时代的失效误标(含内网)，下次自动重检用 no-cors + 内网不标
       const clr=arr=>(arr||[]).forEach(it=>{ if(it&&it.type==='folder')clr(it.items); else if(it)delete it.deadSince; });
@@ -297,6 +309,17 @@ class Core {
   favorites(){ const all=this.allItems(), {cols,rows}=this.favGrid();
     const cm=this.groups.find(g=>/常用|收藏|favorite|book/i.test(g.name));
     return rankFavorites(all,this.cfg.favOrder,cm?this.flatItems(cm):[],cols*rows); }
+  /* 场景模式：模式持有分组 id，允许一个分组归属多个模式。 */
+  modes(){ return this.settings.modes||(this.settings.modes=[]); }
+  activeModeObj(){ const active=this.settings.activeMode; if(active==='privacy')return 'privacy'; return this.modes().find(m=>m.id===active)||null; }
+  setActiveMode(value){ const next=value==='privacy'?'privacy':(value===null||this.modes().some(m=>m.id===value)?value:null); this.settings.activeMode=next; if(next==='privacy')this._navTo='home'; this.save(true); this.rerender(); }
+  createMode(name){ const mode={id:uid('m'),name:(name||'新模式').trim()||'新模式',groupIds:[],hiddenWidgets:[],showFavs:true}; this.modes().push(mode); this.save(true); return mode; }
+  deleteMode(id){ const modes=this.modes(), idx=modes.findIndex(m=>m.id===id); if(idx<0)return false; const mode=modes[idx], wasActive=this.settings.activeMode===id;
+    modes.splice(idx,1); if(wasActive)this.settings.activeMode=null; this.save(true); this.rerender();
+    this._offerUndo('模式「'+mode.name+'」',()=>{ modes.splice(idx,0,mode); if(wasActive)this.settings.activeMode=id; }); return true; }
+  toggleModeGroup(mode,gid){ if(!mode)return; const ids=mode.groupIds||(mode.groupIds=[]), at=ids.indexOf(gid); if(at<0)ids.push(gid); else ids.splice(at,1); this.save(true); }
+  toggleModeWidget(mode,wid){ if(!mode)return; const ids=mode.hiddenWidgets||(mode.hiddenWidgets=[]), at=ids.indexOf(wid); if(at<0)ids.push(wid); else ids.splice(at,1); this.save(true); }
+  setModeShowFavs(mode,value){ if(!mode)return; mode.showFavs=!!value; this.save(true); }
   /* 该项当前是否显示在首页常用里（不论靠固定还是点击次数） */
   isFavored(item){ return !!item && this.favorites().some(x=>x.item.id===item.id); }
   /* 取消锁定后回到 frecency 自动段；历史 fav=false 排除语义仍由排序层尊重。 */
@@ -528,8 +551,10 @@ class Core {
     if(type==='today'){ w.items=[]; w.countdowns=[]; } if(type==='hwmon')w.url='';
     if(type==='clock')this.settings.showClock=true; if(type==='weather')this.settings.showWeather=true;   // 加时钟/天气同时确保未被隐藏
     ws.push(w); this.save(); this.rerender(); if(type==='hwmon') this.openHwmonEditor(w); }   // 硬件监控加完即弹端点设置
-  deleteGroup(group){ const idx=this.groups.indexOf(group); if(idx<0)return false; this._markDeletedGroup(group); this.groups.splice(idx,1); this.save(true); this.rerender();
-    this._offerUndo(group.name+'（'+this.flatItems(group).length+' 个网站）',()=>{ this.groups.splice(idx,0,group); this._clearDeletedGroup(group); }); return true; }
+  deleteGroup(group){ const idx=this.groups.indexOf(group); if(idx<0)return false; const affected=[];
+    this.modes().forEach(mode=>{ const hadAt=(mode.groupIds||[]).indexOf(group.id); if(hadAt>=0){ affected.push({mode,hadAt}); mode.groupIds.splice(hadAt,1); } });
+    this._markDeletedGroup(group); this.groups.splice(idx,1); this.save(true); this.rerender();
+    this._offerUndo(group.name+'（'+this.flatItems(group).length+' 个网站）',()=>{ this.groups.splice(idx,0,group); affected.forEach(({mode,hadAt})=>mode.groupIds.splice(hadAt,0,group.id)); this._clearDeletedGroup(group); }); return true; }
   removeWidget(id){ const ws=this.settings.widgets||[], idx=ws.findIndex(w=>w.id===id); if(idx<0)return false; const w=ws[idx];
     this._tombstones.add(id); ws.splice(idx,1); this.save(true); this.rerender();
     this._offerUndo(w.type==='today'?'今日卡片':w.type==='weather'?'天气卡片':w.type==='clock'?'时钟卡片':'硬件监控卡片',()=>{ ws.splice(idx,0,w); this._tombstones.delete(id); }); return true; }
