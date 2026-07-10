@@ -574,6 +574,23 @@ class Core {
     }) : [el('div','fn-hint','没有归档的分组')];
     this.openModal('归档管理',body,[this.btn('关闭','ghost',()=>this.openSettings())]); }
 
+  /* 场景模式管理：模式持有分组成员关系，配置即时落盘。 */
+  openModeManager(){ const modes=this.modes();
+    const body=modes.length?modes.map(mode=>{ const row=el('div','fn-sync-row');
+      row.append(el('div','fn-sync-label',mode.name+' · '+(mode.groupIds||[]).length+' 个分组'));
+      row.append(this.btn('编辑','ghost',()=>this.openModeEditor(mode),'pencil'));
+      row.append(this.btn('删除','danger',()=>{ this.deleteMode(mode.id); this.openModeManager(); },'trash-2'));
+      return row;
+    }):[el('div','fn-hint','还没有模式——新建一个，按场景定制首屏')];
+    this.openModal('管理模式',body,[this.btn('关闭','ghost',()=>this.openSettings()),this.btn('新建模式','primary',()=>this.promptModal('新建模式','模式名称，如 学习 / 工作 / 生活',name=>{ const mode=this.createMode(name); this.openModeEditor(mode); }),'plus')]); }
+  openModeEditor(mode){ if(!mode)return this.openModeManager(); const nameI=this.inp(mode.name||'','模式名称');
+    const typeName={clock:'时钟',weather:'天气',today:'今日',hwmon:'硬件监控'};
+    const groups=this.groups.length?this.groups.map(g=>this.toggle(g.name,(mode.groupIds||[]).includes(g.id),()=>this.toggleModeGroup(mode,g.id))):[el('div','fn-hint','还没有分组可加入')];
+    const widgets=(this.settings.widgets||[]).length?this.settings.widgets.map(w=>this.toggle(typeName[w.type]||w.type,!(mode.hiddenWidgets||[]).includes(w.id),()=>this.toggleModeWidget(mode,w.id))):[el('div','fn-hint','还没有可配置的小组件')];
+    const favs=this.toggle('显示常用区',mode.showFavs!==false,value=>this.setModeShowFavs(mode,value));
+    const done=this.btn('完成','primary',()=>{ mode.name=nameI.value.trim()||'未命名模式'; this.save(true); this.openModeManager(); });
+    this.openModal('编辑模式',[this.field('名称',nameI),this.sect('分组',groups,true),this.sect('小组件',widgets),favs],[this.btn('返回','ghost',()=>this.openModeManager()),done]); setTimeout(()=>nameI.focus(),50); }
+
 
   /* 云同步（WebDAV / Google Drive）子弹层 —— 从 openSettings 拆出（S1/S4），结构照 openHwmonEditor；关闭/保存回设置 */
   openCloudEditor(){ const s=this.settings;
@@ -656,6 +673,7 @@ class Core {
     const dangerWrap=el('div','fn-wrap'); dangerWrap.append(
       this.btn('恢复默认','ghost',async()=>{if(confirm('用内置默认覆盖当前配置？')){this.cfg=await this.fetchSeed();this.migrate();this.applyTheme();this.rerender();this.save(true);this.closeModal();}},'rotate-ccw'));
     const archiveWrap=el('div','fn-wrap'); archiveWrap.append(this.btn('归档管理','ghost',()=>this.openArchiveManager(),'archive'));
+    const modeWrap=el('div','fn-wrap'); modeWrap.append(this.btn('管理模式','ghost',()=>this.openModeManager(),'layers'));
     const tourWrap=el('div','fn-wrap'); tourWrap.append(this.btn('重看新手引导','ghost',()=>import('./tour.js').then(m=>m.startTour(this)),'graduation-cap'));
     this.openModal('设置',[
       this.sect('常用',[
@@ -677,6 +695,7 @@ class Core {
       this.sect('高级',[
         this.field('打开方式',this.seg([['_blank','新标签页'],['_self','当前页']],s.openIn,v=>{s.openIn=v;})),
         this.field('归档分组',archiveWrap),
+        this.field('场景模式',modeWrap),
         this.field('新手引导',tourWrap),
         this.field('危险操作',dangerWrap),
       ]),
