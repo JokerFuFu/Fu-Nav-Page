@@ -3,7 +3,7 @@ import { $, $$, el } from '../shared/core.js';
 import { lucide } from '../shared/icon-map.js';
 import { fetchGlances } from '../shared/hwmon.js';
 import { PRESETS } from '../shared/bg-presets.js';
-import { effectiveTheme, ONLINE_SOURCES } from '../shared/background.js';
+import { effectiveTheme, ONLINE_SOURCES, DEFAULT_ONLINE_SOURCE } from '../shared/background.js';
 const DI = s => `https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons@main/svg/${s}.svg`;
 const picon = p => (p.icon && p.icon.startsWith('http')) ? p.icon : DI(p.icon);
 let active='home', clockTimer=null, drag=null, clockEls=null, ctxMenu=null;
@@ -186,20 +186,39 @@ function toggleBgPanel(core, anchor){
   });
   panel.appendChild(grid);
   const status=el('div','fn-sub','');
-  // 在线随机：多图源可选（自然/动漫/摄影…），点哪个从哪个源换一张
-  panel.appendChild(el('div','fx-bg-seclabel','在线随机换一张'));
-  const srcRow=el('div','fx-bg-srcrow');
-  const SRC_ICONS={ bing:'mountain', anime:'sparkles', photo:'camera' };   // 图标语言与全应用统一(lucide-mask)，不再是纯文字框
-  ONLINE_SOURCES.forEach(s=>{
-    const btn=el('button','fx-bg-src'+(bg.mode==='online'&&bg.onlineSource===s.id?' sel':'')); btn.type='button'; btn.title=s.name+' · '+s.desc;
-    const ic=el('span','fx-bg-src-ic lucide-mask'); ic.style.webkitMaskImage=ic.style.maskImage=`url("${core.lucide(SRC_ICONS[s.id]||'image')}")`;
-    btn.append(ic, el('span','fx-bg-src-nm',s.name), el('span','fx-bg-src-ds',s.desc));
-    btn.onclick=async()=>{ status.textContent='拉取中…'; const r=await core.refreshOnlineBackground(s.id);
-      status.textContent=r.ok?('已换「'+s.name+'」'):('失败：'+r.reason);
-      $$('.fx-bg-src',srcRow).forEach(x=>x.classList.remove('sel')); if(r.ok)btn.classList.add('sel'); };
-    srcRow.appendChild(btn);
+  // 在线源按用途分组；点选后走统一的图片响应校验 + Blob 落盘管线。
+  panel.appendChild(el('div','fx-bg-seclabel','在线壁纸源'));
+  const current=(bg.onlineSrc&&bg.onlineSrc.id)||DEFAULT_ONLINE_SOURCE;
+  const SRC_ICONS={ bing:'mountain', ycy:'sparkles', moez:'wand-sparkles', ai:'bot', ysz:'sparkles', pc:'monitor', moe:'sparkles', fj:'camera', bd:'sun', ys:'image', acg:'film', mp:'smartphone', picsum:'camera' };
+  ['每日精选','二次元','摄影','其他'].forEach(group=>{
+    const sources=ONLINE_SOURCES.filter(s=>s.group===group); if(!sources.length)return;
+    panel.appendChild(el('div','fx-bg-group',group)); const srcRow=el('div','fx-bg-srcrow');
+    sources.forEach(s=>{
+      const btn=el('button','fx-bg-src'+(bg.mode==='online'&&current===s.id?' sel':'')); btn.type='button'; btn.title=s.name+'：'+s.desc;
+      const ic=el('span','fx-bg-src-ic lucide-mask'); ic.style.webkitMaskImage=ic.style.maskImage=`url("${core.lucide(SRC_ICONS[s.id]||'image')}")`;
+      btn.append(ic, el('span','fx-bg-src-nm',s.name), el('span','fx-bg-src-ds',s.desc));
+      btn.onclick=async()=>{ status.textContent='拉取中…'; const r=await core.refreshOnlineBackground({id:s.id});
+        status.textContent=r.ok?('已换「'+s.name+'」'):('失败：'+r.reason);
+        $$('.fx-bg-src',panel).forEach(x=>x.classList.remove('sel')); if(r.ok)btn.classList.add('sel'); };
+      srcRow.appendChild(btn);
+    }); panel.appendChild(srcRow);
   });
-  panel.appendChild(srcRow);
+  panel.appendChild(el('div','fx-bg-seclabel','自定义图片地址'));
+  const customRow=el('div','fx-bg-custom fn-field'), customI=core.inp(current==='custom'?(bg.onlineSrc.url||''):'','https://example.com/wallpaper.jpg'); customI.type='url';
+  const customBtn=core.btn('使用','ghost',async()=>{ const url=customI.value.trim(); try{ const u=new URL(url); if(!/^https?:$/.test(u.protocol))throw 0; }catch{ core.toast('请输入有效的 http(s) 图片地址','err'); return; }
+    await core.ensureCloudPermission(url); status.textContent='正在校验图片…'; const r=await core.refreshOnlineBackground({id:'custom',url});
+    status.textContent=r.ok?'已应用自定义壁纸':'该地址未返回图片，请检查'; if(!r.ok)core.toast('该地址未返回图片，请检查','err'); },'link');
+  customRow.append(customI,customBtn); panel.appendChild(customRow);
+  panel.appendChild(el('div','fx-bg-seclabel','更新频率'));
+  const presetValues=new Set([0,15,60,720,1440,10080]), refresh=Number(bg.refreshEvery)||0, refreshKey=presetValues.has(refresh)?String(refresh):'custom';
+  const customMinutes=core.inp(refreshKey==='custom'?String(refresh):'','分钟数'); customMinutes.type='number'; customMinutes.min='1'; customMinutes.step='1';
+  const customRefresh=el('div','fx-bg-custom fn-field');
+  const applyMinutes=core.btn('应用分钟数','ghost',()=>{ const n=Math.floor(Number(customMinutes.value)); if(!(n>0)){status.textContent='请输入大于 0 的分钟数';return;} bg.refreshEvery=n; core.save(true); status.textContent='已设为每 '+n+' 分钟检查一次'; },'timer-reset');
+  customRefresh.append(customMinutes,applyMinutes); customRefresh.hidden=refreshKey!=='custom';
+  const refreshSeg=core.seg([['0','仅手动'],['15','15 分钟'],['60','1 小时'],['720','12 小时'],['1440','1 天'],['10080','7 天'],['custom','自定义']],refreshKey,v=>{
+    customRefresh.hidden=v!=='custom'; if(v!=='custom'){ bg.refreshEvery=Number(v); core.save(true); status.textContent=v==='0'?'已设为仅手动更新':'更新频率已保存'; }
+  });
+  const refreshWrap=el('div','fx-bg-refresh'); refreshWrap.append(refreshSeg,customRefresh); panel.appendChild(refreshWrap);
   const actions=el('div','fn-wrap');
   const upBtn=core.btn('上传本地图片…','ghost',()=>{ const f=el('input'); f.type='file'; f.accept='image/*';
     f.onchange=async()=>{ const file=f.files[0]; if(!file)return; status.textContent='上传中…'; const r=await core.setBackgroundLocal(file); status.textContent=r.ok?'已应用':('失败：'+r.reason); }; f.click(); },'upload');
@@ -207,8 +226,8 @@ function toggleBgPanel(core, anchor){
   actions.append(upBtn, noneBtn);
   panel.append(actions, status);
   document.body.appendChild(panel);
-  const r=anchor.getBoundingClientRect();
-  panel.style.top=(r.bottom+8)+'px'; panel.style.left=Math.max(8, r.right-260)+'px';
+  const r=anchor.getBoundingClientRect(), pr=panel.getBoundingClientRect();
+  panel.style.top=(r.bottom+8)+'px'; panel.style.left=Math.max(8, r.right-pr.width)+'px';
   bgPanelEl=panel;
   const closeOnOutside=e=>{ if(!panel.contains(e.target) && e.target!==anchor){ panel.remove(); bgPanelEl=null; document.removeEventListener('click',closeOnOutside); } };
   setTimeout(()=>document.addEventListener('click',closeOnOutside),0);

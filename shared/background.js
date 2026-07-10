@@ -7,6 +7,10 @@
 import { PRESETS } from './bg-presets.js';
 import { putBgImage, deleteBgImage, bgObjectURL } from './bg-storage.js';
 
+export const DEFAULT_ONLINE_SOURCE='ycy';
+let autoRefreshInFlight=null;
+const previewMode=()=>typeof chrome==='undefined'||!(chrome.storage&&chrome.storage.local);
+
 /* 当前"生效"的主题（auto 时看系统偏好），供预置图挑选深/浅变体、强调色复用 */
 export function effectiveTheme(core){
   const t = core.settings.theme || 'auto';
@@ -30,9 +34,14 @@ export async function applyBackground(core, onHome){
     // 在线源现在也是本地缓存的一份图片二进制，跟"本地上传"走同一套存取，读的时候完全不发网络请求，
     // 也就不存在"存下来的地址每次加载都换一张"这个问题了（那是旧版直接存网络 URL 才有的坑）。
     url = await bgObjectURL(bg.onlineImageId);
-    if(!url){ // 换设备后本机没有这张图缓存 → 静默降级为预置默认图
-      bg.mode='preset'; bg.presetId = bg.presetId || 'p01';
+    if(!url && previewMode()) url=bg.onlineDirectUrl||null;   // 预览受 CORS 限制，校验通过后仅存直连 URL
+    if(!url){ // 换设备后本机没有缓存，当前页用预置图兜底，但保留 online 模式以便后台补拉
+      bg.presetId = bg.presetId || 'p01';
       const dp = PRESETS.find(x=>x.id===bg.presetId)||PRESETS[0]; url = dp[effectiveTheme(core)] || dp.dark;
+    }
+    if(isOnlineRefreshDue(bg) && !autoRefreshInFlight){
+      autoRefreshInFlight=refreshOnlineBackground(core,bg.onlineSrc||{id:DEFAULT_ONLINE_SOURCE},{apply:false})
+        .catch(()=>null).finally(()=>{autoRefreshInFlight=null;});
     }
   } else if(bg.mode==='local'){
     url = await bgObjectURL(bg.localImageId);
@@ -74,40 +83,78 @@ export async function fetchBingImage(){
 }
 
 export const ONLINE_SOURCES = [
-  { id:'bing',  name:'自然风光',  desc:'必应每日', fetch: fetchBingImage },
-  { id:'anime', name:'卡通动漫',  desc:'随机横屏', endpoint:'https://t.alcy.cc/moe' },
-  { id:'photo', name:'风光摄影',  desc:'高清随机', endpoint:'https://t.alcy.cc/fj' },
+  { id:'bing',   name:'必应每日',   group:'每日精选', desc:'每日一图', fetch:fetchBingImage },
+  { id:'ycy',    name:'二次元自适应',group:'二次元', desc:'默认动漫源', endpoint:'https://t.alcy.cc/ycy' },
+  { id:'moez',   name:'萌版自适应', group:'二次元', desc:'自适应尺寸', endpoint:'https://t.alcy.cc/moez' },
+  { id:'ai',     name:'AI 自适应',  group:'其他', desc:'AI 随机图', endpoint:'https://t.alcy.cc/ai' },
+  { id:'ysz',    name:'原神自适应', group:'二次元', desc:'自适应尺寸', endpoint:'https://t.alcy.cc/ysz' },
+  { id:'pc',     name:'PC 横图',    group:'摄影', desc:'桌面横屏', endpoint:'https://t.alcy.cc/pc' },
+  { id:'moe',    name:'萌版横图',   group:'二次元', desc:'桌面横屏', endpoint:'https://t.alcy.cc/moe' },
+  { id:'fj',     name:'风景横图',   group:'摄影', desc:'风光摄影', endpoint:'https://t.alcy.cc/fj' },
+  { id:'bd',     name:'白底横图',   group:'摄影', desc:'浅色简洁', endpoint:'https://t.alcy.cc/bd' },
+  { id:'ys',     name:'原神横图',   group:'二次元', desc:'桌面横屏', endpoint:'https://t.alcy.cc/ys' },
+  { id:'acg',    name:'ACG 动图',   group:'二次元', desc:'测试源，当前可能返回视频', endpoint:'https://t.alcy.cc/acg' },
+  { id:'mp',     name:'移动竖图',   group:'其他', desc:'竖屏图片', endpoint:'https://t.alcy.cc/mp' },
+  { id:'picsum', name:'Picsum',     group:'其他', desc:'随机摄影', endpoint:'https://picsum.photos/1920/1080' },
 ];
 
 /* 把某个在线源解析成一份图片二进制。无论最终是 bing 那种"JSON 直接给固定 URL"，
  * 还是 anime/photo 那种"请求会 301→302 重定向到随机图"，统一在这一步把图下载完存住——
  * 下载完之后这份 blob 就跟网络彻底脱钩了，不再关心解析出来的 URL 是否"稳定"，
  * 从根上避免"存下来的地址每次浏览器加载都命中新图"的问题（这正是这次要修的 bug 的根因）。 */
-async function fetchSourceBlob(src){
+async function sourceUrl(src){
   let url;
   if(src.fetch){ url = await src.fetch(); if(!url) return null; }
   else { url = src.endpoint + (src.endpoint.includes('?')?'&':'?') + 'r=' + Date.now(); }
+  return url;
+}
+
+async function fetchImageBlob(url){
+  if(!url)return null;
   const ok = await ensurePermission(url);
   if(!ok) return null;
   try{
     const r = await fetch(url, { redirect:'follow', cache:'no-store' });
     if(!r.ok) return null;
-    return await r.blob();
+    const blob=await r.blob(), type=(r.headers.get('content-type')||blob.type||'').toLowerCase();
+    return type.startsWith('image/') ? blob : null;
   }catch{ return null; }
 }
 
-export async function refreshOnlineBackground(core, sourceId){
-  const src = ONLINE_SOURCES.find(s=>s.id===sourceId) || ONLINE_SOURCES[0];
-  const blob = await fetchSourceBlob(src);
-  if(!blob) return { ok:false, reason:'拉取失败，请稍后再试' };   // 下载失败：不动 settings.background，当前壁纸保持不变
+export async function fetchSourceBlob(src){ return fetchImageBlob(await sourceUrl(src)); }
+
+function validateDirectImage(url){ return new Promise(resolve=>{
+  if(!previewMode() || typeof Image==='undefined'){resolve(false);return;}
+  const img=new Image(), done=ok=>{ clearTimeout(timer); img.onload=img.onerror=null; resolve(ok); };
+  const timer=setTimeout(()=>done(false),12000); img.onload=()=>done(true); img.onerror=()=>done(false); img.src=url;
+}); }
+
+export function isOnlineRefreshDue(bg,now=Date.now()){
+  const minutes=Number(bg&&bg.refreshEvery)||0;
+  return minutes>0 && now-(Number(bg&&bg.lastFetchAt)||0)>minutes*60000;
+}
+
+function resolveSource(ref){
+  if(ref && typeof ref==='object' && ref.id==='custom' && /^https?:\/\//i.test(ref.url||'')) return {id:'custom',name:'自定义源',group:'其他',desc:'用户地址',endpoint:ref.url,url:ref.url};
+  const id=typeof ref==='string'?ref:(ref&&ref.id);
+  return ONLINE_SOURCES.find(s=>s.id===id) || ONLINE_SOURCES.find(s=>s.id===DEFAULT_ONLINE_SOURCE);
+}
+
+export async function refreshOnlineBackground(core, sourceRef, options={}){
+  const src = resolveSource(sourceRef);
+  const url=await sourceUrl(src), blob = await fetchImageBlob(url);
+  const directOk=!blob && await validateDirectImage(url);
+  if(!blob && !directOk) return { ok:false, reason:'该地址未返回图片，请检查' };   // 下载失败：不动 settings.background，当前壁纸保持不变
   const bg = core.settings.background;
   const oldId = bg.mode==='online' ? bg.onlineImageId : null;
-  const id = await putBgImage(blob);
+  const id = blob ? await putBgImage(blob) : '';
   if(oldId && oldId!==id) await deleteBgImage(oldId);   // 换图后清掉旧的，避免 IndexedDB 无限堆积
   bg.mode = 'online';
-  bg.onlineSource = src.id;
+  bg.onlineSrc = src.id==='custom'?{id:'custom',url:src.url}:{id:src.id};
   bg.onlineImageId = id;
+  if(directOk)bg.onlineDirectUrl=url; else delete bg.onlineDirectUrl;
+  bg.lastFetchAt=Date.now();
   core.save(true);
-  await applyBackground(core, true);
+  if(options.apply!==false) await applyBackground(core, true);
   return { ok:true };
 }

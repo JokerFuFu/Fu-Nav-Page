@@ -11,10 +11,10 @@
 
 ## W2 · 壁纸源
 
-- [ ] **W2-1** `passes:false` 〔预览〕断言：背景面板在线源列表 ≥13 项（bing + alcy 11 分类 + picsum），分组展示、当前源高亮；alcy 各项 endpoint 与 t.alcy.cc 文档页路径一一对应（ycy/moez/ai/ysz/pc/moe/fj/bd/ys/acg/mp）。验证：打开面板数一遍 + `grep -c "t.alcy.cc" shared/background.js` ≥11。
-- [ ] **W2-2** `passes:false` 〔预览〕断言：动漫类默认源为 `/ycy`。验证：`grep -n "ycy" shared/background.js` 出现在默认常量；清 localStorage 后切「在线壁纸」默认落在 ycy。
-- [ ] **W2-3** `passes:false` 〔预览〕断言：自定义源填 `https://picsum.photos/1200/800` 可成功换图落盘；填 `https://example.com` 弹明确错误 toast 且 `settings.background.onlineSrc` 未变。验证：两次操作 + DevTools 查 localStorage。
-- [ ] **W2-4** `passes:false` 〔预览〕断言：更新频率选「15 分钟」，把 `settings.background.lastFetchAt` 手改为 20 分钟前并刷新 → Network 出现对当前源的图片请求且 `lastFetchAt` 被更新；改为 5 分钟前刷新 → 无新请求。验证：DevTools Network + localStorage。
+- [ ] **W2-1** `passes:true` 〔预览〕断言：背景面板在线源列表 ≥13 项（bing + alcy 11 分类 + picsum），分组展示、当前源高亮；alcy 各项 endpoint 与 t.alcy.cc 文档页路径一一对应（ycy/moez/ai/ysz/pc/moe/fj/bd/ys/acg/mp）。验证：打开面板数一遍 + `grep -c "t.alcy.cc" shared/background.js` ≥11。
+- [ ] **W2-2** `passes:true` 〔预览〕断言：动漫类默认源为 `/ycy`。验证：`grep -n "ycy" shared/background.js` 出现在默认常量；清 localStorage 后切「在线壁纸」默认落在 ycy。
+- [ ] **W2-3** `passes:true` 〔预览〕断言：自定义源填 `https://picsum.photos/1200/800` 可成功换图落盘；填 `https://example.com` 弹明确错误 toast 且 `settings.background.onlineSrc` 未变。验证：两次操作 + DevTools 查 localStorage。
+- [ ] **W2-4** `passes:true` 〔预览〕断言：更新频率选「15 分钟」，把 `settings.background.lastFetchAt` 手改为 20 分钟前并刷新 → Network 出现对当前源的图片请求且 `lastFetchAt` 被更新；改为 5 分钟前刷新 → 无新请求。验证：DevTools Network + localStorage。
 
 ## W3 · 常用区
 

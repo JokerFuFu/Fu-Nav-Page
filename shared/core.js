@@ -8,7 +8,7 @@ import { lucide, hostOf, isPrivateHost, brandIcon, faviconCandidates, iconSearch
 import { createIconEditor } from './icon-editor.js';
 import { infinityToGroups, mergeInfinity } from './import-infinity.js';
 import { exportConfig as bmExport, importConfig as bmImport, cfgSignature as bmCfgSig, bmAvailable, ROOT_TITLE } from './bmsync.js';
-import { applyBackground, refreshOnlineBackground, effectiveTheme } from './background.js';
+import { applyBackground, refreshOnlineBackground, effectiveTheme, DEFAULT_ONLINE_SOURCE } from './background.js';
 import { ACCENTS, DEFAULT_ACCENT_ID } from './accent-presets.js';
 import { checkAllLinks as runLinkCheck, maybeAutoCheck } from './link-check.js';
 import { putBgImage, deleteBgImage } from './bg-storage.js';
@@ -79,7 +79,7 @@ class Core {
   }
   async fetchSeed(){ try{ return await (await fetch('data/seed.json')).json(); }catch{ return {version:2,settings:this.defaults(),groups:[]}; } }
   defaults(){ return { title:'Fu.', layout:'fusion', theme:'auto', openIn:'_blank', searchEngine:'bing', askProvider:'bing', showClock:true, showWeather:true, showStatus:true, locked:true, cardView:'grid', privacy:false, sideCollapsed:false, agentPort:7842, agentToken:'fu-nav-local', cloud:{ enabled:false, type:'webdav', url:'', user:'', pass:'', gdriveClientId:'' }, bmSync:{ enabled:false }, bmSig:'',
-      background:{ enabled:true, mode:'preset', presetId:'p01', onlineSource:'bing', onlineImageId:'', localImageId:'', scrimOpacity:0.55 },
+      background:{ enabled:true, mode:'preset', presetId:'p01', onlineSrc:{id:DEFAULT_ONLINE_SOURCE}, onlineImageId:'', localImageId:'', refreshEvery:0, lastFetchAt:0, scrimOpacity:0.55 },
       accentId: 'indigo', favGrid:{cols:8,rows:2}, lastDeadCheck: 0,
       widgets:[{id:'w-clock',type:'clock'},{id:'w-weather',type:'weather'},{id:'w-today',type:'today',items:[],countdowns:[]}] }; }
   migrate(){ const s=this.cfg.settings||(this.cfg.settings=this.defaults()); for(const[k,v]of Object.entries(this.defaults())) if(s[k]===undefined)s[k]=v;
@@ -102,6 +102,12 @@ class Core {
       if(s.background.onlineImageId===undefined) s.background.onlineImageId='';
       if(s.background.onlineSource===undefined) s.background.onlineSource='bing';
       if(s.background.mode==='online') s.background.mode='preset';   // 旧的在线壁纸设置这次直接失效，降级回预置图库，用户重新点一次"换一张"即可用新逻辑换回来
+    }
+    if(s.background){
+      if(!s.background.onlineSrc){ const old={anime:'ycy',photo:'fj',bing:'bing'}[s.background.onlineSource]||DEFAULT_ONLINE_SOURCE; s.background.onlineSrc={id:old}; }
+      delete s.background.onlineSource;
+      if(s.background.refreshEvery===undefined)s.background.refreshEvery=0;
+      if(s.background.lastFetchAt===undefined)s.background.lastFetchAt=0;
     }
     if(!s.deadCheckV2){ s.deadCheckV2=true; s.lastDeadCheck=0;   // 可达检测升级：清掉旧 favicon 时代的失效误标(含内网)，下次自动重检用 no-cors + 内网不标
       const clr=arr=>(arr||[]).forEach(it=>{ if(it&&it.type==='folder')clr(it.items); else if(it)delete it.deadSince; });
