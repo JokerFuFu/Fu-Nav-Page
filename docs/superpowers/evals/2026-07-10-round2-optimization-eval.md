@@ -7,7 +7,7 @@
 ## W1 · AI 搜索词
 
 - [ ] **W1-1** `passes:false` 〔预览〕断言：选 Kimi 输入「测试问题」回车后，原页面出现内容含「已复制」的 toast（若 5.1 实测 Kimi 已支持 URL 直填则断言改为验证 q 模板生效——该改动需在 PR 注明实测证据）。验证：预览操作 + 截图。
-- [ ] **W1-2** `passes:false` 〔预览〕断言：Bing / ChatGPT 等 `q:` 模板类 provider 搜索时**不**出现复制类 toast。验证：逐一试搜观察。
+- [ ] **W1-2** `passes:true` 〔预览〕断言：Bing / ChatGPT 等 `q:` 模板类 provider 搜索时**不**出现复制类 toast。验证：逐一试搜观察。
 
 ## W2 · 壁纸源
 

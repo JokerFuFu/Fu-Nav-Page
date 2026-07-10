@@ -13,6 +13,7 @@ import { ACCENTS, DEFAULT_ACCENT_ID } from './accent-presets.js';
 import { checkAllLinks as runLinkCheck, maybeAutoCheck } from './link-check.js';
 import { putBgImage, deleteBgImage } from './bg-storage.js';
 import { readFavGrid, rankFavorites, visitItem } from './favorites.js';
+import { providerAction } from './provider-action.js';
 
 export const $  = (s,r=document)=>r.querySelector(s);
 export const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
@@ -38,10 +39,12 @@ export const PROVIDERS = {
   bing:      {name:'Bing',      kind:'search', icon:'bing',       q:'https://www.bing.com/search?q='},
   google:    {name:'Google',    kind:'search', icon:'google',     q:'https://www.google.com/search?q='},
   baidu:     {name:'百度',      kind:'search', icon:'baidu',      q:'https://www.baidu.com/s?wd='},
+  // 2026-07-10 实测：Kimi ?q= 打开首页但输入框为空，继续同步复制。
   kimi:      {name:'Kimi',      kind:'ai',     icon:'kimi-ai',    home:'https://www.kimi.com/', copy:true},
   chatgpt:   {name:'ChatGPT',   kind:'ai',     icon:'openai',     q:'https://chatgpt.com/?q='},
   claude:    {name:'Claude',    kind:'ai',     icon:'claude-ai', q:'https://claude.ai/new?q='},
   perplexity:{name:'Perplexity',kind:'ai',     icon:'perplexity', q:'https://www.perplexity.ai/search?q='},
+  // 2026-07-10 实测：豆包 /chat/?q= 输入框为空；DeepSeek ?q= 未登录会转登录页，均无可靠公开预填。
   doubao:    {name:'豆包',      kind:'ai',     icon:'https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://www.doubao.com&size=64', home:'https://www.doubao.com/chat/', copy:true},
   deepseek:  {name:'DeepSeek',  kind:'ai',     icon:'deepseek',   home:'https://chat.deepseek.com/', copy:true},
 };
@@ -409,17 +412,9 @@ class Core {
   activeProvider(){ return (this.settings.askProvider && PROVIDERS[this.settings.askProvider]) ? this.settings.askProvider : 'bing'; }
   setProvider(id){ if(PROVIDERS[id]){ this.settings.askProvider=id; this.save(); } }
   ask(id, q){ const p=PROVIDERS[id]||PROVIDERS.bing; const tgt=this.settings.openIn==='_self'?'_self':'_blank'; q=(q||'').trim();
-    if(!q){ window.open(p.home || (p.q?p.q.replace(/[?&]q=.*$/,''):'about:blank'), tgt); return; }
-    if(p.kind==='ai'){
-      // 有 ?q 查询 URL（ChatGPT/Claude/Perplexity 等）→ 内容进 URL 直接打开，像搜索引擎一样自动填入。
-      // 无查询 URL 的 AI（Kimi/DeepSeek/豆包）→ 网站不认参数，只能复制到剪贴板让用户粘贴。
-      // 关键：必须**同步**复制(execCommand)——navigator.clipboard.writeText 是异步的，紧接着的
-      // window.open 会抢走焦点导致异步写入失败，输入的字就丢了(这正是之前 Kimi 等一直没内容的根因)。
-      const copied = copyTextSync(q);
-      window.open(p.q ? p.q+encodeURIComponent(q) : p.home, tgt);
-      if(p.q) this.toast(`已在 ${p.name} 打开`+(copied?'（若没自动填入，内容已复制可 ⌘V 粘贴）':''), 'ok');
-      else    this.toast(copied?`内容已复制 → 在 ${p.name} 按 ⌘V 粘贴发送`:`请在 ${p.name} 手动输入`, 'ok');
-    } else { window.open(p.q+encodeURIComponent(q), tgt); } }
+    const action=providerAction(p,q); if(!q){window.open(action.url,tgt);return;}
+    if(action.shouldCopy){ const copied=copyTextSync(q); if(tgt!=='_self')this.toast(copied?action.successMessage:action.failureMessage,copied?'ok':'err'); }
+    window.open(action.url,tgt); }
   recordVisit(item){ if(!item)return; visitItem(item); this.save(true); }
   iconSuggestions(name,url){ return iconSearch(name,url).filter(u=>u&&u!=='__letter__').slice(0,10); }
 
