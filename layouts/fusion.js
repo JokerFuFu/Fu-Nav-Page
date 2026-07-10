@@ -141,6 +141,7 @@ function renderMain(core,main){ if(!main)return; main.textContent='';
 function renderHome(core,main){
   const priv=core.settings.privacy;
   const home=el('div','fx-home'+(priv?' fx-home-priv':''));
+  if(!priv){ const grid=core.favGrid(); home.style.setProperty('--home-scale',grid.rows===3?(grid.cols===8?.76:.84):1); }
   if(!priv) home.appendChild(buildBgTrigger(core));   // 背景切换悬浮入口（隐私模式不显示，减少干扰）
   if(core.settings.showClock) home.appendChild(buildHeroClock(core));   // 时钟+日期 固定 Hero，放在搜索框上方
   home.appendChild(buildAsk(core));               // 输入框（AI/搜索/收藏检索）
