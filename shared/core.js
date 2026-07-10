@@ -387,9 +387,8 @@ class Core {
       const open=it=>{ this.recordVisit(it); window.open(it.url, this.settings.openIn==='_self'?'_self':'_blank'); this.closePalette(); };
       const actions=[
         {ic:'plus',label:'新建网站',run:()=>this.openItemEditor(null, this.groups[0]&&this.groups[0].id)},
-        {ic:'layout-grid',label:'新建工作区',run:()=>this.promptModal('新建工作区','工作区名称，如 运维 / 影音',n=>{
-          const g={id:uid('g'),name:'新分组',icon:'server',color:COLORS[0],collapsed:false,items:[],page:n};
-          this.groups.push(g); this.save(true); this.rerender(); this.openGroupEditor(g); })},
+        {ic:'layers',label:'新建模式',run:()=>this.promptModal('新建模式','模式名称，如 学习 / 工作 / 生活',name=>{
+          const mode=this.createMode(name); this.openModeEditor(mode); })},
         {ic:'cpu',label:'硬件监控设置',run:()=>{ const w=(this.settings.widgets||[]).find(x=>x.type==='hwmon'); w?this.openHwmonEditor(w):this.addWidget('hwmon'); }},
         {ic:'download',label:'导出备份',run:()=>this.exportConfig()},
         {ic:'upload',label:'导入备份',run:()=>this.importConfig()},
