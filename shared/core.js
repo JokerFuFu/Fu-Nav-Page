@@ -174,6 +174,10 @@ class Core {
   /* 会话墓碑：删除时登记 id（文件夹/分组含全部后代），收件箱兑现据此拒绝复活 */
   _markDeleted(it){ if(!it||!it.id) return; this._tombstones.add(it.id); if(this.isFolder(it)) (it.items||[]).forEach(x=>this._markDeleted(x)); }
   _markDeletedGroup(g){ if(!g) return; if(g.id) this._tombstones.add(g.id); (g.items||[]).forEach(x=>this._markDeleted(x)); }
+  _clearDeleted(it){ if(!it||!it.id) return; this._tombstones.delete(it.id); if(this.isFolder(it)) (it.items||[]).forEach(x=>this._clearDeleted(x)); }
+  _clearDeletedGroup(g){ if(!g)return; if(g.id)this._tombstones.delete(g.id); (g.items||[]).forEach(x=>this._clearDeleted(x)); }
+  _offerUndo(desc,restore){ const snap={restore}; this._undoSnap=snap;
+    this.toast('已删除 '+desc,'ok',{label:'撤销',run:()=>{ if(this._undoSnap!==snap)return; this._undoSnap=null; snap.restore(); this.save(true); this.rerender(); }}); }
 
   /* ---- 持久化 ---- */
   save(immediate){ clearTimeout(this._saveT); this._saveT=null;
@@ -310,6 +314,7 @@ class Core {
   _containsItem(g, item){ const has=arr=>(arr||[]).includes(item)||(arr||[]).some(it=>this.isFolder(it)&&has(it.items||[])); return has(g.items||[]); }
   /* 递归：从某分组（任意层）移除条目 */
   _removeItem(g, item){ const rm=arr=>{ const i=arr.indexOf(item); if(i>=0){ arr.splice(i,1); return true; } for(const it of arr){ if(this.isFolder(it) && rm(it.items||(it.items=[]))) return true; } return false; }; return rm(g.items||[]); }
+  _itemLocation(item){ for(const g of this.groups){ const find=arr=>{ const idx=arr.indexOf(item); if(idx>=0)return {arr,idx,group:g}; for(const it of arr){ if(this.isFolder(it)){ const hit=find(it.items||[]); if(hit)return hit; } } return null; }; const hit=find(g.items||[]); if(hit)return hit; } return null; }
   /* 递归：所有文件夹（任意层），带 depth（0=顶层） —— 移入子菜单/侧栏树用 */
   allFolders(g){ const out=[]; const walk=(arr,depth)=>{ (arr||[]).forEach(it=>{ if(this.isFolder(it)){ out.push({folder:it,depth}); walk(it.items,depth+1); } }); }; walk(g.items,0); return out; }
   /* 某文件夹的直接父容器数组 + 所在分组 */
@@ -317,7 +322,9 @@ class Core {
   /* 某条目所在的直接文件夹（任意层），无则 null */
   _itemFolder(g, item){ const find=arr=>{ for(const it of arr){ if(this.isFolder(it)){ if((it.items||[]).includes(item))return it; const r=find(it.items||[]); if(r)return r; } } return null; }; return find(g.items||[]); }
   /* 删除条目（跨分组、含文件夹内） */
-  deleteItem(item){ this._markDeleted(item); for(const g of this.groups){ if(this._removeItem(g,item)){ this.save(true); this.rerender(); return true; } } return false; }
+  deleteItem(item){ const hit=this._itemLocation(item); if(!hit)return false;
+    this._markDeleted(item); hit.arr.splice(hit.idx,1); this.save(true); this.rerender();
+    this._offerUndo(item.name||'条目',()=>{ hit.arr.splice(hit.idx,0,item); this._clearDeleted(item); }); return true; }
   /* 移入文件夹 / 移出文件夹 */
   moveItemToFolder(item, folder, g){ if(item===folder)return; if(this._removeItem(g,item)){ (folder.items||(folder.items=[])).push(item); this.save(true); this.rerender(); } }
   moveItemOutOfFolder(item, folder, g){ const j=(folder.items||[]).indexOf(item); if(j>=0){ folder.items.splice(j,1); g.items.push(item); this.save(true); this.rerender(); } }
@@ -327,11 +334,8 @@ class Core {
       if(isNew){ const arr = container || (this.groups.find(x=>x.id===gid)||{}).items; if(arr) arr.push({ id:uid('f'), type:'folder', name, icon:'folder', items:[] }); }
       else { folder.name=name; }
       this.save(true); this.rerender(); this.closeModal(); });
-    const del = isNew ? null : this.btn('删除文件夹','danger',()=>{ const p=this._folderParent(folder); if(!p){this.closeModal();return;}
-      const n=(folder.items||[]).length;
-      if(n && !confirm(`文件夹「${folder.name}」内有 ${n} 项，删除后它们会移到上一层。确认？`)) return;
-      const idx=p.arr.indexOf(folder); p.arr.splice(idx,1,...(folder.items||[]));   // 子项移到上一层，不丢
-      this.save(true); this.rerender(); this.closeModal(); });
+    const del = isNew ? null : this.btn('删除文件夹','danger',()=>{ if((folder.items||[]).length&&!confirm(`「${folder.name}」及其中条目将被删除，可在 5 秒内撤销。确认？`))return;
+      if(this.deleteItem(folder))this.closeModal(); });
     this.openModal(isNew?'新建文件夹':'重命名文件夹',[this.field('名称',nameI)],[del,this.btn('取消','ghost',()=>this.closeModal()),save].filter(Boolean)); setTimeout(()=>nameI.focus(),50); }
 
   /* ---- 跳转分组（命令面板/外部调用，布局 mount 读 _navTo）---- */
@@ -508,7 +512,7 @@ class Core {
     const archC=this.toggle('归档此分组（从侧栏隐藏，可在设置中管理）', group?.archived===true, ()=>{});
     const save=this.btn(isNew?'创建':'保存','primary',()=>{const name=nameI.value.trim()||'新分组'; const icon=urlI.value.trim()||lucideSel; const archived=archC.querySelector('input').checked||undefined;
       if(isNew)this.groups.push({id:uid('g'),name,icon,color,collapsed:false,items:[],archived}); else{group.name=name;group.icon=icon;group.color=color;group.emoji='';group.archived=archived;} this.save(true);this.rerender();this.closeModal();});   // 工作区(page)不在此编辑，改由侧栏右键分组指定
-    const foot=[ isNew?null:this.btn('删除分组','danger',()=>{if(group.items.length&&!confirm(`「${group.name}」内有 ${group.items.length} 个网站，确认删除整组？`))return;this._markDeletedGroup(group);this.cfg.groups=this.groups.filter(g=>g!==group);this.save(true);this.rerender();this.closeModal();}), this.btn('取消','ghost',()=>this.closeModal()), save ];
+    const foot=[ isNew?null:this.btn('删除分组','danger',()=>{ if(group.items.length&&!confirm(`「${group.name}」内有 ${group.items.length} 个网站，确认删除整组？`))return; this.deleteGroup(group); this.closeModal(); }), this.btn('取消','ghost',()=>this.closeModal()), save ];
     this.openModal(isNew?'新建分组':'编辑分组',[this.field('名称',nameI),this.field('图标',iconWrap),this.field('强调色',cg),archC],foot.filter(Boolean));
     setTimeout(()=>{nameI.focus();markLucide();renderSug();},50); }
 
@@ -517,8 +521,11 @@ class Core {
     if(type==='today'){ w.items=[]; w.countdowns=[]; } if(type==='hwmon')w.url='';
     if(type==='clock')this.settings.showClock=true; if(type==='weather')this.settings.showWeather=true;   // 加时钟/天气同时确保未被隐藏
     ws.push(w); this.save(); this.rerender(); if(type==='hwmon') this.openHwmonEditor(w); }   // 硬件监控加完即弹端点设置
-  removeWidget(id){ this._tombstones.add(id);   // 小组件同享墓碑：另一标签页旧快照写回时采纳路径按此剔除，防已删卡片复活
-    this.settings.widgets=(this.settings.widgets||[]).filter(x=>x.id!==id); this.save(true); this.rerender(); }
+  deleteGroup(group){ const idx=this.groups.indexOf(group); if(idx<0)return false; this._markDeletedGroup(group); this.groups.splice(idx,1); this.save(true); this.rerender();
+    this._offerUndo(group.name+'（'+this.flatItems(group).length+' 个网站）',()=>{ this.groups.splice(idx,0,group); this._clearDeletedGroup(group); }); return true; }
+  removeWidget(id){ const ws=this.settings.widgets||[], idx=ws.findIndex(w=>w.id===id); if(idx<0)return false; const w=ws[idx];
+    this._tombstones.add(id); ws.splice(idx,1); this.save(true); this.rerender();
+    this._offerUndo(w.type==='today'?'今日卡片':w.type==='weather'?'天气卡片':w.type==='clock'?'时钟卡片':'硬件监控卡片',()=>{ ws.splice(idx,0,w); this._tombstones.delete(id); }); return true; }
 
   /* 硬件监控卡片编辑（Glances 端点）*/
   openHwmonEditor(w){ const labelI=this.inp(w.label||'硬件监控','名称'); const urlI=this.inp(w.url||'','http://127.0.0.1:7842（本机）或 http://服务器IP:61208');
@@ -663,8 +670,10 @@ class Core {
     this.toast(`已导入 ${added} 个收藏（${parsed.groups.length} 组，已去重 ${parsed.stats.dropped}）`,'ok'); }
 
   /* 提示 */
-  toast(msg,kind){ const host=$('#fnToasts'); if(!host) return;   // boot 早期(容器未建)静默跳过，不抛错
-    const t=el('div','fn-toast '+(kind||''),msg); host.appendChild(t); setTimeout(()=>{t.style.opacity='0';t.style.transform='translateX(20px)';setTimeout(()=>t.remove(),250);},2600); }
+  toast(msg,kind,action){ const host=$('#fnToasts'); if(!host) return;   // boot 早期(容器未建)静默跳过，不抛错
+    const t=el('div','fn-toast '+(kind||'')); t.append(el('span','fn-toast-msg',msg));
+    if(action){ const b=el('button','fn-toast-act',action.label); b.type='button'; b.onclick=()=>{ action.run(); t.remove(); }; t.appendChild(b); }
+    host.appendChild(t); const delay=(action||kind==='err')?5000:2600; setTimeout(()=>{t.style.opacity='0';t.style.transform='translateX(20px)';setTimeout(()=>t.remove(),250);},delay); }
   flashSync(msg){ const p=$('#fnPill'); if(!p)return; p.hidden=false; p.textContent=msg; clearTimeout(this._pt); this._pt=setTimeout(()=>p.hidden=true,1800); }
 }
 
