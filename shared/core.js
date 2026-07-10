@@ -366,7 +366,7 @@ class Core {
       ].filter(a=>!q || a.label.toLowerCase().includes(q));
       if(actions.length){ sec('操作'); actions.forEach(a=>mkRow({ic:a.ic,label:a.label,run:()=>{ this.closePalette(); a.run(); }})); }
       const groups=this.groups.filter(g=>!q || (g.name||'').toLowerCase().includes(q)).slice(0,6);
-      if(groups.length){ sec('分组'); groups.forEach(g=>mkRow({group:g,label:g.name,sub:this.flatItems(g).length+' 个',run:()=>{ this.closePalette(); this.gotoGroup(g.id); }})); }
+      if(groups.length){ sec('分组'); groups.forEach(g=>mkRow({group:g,label:g.name,sub:(g.archived?'已归档 · ':'')+this.flatItems(g).length+' 个',run:()=>{ this.closePalette(); this.gotoGroup(g.id); }})); }
       const sites=this.allItems().filter(({item})=>!q || (item.name+' '+item.url+' '+(item.note||'')).toLowerCase().includes(q)).slice(0,9);
       if(sites.length){ sec('网站'); sites.forEach(({item,group})=>mkRow({item,label:item.name,sub:group.name,run:()=>open(item)})); }
       if(!rows.length) list.appendChild(el('div','fn-pal-empty','没有匹配项'));
@@ -505,7 +505,7 @@ class Core {
     nameI.addEventListener('input',()=>{ clearTimeout(this._gsugT); this._gsugT=setTimeout(renderSug,400); });
     const cg=el('div','fn-colorgrid'); COLORS.forEach(c=>{const b=el('button','fn-colorpick'+(c===color?' sel':''));b.type='button';b.style.background=c;b.onclick=()=>{color=c;$$('.fn-colorpick',cg).forEach(x=>x.classList.remove('sel'));b.classList.add('sel');};cg.appendChild(b);});
     const iconWrap=el('div'); iconWrap.append(ig, el('div','fn-sub','或联网图标（按分组名自动匹配，或填 URL）'), sug, urlI);
-    const archC=this.toggle('归档此分组（收进侧栏「归档」折叠区，主列表不占位）', group?.archived===true, ()=>{});
+    const archC=this.toggle('归档此分组（从侧栏隐藏，可在设置中管理）', group?.archived===true, ()=>{});
     const save=this.btn(isNew?'创建':'保存','primary',()=>{const name=nameI.value.trim()||'新分组'; const icon=urlI.value.trim()||lucideSel; const archived=archC.querySelector('input').checked||undefined;
       if(isNew)this.groups.push({id:uid('g'),name,icon,color,collapsed:false,items:[],archived}); else{group.name=name;group.icon=icon;group.color=color;group.emoji='';group.archived=archived;} this.save(true);this.rerender();this.closeModal();});   // 工作区(page)不在此编辑，改由侧栏右键分组指定
     const foot=[ isNew?null:this.btn('删除分组','danger',()=>{if(group.items.length&&!confirm(`「${group.name}」内有 ${group.items.length} 个网站，确认删除整组？`))return;this._markDeletedGroup(group);this.cfg.groups=this.groups.filter(g=>g!==group);this.save(true);this.rerender();this.closeModal();}), this.btn('取消','ghost',()=>this.closeModal()), save ];
@@ -525,6 +525,15 @@ class Core {
     const hint=el('div','fn-hint'); hint.innerHTML='监控<b>本机（这台 Mac）</b>：装好 Fu 导航伴随服务（仓库 <code>agent/install.sh</code>）后填 <code>http://127.0.0.1:7842</code>，零额外依赖。<br>监控<b>其它服务器</b>：对接 <b>Glances</b>——目标机执行 <code>glances -w</code>（端口默认 <b>61208</b>），或 Docker：<br><code>docker run -d --restart=always --network host nicolargo/glances:latest-full glances -w</code><br>URL 填 <code>http://你的IP:61208</code>。首次保存会请求访问该地址的授权，点允许。';
     const save=this.btn('保存','primary',async()=>{ w.label=labelI.value.trim()||'硬件监控'; w.url=urlI.value.trim().replace(/\/+$/,''); if(w.url) await this.ensureCloudPermission(w.url); this.save(true); this.rerender(); this.closeModal(); });
     this.openModal('硬件监控（Glances）',[this.field('名称',labelI),this.field('Glances 端点',urlI),hint],[this.btn('取消','ghost',()=>this.closeModal()),save]); setTimeout(()=>urlI.focus(),50); }
+
+  openArchiveManager(){ const archived=this.groups.filter(g=>g.archived);
+    const body=archived.length ? archived.map(g=>{ const row=el('div','fn-sync-row');
+      row.append(el('div','fn-sync-label',`${g.name} · ${this.flatItems(g).length} 个网站`));
+      row.append(this.btn('取消归档','ghost',()=>{ g.archived=undefined; this.save(true); this.rerender(); this.openArchiveManager(); },'archive-restore'));
+      row.append(this.btn('进入','ghost',()=>{ this.closeModal(); this.gotoGroup(g.id); },'arrow-right'));
+      return row;
+    }) : [el('div','fn-hint','没有归档的分组')];
+    this.openModal('归档管理',body,[this.btn('关闭','ghost',()=>this.openSettings())]); }
 
 
   /* 云同步（WebDAV / Google Drive）子弹层 —— 从 openSettings 拆出（S1/S4），结构照 openHwmonEditor；关闭/保存回设置 */
@@ -607,6 +616,7 @@ class Core {
     const info=el('div','fn-hint'); info.innerHTML=isExtension?'<b>浏览器账号同步已开启</b>：配置随 Chrome/Edge 账号自动同步到登录同账号的设备。要存到<b>自己的服务器</b>用上方「云同步」。提醒/日历/AI日报 需本机 <code>agent/</code> 服务。':'<b>预览模式</b>：配置仅存本浏览器；装成扩展后启用同步。';
     const dangerWrap=el('div','fn-wrap'); dangerWrap.append(
       this.btn('恢复默认','ghost',async()=>{if(confirm('用内置默认覆盖当前配置？')){this.cfg=await this.fetchSeed();this.migrate();this.applyTheme();this.rerender();this.save(true);this.closeModal();}},'rotate-ccw'));
+    const archiveWrap=el('div','fn-wrap'); archiveWrap.append(this.btn('归档管理','ghost',()=>this.openArchiveManager(),'archive'));
     this.openModal('设置',[
       this.sect('常用',[
         this.field('标题',titleI),
@@ -626,6 +636,7 @@ class Core {
       ]),
       this.sect('高级',[
         this.field('打开方式',this.seg([['_blank','新标签页'],['_self','当前页']],s.openIn,v=>{s.openIn=v;})),
+        this.field('归档分组',archiveWrap),
         this.field('危险操作',dangerWrap),
       ]),
     ],[ this.btn('完成','primary',()=>{ s.title=titleI.value.trim()||'Fu 导航'; this.applyTheme(); this.save(true); this.rerender(); this.closeModal(); }) ]); }

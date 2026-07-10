@@ -54,15 +54,6 @@ body.editing .lay-fusion .fx-navitem[data-gid]{ cursor:grab; }
 .lay-fusion .fx-navfolder .fx-ni-ct{ margin-left:auto; color:var(--text-3); font-size:11px; font-variant-numeric:tabular-nums; }
 .lay-fusion.side-collapsed .fx-ni-caret{ display:none; }
 .lay-fusion.side-collapsed .fx-navfolder{ display:none; }
-/* 页面/工作区 tab */
-/* 归档折叠区 */
-.lay-fusion .fx-arch{ display:flex; flex-direction:column; gap:var(--s1); margin-top:4px; }
-.lay-fusion .fx-arch-head{ display:flex; align-items:center; gap:var(--s2); padding:var(--s2) var(--s3); border-radius:var(--r-md); color:var(--text-3); font-size:12px; font-weight:600; transition:var(--t); }
-.lay-fusion .fx-arch-head:hover{ color:var(--text-2); background:var(--surface-2); }
-.lay-fusion .fx-arch-ic{ width:11px; height:11px; }
-.lay-fusion .fx-arch-nm{ flex:1; }
-.lay-fusion .fx-arch-ct{ color:var(--text-3); font-size:11px; font-variant-numeric:tabular-nums; }
-.lay-fusion.side-collapsed .fx-arch-nm, .lay-fusion.side-collapsed .fx-arch-ct{ display:none; }
 .lay-fusion .fx-side-foot{ display:flex; gap:var(--s1); padding-top:var(--s2); margin-top:var(--s1); border-top:1px solid var(--border); }
 .lay-fusion .fx-sidebtn{ flex:1; height:34px; border-radius:var(--r-sm); background:transparent; border:none; color:var(--text-3); display:grid; place-items:center; transition:var(--t); }
 .lay-fusion .fx-sidebtn:hover{ background:var(--surface-2); color:var(--text); }

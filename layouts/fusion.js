@@ -44,8 +44,6 @@ function buildSidebar(core){
     if(!pages.includes(activePage)){ activePage='全部'; core.settings.activePage='全部'; }   // 工作区已不存在(如删掉该工作区所有分组)→回全部，避免分组全被过滤成空
     const inPage=g=> activePage==='全部' || (g.page||'')===activePage;   // 工作区切换在底部统一切换器里（全部/工作区/隐私）
     core.groups.filter(g=>inPage(g)&&!g.archived).forEach(g=> navGroup(core,g).forEach(n=>nav.appendChild(n)));
-    const arch=core.groups.filter(g=>inPage(g)&&g.archived);
-    if(arch.length) nav.appendChild(buildArchiveSection(core,arch));
     if(!core.groups.length) nav.appendChild(el('div','fx-side-empty','还没有分组 — 从「新建分组」开始'));   // R5 空侧栏引导（下方按钮此时常显）
     const addG=el('button','fx-navitem fx-addgroup'+(core.groups.length?' edit-only':'')); addG.innerHTML=`<span class="fx-ni-ico lucide-mask" style="-webkit-mask-image:url('${lucide('plus')}');mask-image:url('${lucide('plus')}')"></span><span class="fx-ni-nm">新建分组</span>`; addG.onclick=()=>core.openGroupEditor(null); nav.appendChild(addG);
   }
@@ -84,7 +82,7 @@ function navItem(core,key,icon,name,count,on,group){
     derivePages(core).filter(p=>p!=='全部'&&p!==group.page).forEach(w=> menu.push({ic:'layers', label:'移到工作区「'+w+'」', on:()=>{ group.page=w; core.save(true); core.rerender(); core.toast('已移到工作区「'+w+'」','ok'); }}));
     menu.push({ic:'plus', label:'新建工作区…', on:()=>{ const n=prompt('新工作区名称（如 运维 / 影音）'); if(n&&n.trim()){ group.page=n.trim(); core.save(true); core.rerender(); core.toast('已加入工作区「'+n.trim()+'」','ok'); } }});
     if(group.page) menu.push({ic:'corner-up-left', label:'移出工作区「'+group.page+'」', on:()=>{ group.page=undefined; core.save(true); core.rerender(); }});
-    menu.push('-', {ic: group.archived?'archive-restore':'archive', label: group.archived?'取消归档':'归档分组', on:()=>{ group.archived=group.archived?undefined:true; core.save(true); core.rerender(); core.toast(group.archived?'已归档（侧栏「归档」区）':'已取消归档','ok'); }});
+    menu.push('-', {ic: group.archived?'archive-restore':'archive', label: group.archived?'取消归档':'归档分组', on:()=>{ group.archived=group.archived?undefined:true; core.save(true); core.rerender(); core.toast(group.archived?'已归档，可在设置中管理':'已取消归档','ok'); }});
     showCtx(e.clientX,e.clientY,menu); };
   return a;
 }
@@ -103,13 +101,6 @@ function openModeMenu(core,e){
   items.push('-', {ic:'eye-off', sel:priv, label:'隐私模式（只留搜索/天气）', on:()=>{ core.settings.privacy=true; core.save(); core.rerender(); }});
   const x=(e&&e.clientX)||120, y=(e&&e.clientY)||innerHeight-40; showCtx(x,y,items);
 }
-/* 归档分组：侧栏底部可折叠区收纳低频分组 */
-function buildArchiveSection(core,arch){ const open=!!core.settings.archiveOpen; const box=el('div','fx-arch');
-  const head=el('button','fx-arch-head'); const archIc=mico(open?'chevron-down':'chevron-right',11); archIc.classList.add('fx-arch-ic');
-  head.append(archIc, el('span','fx-arch-nm','归档'), el('span','fx-arch-ct',String(arch.length)));
-  head.onclick=()=>{ core.settings.archiveOpen=!open; core.save(); core.rerender(); }; box.appendChild(head);
-  if(open) arch.forEach(g=> box.appendChild(navItem(core,g.id,g.icon,g.name,core.flatItems(g).length,()=>openGroup(core,g.id),g)));
-  return box; }
 /* 侧栏点分组 → 进该分组页 */
 function openGroup(core,gid){ go(core,gid); }
 /* 侧栏两级子目录树：分组 → 文件夹 → 子文件夹，可展开/收折 */

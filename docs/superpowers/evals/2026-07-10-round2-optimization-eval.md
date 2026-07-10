@@ -26,8 +26,8 @@
 
 ## W4 · 归档
 
-- [ ] **W4-1** `passes:false` 〔预览〕断言：归档任一分组后侧栏不再出现任何归档区块；`grep -n "buildArchiveSection" layouts/fusion.js` 零命中。验证：操作 + grep。
-- [ ] **W4-2** `passes:false` 〔预览〕断言：⌘K 搜归档分组名可见「已归档」标注且回车直达其分组页；设置→高级→归档管理列出该分组并可一键取消归档（分组回到侧栏）。验证：操作。
+- [ ] **W4-1** `passes:true` 〔预览〕断言：归档任一分组后侧栏不再出现任何归档区块；`grep -n "buildArchiveSection" layouts/fusion.js` 零命中。验证：操作 + grep。
+- [ ] **W4-2** `passes:true` 〔预览〕断言：⌘K 搜归档分组名可见「已归档」标注且回车直达其分组页；设置→高级→归档管理列出该分组并可一键取消归档（分组回到侧栏）。验证：操作。
 
 ## W5 · WebDAV 多备份
 
