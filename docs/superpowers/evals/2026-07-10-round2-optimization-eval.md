@@ -44,7 +44,7 @@
 ## W7 · 新手引导
 
 - [ ] **W7-1** `passes:true` 〔预览〕断言：`localStorage.clear()` 刷新（全新用户）→ 自动进入 5 步引导；步进/上一步/跳过/Esc 均正常；完成或跳过后 `settings.onboarded===true` 且刷新不再出现。验证：操作 + localStorage。
-- [ ] **W7-2** `passes:false` 〔预览〕断言：深/浅两主题下引导气泡与遮罩可读不破版；DevTools 模拟 `prefers-reduced-motion: reduce` 时无过渡动画仍可正常走完；设置→高级「重看新手引导」可再次触发。验证：操作。
+- [ ] **W7-2** `passes:true` 〔预览〕断言：深/浅两主题下引导气泡与遮罩可读不破版；DevTools 模拟 `prefers-reduced-motion: reduce` 时无过渡动画仍可正常走完；设置→高级「重看新手引导」可再次触发。验证：操作。
 
 ## W8 · 删除撤销
 
@@ -55,7 +55,7 @@
 ## 全局与端到端
 
 - [ ] **G-1** `passes:false` 〔预览〕断言：全量回归（首页/分组页/文件夹页/设置含 3 个新子弹层/命令面板/popup × 深浅双主题）console 无红错、无破版。验证：逐界面走查。
-- [ ] **G-2** `passes:false` 〔预览〕断言：图标语言零新增违规——`grep -rnE "textContent *=.*['\"][▸✓⠿☰＋↗«»↵⚠☁🔖🔒🔓]|innerHTML *=.*[▸✓⠿☰＋↗«»↵⚠☁🔖🔒🔓]" shared/ layouts/ popup.js | grep -v mico` 输出为空。验证：命令。
+- [ ] **G-2** `passes:true` 〔预览〕断言：图标语言零新增违规——`grep -rnE "textContent *=.*['\"][▸✓⠿☰＋↗«»↵⚠☁🔖🔒🔓]|innerHTML *=.*[▸✓⠿☰＋↗«»↵⚠☁🔖🔒🔓]" shared/ layouts/ popup.js | grep -v mico` 输出为空。验证：命令。
 - [ ] **G-3** `passes:false` 〔预览〕断言：manifest version 为 `3.21.0` 且 `python3 -m json.tool manifest.json` 通过；每任务独立 commit、全部为中文 message、作者邮箱为 noreply。验证：`git log --format='%h %ae %s' -10`。
 - [ ] **E2E-1** `passes:false` 〔预览〕**端到端组合**断言：清空数据全新启动 → 走完新手引导 → 切换壁纸源到 alcy/fj 并设 15 分钟频率 → 连点某站 5 次 + 锁定另一站 → 切 6×3 规格 → 删除一个分组并撤销 → 归档另一分组后从 ⌘K 直达：全程 console 无红错，最终刷新后以上状态全部持久正确（引导不再弹/源与频率保持/frecency 排序生效/锁定与规格保持/撤销的分组完好/归档分组不在侧栏）。验证：按序走完一遍。
 - [ ] **E2E-2** `passes:false` 〔真机〕**端到端组合**断言：开书签双向同步 + WebDAV：制造书签重复 → 导出收敛单份 → 手动云备份两次 → 从列表恢复较旧一份 → 配置回退成功且书签树随之重新对齐无重复。验证：真机走完一遍。
