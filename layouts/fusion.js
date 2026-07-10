@@ -41,12 +41,12 @@ function buildSidebar(core){
   side.append(brand, collapseBtn);
   const nav=el('nav','fx-nav');
   nav.appendChild(navItem(core,'home','house','首页',null,()=>go(core,'home')));
-  if(!core.settings.privacy){
-    const pages=derivePages(core); let activePage=core.settings.activePage||'全部';
-    if(!pages.includes(activePage)){ activePage='全部'; core.settings.activePage='全部'; }   // 工作区已不存在(如删掉该工作区所有分组)→回全部，避免分组全被过滤成空
-    const inPage=g=> activePage==='全部' || (g.page||'')===activePage;   // 工作区切换在底部统一切换器里（全部/工作区/隐私）
-    core.groups.filter(g=>inPage(g)&&!g.archived).forEach(g=> navGroup(core,g).forEach(n=>nav.appendChild(n)));
-    if(!core.groups.length) nav.appendChild(el('div','fx-side-empty','还没有分组 — 从「新建分组」开始'));   // R5 空侧栏引导（下方按钮此时常显）
+  const am=core.activeModeObj();
+  if(am!=='privacy'){
+    const inMode=g=>am===null || am.groupIds.includes(g.id);
+    const visibleGroups=core.groups.filter(g=>inMode(g)&&!g.archived);
+    visibleGroups.forEach(g=> navGroup(core,g).forEach(n=>nav.appendChild(n)));
+    if(!visibleGroups.length) nav.appendChild(el('div','fx-side-empty',am===null?'还没有分组 — 从「新建分组」开始':'这个模式还没有分组 — 到「管理模式」勾选分组'));
     const addG=el('button','fx-navitem fx-addgroup'+(core.groups.length?' edit-only':'')); addG.innerHTML=`<span class="fx-ni-ico lucide-mask" style="-webkit-mask-image:url('${lucide('plus')}');mask-image:url('${lucide('plus')}')"></span><span class="fx-ni-nm">新建分组</span>`; addG.onclick=()=>core.openGroupEditor(null); nav.appendChild(addG);
   }
   wireSidebarDnD(core,nav); side.appendChild(nav);
@@ -58,9 +58,10 @@ function buildSidebar(core){
   const editBtn=sideBtn(core, core.editing?'lock-open':'lock', editTitle(), function(){ core.editing=!core.editing; document.body.classList.toggle('editing',core.editing); setIcon(core,editBtn,core.editing?'lock-open':'lock'); editBtn.classList.toggle('on',core.editing); editBtn.title=editTitle(); core.toast(core.editing?'已解锁：可拖拽排序、编辑、删除卡片':'已锁定：点击即打开链接','ok'); core.rerender(); });
   editBtn.dataset.tour='lock';
   if(core.editing) editBtn.classList.add('on');
-  // 统一视图切换器：全部收藏 / 各工作区 / 隐私模式
-  const modeBtn=sideBtn(core, core.settings.privacy?'eye':'layers', modeTitle(core), (e)=>openModeMenu(core,e));
-  if(core.settings.privacy || (core.settings.activePage&&core.settings.activePage!=='全部')) modeBtn.classList.add('on');
+  // 场景模式：全部 / 自定义模式 / 隐私
+  const modeBtn=sideBtn(core, am==='privacy'?'eye':'layers', modeTitle(core), (e)=>openModeMenu(core,e));
+  modeBtn.dataset.tour='mode';
+  if(am!==null) modeBtn.classList.add('on');
   // 主题切换：跟随系统 → 浅 → 深 循环（#5 首页左下方按钮）
   const THEMES=[['auto','monitor','跟随系统'],['light','sun','浅色'],['dark','moon','深色']];
   const tcur=()=>{ const i=THEMES.findIndex(t=>t[0]===(core.settings.theme||'auto')); return i<0?0:i; };
@@ -83,9 +84,9 @@ function navItem(core,key,icon,name,count,on,group){
   a.append(ico, el('span','fx-ni-nm',name)); if(count!=null)a.appendChild(el('span','fx-ni-ct',String(count)));
   a.onclick=on; if(group) a.oncontextmenu=e=>{ e.preventDefault();
     const menu=[{ic:'pencil', label:'编辑分组', on:()=>core.openGroupEditor(group)}];
-    derivePages(core).filter(p=>p!=='全部'&&p!==group.page).forEach(w=> menu.push({ic:'layers', label:'移到工作区「'+w+'」', on:()=>{ group.page=w; core.save(true); core.rerender(); core.toast('已移到工作区「'+w+'」','ok'); }}));
-    menu.push({ic:'plus', label:'新建工作区…', on:()=>core.promptModal('新建工作区','工作区名称，如 运维 / 影音',n=>{ group.page=n; core.save(true); core.rerender(); core.toast('已加入工作区「'+n+'」','ok'); })});   // R7: 原生 prompt → 自定义弹层
-    if(group.page) menu.push({ic:'corner-up-left', label:'移出工作区「'+group.page+'」', on:()=>{ group.page=undefined; core.save(true); core.rerender(); }});
+    if(core.modes().length){ menu.push('-'); core.modes().forEach(mode=>{ const has=mode.groupIds.includes(group.id);
+      menu.push({ic:'layers',sel:has,label:mode.name,on:()=>{ core.toggleModeGroup(mode,group.id); core.toast(has?('已移出「'+mode.name+'」'):('已加入「'+mode.name+'」'),'ok'); }}); }); }
+    menu.push({ic:'settings-2', label:'管理模式…', on:()=>core.openModeManager()});
     menu.push('-', {ic: group.archived?'archive-restore':'archive', label: group.archived?'取消归档':'归档分组', on:()=>{ group.archived=group.archived?undefined:true; core.save(true); core.rerender(); core.toast(group.archived?'已归档，可在设置中管理':'已取消归档','ok'); }});
     showCtx(e.clientX,e.clientY,menu); };
   return a;
@@ -93,16 +94,15 @@ function navItem(core,key,icon,name,count,on,group){
 function sideBtn(core,icon,title,on){ const b=el('button','fx-sidebtn'); b.title=title; b.onclick=on;
   const s=el('span','fx-sb-ico lucide-mask'); s.style.webkitMaskImage=s.style.maskImage=`url("${core.lucide(icon)}")`; s.style.background='currentColor';
   b.appendChild(s); return b; }
-/* 工作区：从分组的 page 自动派生 + 全部（无需单独管理 UI；指定改由右键分组）*/
-function derivePages(core){ const set=[]; core.groups.forEach(g=>{ if(g.page && !set.includes(g.page)) set.push(g.page); }); return ['全部',...set]; }
-/* 统一视图切换器（底部）：全部收藏 / 各工作区 / 隐私模式 */
-function modeTitle(core){ if(core.settings.privacy) return '当前：隐私模式（只搜索/天气）· 点击切换'; const ap=core.settings.activePage||'全部'; return '视图：'+(ap==='全部'?'全部收藏':'工作区 '+ap)+' · 点击切换（全部/工作区/隐私）'; }
+/* 场景模式切换器：全部 / 多属分组模式 / 隐私 */
+function modeTitle(core){ const am=core.activeModeObj(); return am==='privacy'?'当前：隐私模式（只搜索/天气）· 点击切换':am?'模式：'+am.name+' · 点击切换':'视图：全部收藏 · 点击切换'; }
 function openModeMenu(core,e){
   if(e){ e.stopPropagation(); e.preventDefault(); }   // 阻止冒泡到 document 的 click→hideCtx 把菜单立刻关掉
-  const priv=!!core.settings.privacy, ap=core.settings.activePage||'全部';
-  const items=[{ic:'layout-grid', sel:!priv&&ap==='全部', label:'全部收藏', on:()=>{ core.settings.privacy=false; core.settings.activePage='全部'; core.save(); core.rerender(); }}];
-  derivePages(core).filter(p=>p!=='全部').forEach(w=>{ items.push({ic:'layers', sel:!priv&&ap===w, label:w, on:()=>{ core.settings.privacy=false; core.settings.activePage=w; core.save(); core.rerender(); }}); });
-  items.push('-', {ic:'eye-off', sel:priv, label:'隐私模式（只留搜索/天气）', on:()=>{ core.settings.privacy=true; active='home'; core.save(); core.rerender(); }});   // D5: 归位 home，否则分组页内容在隐私模式下仍被渲染
+  const am=core.activeModeObj();
+  const items=[{ic:'layout-grid',sel:am===null,label:'全部收藏',on:()=>core.setActiveMode(null)}];
+  core.modes().forEach(mode=>items.push({ic:'layers',sel:am&&am.id===mode.id,label:mode.name,on:()=>core.setActiveMode(mode.id)}));
+  items.push('-', {ic:'eye-off',sel:am==='privacy',label:'隐私模式（只留搜索/天气）',on:()=>core.setActiveMode('privacy')});
+  items.push('-', {ic:'settings-2',label:'管理模式…',on:()=>core.openModeManager()});
   const x=(e&&e.clientX)||120, y=(e&&e.clientY)||innerHeight-40; showCtx(x,y,items);
 }
 /* 侧栏点分组 → 进该分组页 */
@@ -141,14 +141,14 @@ function renderMain(core,main){ if(!main)return; main.textContent='';
 }
 
 function renderHome(core,main){
-  const priv=core.settings.privacy;
+  const am=core.activeModeObj(), priv=am==='privacy';
   const home=el('div','fx-home'+(priv?' fx-home-priv':''));
   if(!priv){ const grid=core.favGrid(); home.style.setProperty('--home-scale',grid.rows===3?(grid.cols===8?.76:.84):1); }
   if(!priv) home.appendChild(buildBgTrigger(core));   // 背景切换悬浮入口（隐私模式不显示，减少干扰）
-  if(core.settings.showClock) home.appendChild(buildHeroClock(core));   // 时钟+日期 固定 Hero，放在搜索框上方
+  if(core.settings.showClock && !(am&&am!=='privacy'&&(am.hiddenWidgets||[]).includes('w-clock'))) home.appendChild(buildHeroClock(core));   // 时钟+日期 固定 Hero，放在搜索框上方
   home.appendChild(buildAsk(core));               // 输入框（AI/搜索/收藏检索）
   home.appendChild(buildWidgetCards(core,priv));   // 时钟/天气/(本机)卡片
-  if(!priv){ const favs=core.favorites(), grid=core.favGrid();
+  if(!priv && !(am&&am.showFavs===false)){ const favs=core.favorites(), grid=core.favGrid();
     if(favs.length){
       const row=el('div','fx-favs'); row.style.setProperty('--fav-cols',grid.cols);
       favs.forEach(({item,group,pinned})=>row.appendChild(favCard(core,item,group,pinned)));
@@ -277,7 +277,9 @@ function buildAsk(core){
 /* ---------- 卡片：时钟 / 天气 / 待办 / 倒数日（可拖拽重排、可增删）---------- */
 function buildWidgetCards(core, priv){
   const row=el('div','fx-wcards');
+  const am=core.activeModeObj(), hidden=(am&&am!=='privacy')?(am.hiddenWidgets||[]):[];
   (core.settings.widgets||[]).forEach(w=>{
+    if(hidden.includes(w.id)) return;
     if(w.type==='clock') return;   // 时钟已移到搜索框上方的固定 Hero，不再作为卡片渲染
     if(w.type==='weather' && !core.settings.showWeather) return;
     if(priv && w.type!=='weather')   return;   // 隐私模式只留天气卡（时钟是 Hero，另行渲染）
