@@ -110,11 +110,22 @@ export async function saveConfig(config){
 const INBOX = 'fn_inbox';
 export async function pushInbox(ops){
   if(!isExtension || !ops || !ops.length) return;
-  try{ const cur=(await lGet(INBOX))[INBOX]||[]; await lSet({ [INBOX]: cur.concat(ops) }); }catch{}
+  try{ const cur=(await lGet(INBOX))[INBOX]||[];
+    const stamped=ops.map(o=>({ ...o, _k: Math.random().toString(36).slice(2)+Date.now().toString(36) }));   // 唯一键：drain 按键清理
+    await lSet({ [INBOX]: cur.concat(stamped) }); }catch{}
 }
 export async function drainInbox(){
   if(!isExtension) return [];
-  try{ const cur=(await lGet(INBOX))[INBOX]||[]; if(cur.length) await lSet({ [INBOX]: [] }); return cur; }catch{ return []; }
+  try{
+    const cur=(await lGet(INBOX))[INBOX]||[]; if(!cur.length) return [];
+    // 清理前重读、只清"本次读到"的条目——把「drain 期间 popup 又推入新 op 被整箱清掉」的丢失窗从整个处理期缩到一次读写间隙
+    const took=new Set(cur.map(o=>o&&o._k).filter(Boolean));
+    const latest=(await lGet(INBOX))[INBOX]||[];
+    // 只保留「drain 期间新推入的带键条目」；无 _k 的一律视为已取走（两次 lGet 对象身份不同，includes 永假会造成永不清除→无限重放）
+    const rest=latest.filter(o=> o && o._k && !took.has(o._k));
+    await lSet({ [INBOX]: rest });
+    return cur;
+  }catch{ return []; }
 }
 
 /* 其他终端/其他上下文改动 → 回调（本地实时刷新）。

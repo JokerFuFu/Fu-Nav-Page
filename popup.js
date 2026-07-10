@@ -121,7 +121,8 @@ function render(cfg, ctx){
         const holder=ctx.existingHolder; if(holder){ const i=holder.indexOf(ctx.existing); if(i>=0) holder.splice(i,1); }
         tg.items.push(ctx.existing);
       }
-      persist(cfg, status, '已保存');
+      // 编辑也记收件箱(评审P1)：改名/换图标/跨组移动 同样可能被开着的新标签页旧内存覆盖，op:edit 按 id 重放补回
+      persist(cfg, status, '已保存', [{op:'edit', id: ctx.existing.id, patch: data, tgid: tg ? tg.id : undefined}]);
       return;
     }
     const tg=resolveGroup(cfg, sel.value); data.id=uid('i'); data.note=''; tg.items.push(data);

@@ -119,16 +119,33 @@ class Core {
      编辑弹层开着时先挂起（_remoteDirty），关弹层再采纳——否则 cfg 被整体替换，弹层里的编辑写到脱钩旧对象上丢失。 */
   async _maybeAdoptLatest(){ let r; try{ r=await loadConfig(); }catch{ return; }
     if(!(r && r.config && (r.config.savedAt||0) > (this.cfg.savedAt||0))) return;
-    const bd=$('#fnBackdrop'); if(bd && !bd.hidden){ this._remoteDirty=true; return; }
+    // 弹层/命令面板/右键菜单开着都挂起采纳——它们的闭包持有旧 cfg 对象，整份替换会让"保存/删除"写到脱钩对象上
+    const busy = ['#fnBackdrop','#fnPalBack'].some(s=>{ const n=$(s); return n && !n.hidden; }) || !!document.querySelector('.fx-ctx');
+    if(busy){ this._remoteDirty=true; return; }
     this.cfg=r.config; this.migrate();
+    this._pruneTombstoned();        // 关键(评审P0)：另一标签页的旧快照写回会携带本会话已删的条目/卡片，采纳时按墓碑剔除，杜绝复活
     this._lastBmCfgSig=undefined;   // 新 cfg，旧书签结构签名不再对应（防 bmPush 误导出→bookmarks 事件→二次循环）
     this.applyTheme(); this.rerender(); this.toast('已更新'); }
+
+  /* 按会话墓碑清洗当前 cfg：剔除已删的分组/条目(递归)/小组件——采纳外来快照后调用 */
+  _pruneTombstoned(){ const T=this._tombstones; if(!T.size) return;
+    const prune=arr=>{ for(let i=arr.length-1;i>=0;i--){ const it=arr[i]; if(it && T.has(it.id)) arr.splice(i,1); else if(this.isFolder(it)) prune(it.items||[]); } };
+    this.cfg.groups=(this.cfg.groups||[]).filter(g=>!T.has(g.id));
+    this.cfg.groups.forEach(g=>prune(g.items||[]));
+    const s=this.settings; if(Array.isArray(s.widgets)) s.widgets=s.widgets.filter(w=>!T.has(w.id)); }
 
   /* popup 收件箱兑现：add=增（目标组丢失可重建；同组同址去重；墓碑跳过），del=删（递归定位）。返回是否改了 cfg */
   async _applyInbox(){ const ops=await drainInbox(); if(!ops||!ops.length) return false; let changed=false;
     for(const op of ops){
       if(op.op==='del' && op.id){ this._tombstones.add(op.id);
         for(const g of this.groups){ const hit=this.flatItems(g).find(x=>x.item.id===op.id); if(hit){ this._removeItem(g,hit.item); changed=true; break; } } continue; }
+      if(op.op==='edit' && op.id){ if(this._tombstones.has(op.id)) continue;   // 本会话已删 → 编辑作废（删除优先）
+        let found=null, fg=null;
+        for(const g of this.groups){ const hit=this.flatItems(g).find(x=>x.item.id===op.id); if(hit){ found=hit.item; fg=g; break; } }
+        if(!found) continue;
+        if(op.patch){ const p={...op.patch}; delete p.id; Object.assign(found,p); }
+        if(op.tgid && fg && op.tgid!==fg.id && !this._tombstones.has(op.tgid)){ const tg=this.groups.find(g=>g.id===op.tgid); if(tg){ this._removeItem(fg,found); tg.items.push(found); } }
+        changed=true; continue; }
       if(op.op!=='add' || !op.item) continue;
       const it=op.item;
       if(this._tombstones.has(it.id) || (op.gid && this._tombstones.has(op.gid))) continue;   // 本会话删过 → 不复活
@@ -139,6 +156,8 @@ class Core {
       if(nu && this.flatItems(tg).some(x=>((x.item.url||'').trim().toLowerCase())===nu)){ this._tombstones.add(it.id); continue; }   // 同组同址已有 → 去重
       tg.items.push(it); changed=true;
     }
+    // 兑现即刷新(评审P1)：popup 增删后开着的新标签页要立刻可见——不刷的话 popup 报"已同步"而首页毫无变化
+    if(changed && this.layoutMod && this.root){ try{ this.rerender(); }catch{} }
     return changed; }
 
   /* 会话墓碑：删除时登记 id（文件夹/分组含全部后代），收件箱兑现据此拒绝复活 */
@@ -149,6 +168,7 @@ class Core {
   save(immediate){ clearTimeout(this._saveT); this._saveT=null;
     // 提为实例字段(run)，便于 onRemoteChange 回灌前 flush（否则防抖窗口内未落盘的改动会被远端旧快照整体覆盖→删除复活）
     const run=this._pendingSave=async()=>{
+      if(this._pendingSave===run) this._pendingSave=null;   // 起跑即摘牌：防 flushSave 撞上飞行中的 run 把同一次保存跑两遍(bmPush 并发重复导出)
       // local 是唯一权威：不做整份 diff「防丢合并」(只加不删的合并正是删除复活的元凶)；popup 增删走收件箱兑现
       try{ await this._applyInbox(); }catch{}
       await this.bmPush();        // 书签双向同步：导航变更 → 镜像到浏览器「Fu 导航」文件夹（内部按结构签名跳过无关变更）
@@ -163,8 +183,7 @@ class Core {
         else this.flashSync('已保存（仅本机）');
       }
       else this.flashSync('已保存');
-      this.cloudPush();           // 自托管云：改动后自动备份（内部防抖）
-      if(this._pendingSave===run) this._pendingSave=null; };   // 落盘完成才清(且只清自己，不误清后来的 save)
+      this.cloudPush(); };        // 自托管云：改动后自动备份（内部防抖）
     return immediate ? run() : (this._saveT=setTimeout(run,600)); }
 
   /* 把排队中的防抖保存立即落盘——远端回灌(onRemoteChange)前必须调用，
@@ -502,7 +521,8 @@ class Core {
     if(type==='today'){ w.items=[]; w.countdowns=[]; } if(type==='hwmon')w.url='';
     if(type==='clock')this.settings.showClock=true; if(type==='weather')this.settings.showWeather=true;   // 加时钟/天气同时确保未被隐藏
     ws.push(w); this.save(); this.rerender(); if(type==='hwmon') this.openHwmonEditor(w); }   // 硬件监控加完即弹端点设置
-  removeWidget(id){ this.settings.widgets=(this.settings.widgets||[]).filter(x=>x.id!==id); this.save(true); this.rerender(); }
+  removeWidget(id){ this._tombstones.add(id);   // 小组件同享墓碑：另一标签页旧快照写回时采纳路径按此剔除，防已删卡片复活
+    this.settings.widgets=(this.settings.widgets||[]).filter(x=>x.id!==id); this.save(true); this.rerender(); }
 
   /* 硬件监控卡片编辑（Glances 端点）*/
   openHwmonEditor(w){ const labelI=this.inp(w.label||'硬件监控','名称'); const urlI=this.inp(w.url||'','http://127.0.0.1:7842（本机）或 http://服务器IP:61208');
@@ -623,7 +643,8 @@ class Core {
     this.toast(`已导入 ${added} 个收藏（${parsed.groups.length} 组，已去重 ${parsed.stats.dropped}）`,'ok'); }
 
   /* 提示 */
-  toast(msg,kind){ const t=el('div','fn-toast '+(kind||''),msg); $('#fnToasts').appendChild(t); setTimeout(()=>{t.style.opacity='0';t.style.transform='translateX(20px)';setTimeout(()=>t.remove(),250);},2600); }
+  toast(msg,kind){ const host=$('#fnToasts'); if(!host) return;   // boot 早期(容器未建)静默跳过，不抛错
+    const t=el('div','fn-toast '+(kind||''),msg); host.appendChild(t); setTimeout(()=>{t.style.opacity='0';t.style.transform='translateX(20px)';setTimeout(()=>t.remove(),250);},2600); }
   flashSync(msg){ const p=$('#fnPill'); if(!p)return; p.hidden=false; p.textContent=msg; clearTimeout(this._pt); this._pt=setTimeout(()=>p.hidden=true,1800); }
 }
 
