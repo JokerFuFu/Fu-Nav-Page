@@ -54,34 +54,67 @@ export async function loadConfig(){
   return { config: s ? JSON.parse(s) : null, source: s ? 'local' : null };
 }
 
+/* sync 镜像节流：local 已是唯一权威，sync 只充当"新设备首次引导"的快照，不追实时。
+ * 高频写 sync 会触发 Chrome 速率限制(每分钟/每小时写入上限)——之前被误报成"配置过大"。
+ * 60s 内多次保存只写一次，窗口内合并为尾随一次（SW 短命上下文丢尾随也无妨，下次保存补上）。 */
+const SYNC_MIN_GAP = 60000;
+let _syncLastTs = 0, _syncTimer = null, _syncPendingJson = null;
+async function _mirrorToSync(json, ver){
+  const chunks = sliceUtf8(json, ITEM_BYTES);
+  const oldMeta = (await sGet(META))[META];
+  const obj = { [META]: { chunks: chunks.length, ts: Date.now(), v: ver || 1 } };
+  chunks.forEach((c,i)=> obj[CHUNK+i] = c);
+  await sSet(obj);
+  // 清掉多余旧片
+  if(oldMeta && oldMeta.chunks > chunks.length){
+    const rm=[]; for(let i=chunks.length;i<oldMeta.chunks;i++) rm.push(CHUNK+i);
+    await sDel(rm);
+  }
+}
+
 export async function saveConfig(config){
-  config.savedAt = Date.now();                 // 时间戳：load 时取最新一份，避免读到旧 sync
+  config.savedAt = Date.now();                 // 时间戳：本机 local 权威判新用
   const json = JSON.stringify(config);
   if(!isExtension){
     localStorage.setItem(LOCAL, json);
     return { ok:true, synced:false, reason:'preview' };
   }
-  // 始终先镜像到 local（最快最可靠的本机兜底）
+  // 始终先镜像到 local（唯一权威，最快最可靠）
   await lSet({ [LOCAL]: config });
   const chunks = sliceUtf8(json, ITEM_BYTES);
   if(chunks.length > MAX_CHUNKS){
     return { ok:true, synced:false, reason:'too-large' };
   }
+  const now = Date.now();
+  if(now - _syncLastTs < SYNC_MIN_GAP){
+    _syncPendingJson = json;
+    clearTimeout(_syncTimer);
+    _syncTimer = setTimeout(()=>{ const j=_syncPendingJson; _syncPendingJson=null; if(!j) return;
+      _syncLastTs = Date.now(); _mirrorToSync(j, config.version).catch(()=>{}); }, SYNC_MIN_GAP - (now - _syncLastTs));
+    return { ok:true, synced:false, reason:'throttled' };   // 本机已存好；sync 快照稍后跟上
+  }
+  _syncLastTs = now;
   try{
-    const oldMeta = (await sGet(META))[META];
-    const obj = { [META]: { chunks: chunks.length, ts: Date.now(), v: config.version || 1 } };
-    chunks.forEach((c,i)=> obj[CHUNK+i] = c);
-    await sSet(obj);
-    // 清掉多余旧片
-    if(oldMeta && oldMeta.chunks > chunks.length){
-      const rm=[]; for(let i=chunks.length;i<oldMeta.chunks;i++) rm.push(CHUNK+i);
-      await sDel(rm);
-    }
+    await _mirrorToSync(json, config.version);
     return { ok:true, synced:true };
   }catch(e){
-    console.warn('sync 写入失败（仅存本机）:', e);
+    console.warn('sync 写入失败（仅存本机）:', (e && e.message) || e);
     return { ok:true, synced:false, reason:'quota' };   // 归一化：core.save 据此给明确提示，不再假报「已保存」
   }
+}
+
+/* ---- popup → 新标签页 的增量收件箱 ----
+ * popup 写整份配置仍可能被"开着的新标签页里未落盘的旧内存"覆盖（flushSave 时序）。
+ * 故 popup 的增/删动作冗余记一份到 fn_inbox，由新标签页在 保存前/变更通知/启动 时兑现，
+ * 配合会话墓碑（删除过的 id 不复活）保证 popup 收藏零丢失。 */
+const INBOX = 'fn_inbox';
+export async function pushInbox(ops){
+  if(!isExtension || !ops || !ops.length) return;
+  try{ const cur=(await lGet(INBOX))[INBOX]||[]; await lSet({ [INBOX]: cur.concat(ops) }); }catch{}
+}
+export async function drainInbox(){
+  if(!isExtension) return [];
+  try{ const cur=(await lGet(INBOX))[INBOX]||[]; if(cur.length) await lSet({ [INBOX]: [] }); return cur; }catch{ return []; }
 }
 
 /* 其他终端/其他上下文改动 → 回调（本地实时刷新）。

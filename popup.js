@@ -2,7 +2,7 @@
  * 点扩展图标 → 弹出 Infinity 式编辑框，收藏/编辑当前网页（名称 + 四模式图标 + 分组）。
  * 已收藏检测递归进文件夹（locateFavorite），跟 background.js 的图标角标共用同一套 normUrl 归一化口径。
  */
-import { loadConfig, saveConfig } from './shared/storage.js';
+import { loadConfig, saveConfig, pushInbox } from './shared/storage.js';
 import { createIconEditor } from './shared/icon-editor.js';
 import { hostOf, normUrl } from './shared/icon-map.js';
 
@@ -109,7 +109,7 @@ function render(cfg, ctx){
   const foot=[];
   if(ctx.existing) foot.push(btn('删除','danger',()=>{
     const holder=ctx.existingHolder; if(holder){ const i=holder.indexOf(ctx.existing); if(i>=0) holder.splice(i,1); }
-    persist(cfg, status, '已删除'); }));
+    persist(cfg, status, '已删除', [{op:'del', id: ctx.existing.id}]); }));   // 冗余记收件箱：防开着的新标签页用旧内存把删除盖回来
   foot.push(btn('取消','ghost',()=>window.close()));
   foot.push(btn(ctx.existing?'保存':'确定','primary',()=>{
     let url=urlI.value.trim(); if(!url){ status.textContent='请填写网址'; status.className='pop-status err'; return; }
@@ -121,10 +121,12 @@ function render(cfg, ctx){
         const holder=ctx.existingHolder; if(holder){ const i=holder.indexOf(ctx.existing); if(i>=0) holder.splice(i,1); }
         tg.items.push(ctx.existing);
       }
-    } else {
-      const tg=resolveGroup(cfg, sel.value); data.id=uid('i'); data.note=''; tg.items.push(data);
+      persist(cfg, status, '已保存');
+      return;
     }
-    persist(cfg, status, ctx.existing?'已保存':'已收藏');
+    const tg=resolveGroup(cfg, sel.value); data.id=uid('i'); data.note=''; tg.items.push(data);
+    // 冗余记收件箱（含目标组信息，组被覆盖丢失时可重建）：防开着的新标签页用旧内存覆盖掉这次收藏
+    persist(cfg, status, '已收藏', [{op:'add', gid:tg.id, gname:tg.name, gicon:tg.icon, gcolor:tg.color, item:data}]);
   }));
   pop.appendChild(footRow(foot));
 
@@ -140,9 +142,10 @@ function resolveGroup(cfg, val){
 
 function footRow(btns){ const f=E('div','pop-foot'); btns.forEach(b=>f.appendChild(b)); return f; }
 
-async function persist(cfg, status, okMsg){
+async function persist(cfg, status, okMsg, ops){
   status.className='pop-status'; status.textContent='保存中…';
-  try{ await saveConfig(cfg); status.className='pop-status ok'; status.textContent=okMsg+'，已同步到首页';
+  try{ await saveConfig(cfg); if(ops&&ops.length) await pushInbox(ops);
+    status.className='pop-status ok'; status.textContent=okMsg+'，已同步到首页';
     setTimeout(()=>window.close(), 650);
   }catch(e){ status.className='pop-status err'; status.textContent='保存失败：'+(e&&e.message||e); }
 }

@@ -105,7 +105,7 @@ git clone <本仓库地址>
 
 ### ☁️ WebDAV 自托管云同步
 
-把整份配置存到**你自己的服务器**（NAS 的 WebDAV Server 套件 / Nextcloud / 任意 WebDAV）。设置里填地址（如 `https://nas.example.com:5006/fu-nav/`）+ WebDAV 账号密码，改动自动备份、启动自动拉取，另有一键备份/恢复/测试。首次使用会弹窗申请该网址的访问授权。另支持 **Google Drive 云备份**（设置里填自己的 OAuth Client ID，数据存在你账号的应用专属文件夹）。
+把整份配置存到**你自己的服务器**（NAS 的 WebDAV Server 套件 / Nextcloud / 任意 WebDAV）。设置里填地址（如 `https://nas.example.com:5006/fu-nav/`）+ WebDAV 账号密码，改动自动备份到云；其他设备在设置里一键**「从云恢复」**手动拉取最新——**不做后台自动覆盖**，本机改动永远优先、不会被云端旧数据冲掉。另有测试连接/立即备份。首次使用会弹窗申请该网址的访问授权。另支持 **Google Drive 云备份**（设置里填自己的 OAuth Client ID，数据存在你账号的应用专属文件夹）。
 
 ### 🔖 浏览器书签双向同步
 

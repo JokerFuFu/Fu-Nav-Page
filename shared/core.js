@@ -1,5 +1,5 @@
 /* ============ Fu 导航 · 共享内核 ============ */
-import { isExtension, loadConfig, saveConfig, onRemoteChange, getBookmarksTree } from './storage.js';
+import { isExtension, loadConfig, saveConfig, onRemoteChange, getBookmarksTree, drainInbox } from './storage.js';
 import { mountItemIcon, mountGroupIcon } from './icons.js';
 import { getWeather, preciseLocate, wmo } from './weather.js';
 import { fetchAgentData, agentProbe } from './agent.js';
@@ -31,13 +31,8 @@ export function copyTextSync(text){
   }catch{ try{ navigator.clipboard && navigator.clipboard.writeText(text); }catch{} return false; }
 }
 
-export const ENGINES = {
-  bing:{name:'Bing',badge:'B',q:'https://www.bing.com/search?q='},
-  google:{name:'Google',badge:'G',q:'https://www.google.com/search?q='},
-  baidu:{name:'百度',badge:'度',q:'https://www.baidu.com/s?wd='},
-  ddg:{name:'DuckDuckGo',badge:'D',q:'https://duckduckgo.com/?q='},
-};
-/* 搜索 + AI 一体：q 模板支持直发；copy 类无 prefill 的打开主页并复制问题 */
+/* 搜索 + AI 一体：q 模板支持直发；copy 类无 prefill 的打开主页并复制问题
+ * （旧 ENGINES 表已删——首页搜索/引擎切换全部走 PROVIDERS/askProvider 这一套） */
 export const PROVIDERS = {
   bing:      {name:'Bing',      kind:'search', icon:'bing',       q:'https://www.bing.com/search?q='},
   google:    {name:'Google',    kind:'search', icon:'google',     q:'https://www.google.com/search?q='},
@@ -53,28 +48,27 @@ const LUCIDE_GROUP_OPTS=['server','hard-drive','network','router','shield-check'
 const COLORS=['#2563eb','#0891b2','#16a34a','#7c3aed','#64748b','#ef4444','#0ea5e9','#f59e0b','#14b8a6','#ec4899','#8b5cf6','#f43f5e','#6366f1','#22c55e','#eab308','#fb7185'];
 
 class Core {
-  constructor(){ this.cfg=null; this.layout=null; this.layoutMod=null; this.root=null; this.editing=false; this.agentData=null; this._saveT=null; this._pendingSave=null; this._quotaWarned=false; this._listeners=[]; }
+  constructor(){ this.cfg=null; this.layout=null; this.layoutMod=null; this.root=null; this.editing=false; this.agentData=null; this._saveT=null; this._pendingSave=null; this._quotaWarned=false; this._listeners=[];
+    this._tombstones=new Set();    // 本会话删除过的 id（条目/文件夹/分组）——收件箱兑现时跳过，杜绝"删了又被补回"
+    this._remoteDirty=false; }     // 编辑弹层开着时挂起的"存储有更新"信号，关弹层再采纳（防 cfg 被换导致编辑写丢）
   get settings(){ return this.cfg.settings; }
   get groups(){ return this.cfg.groups; }
 
   async boot(){
-    const { config } = await loadConfig();
+    const { config, source } = await loadConfig();
     this.cfg = (config && config.groups) ? config : await this.fetchSeed();
     this.migrate();
+    try{ if(await this._applyInbox()) await this.save(true); }catch{}   // 兑现 popup 在没有新标签页打开时留下的增删
     const ql=new URLSearchParams(location.search).get('layout'); if(ql) this.settings.layout=ql; // 预览/截图用
     this.buildModalHost();
     this.wireChrome();
     this.applyTheme();
-    if(!config) await this.save(true);
+    if(!config || source==='sync') await this.save(true);   // 无配置或刚从 sync 引导 → 立即落成本机权威副本
     await this.mountLayout(this.settings.layout || 'classic');
     // 远端变更：仅在 savedAt 严格更新时才回灌，杜绝"自己写入→读到旧/中间态覆盖内存→下次存旧值"的丢失循环
-    onRemoteChange(async ()=>{ await this.flushSave();   // 先落盘本地未保存的防抖改动，避免被远端旧快照整体覆盖(吞掉刚删的卡片)
-      const r=await loadConfig();
-      if(r.config && (r.config.savedAt||0) > (this.cfg.savedAt||0)){ this.cfg=r.config; this.migrate();
-        this._lastBmCfgSig=undefined;   // 换了一份新 cfg，旧的书签结构签名缓存已经不对应它了；不重置的话
-                                         // 下次 save() 里 bmPush() 会误判"结构又变了"，白白再导出一次到书签，
-                                         // 又触发 chrome.bookmarks.onChanged 唤醒 SW，形成第二条循环路径。
-        this.applyTheme(); this.rerender(); this.toast('已更新'); } });
+    onRemoteChange(async ()=>{ await this.flushSave();   // 先落盘本地未保存的防抖改动，避免被旧快照整体覆盖(吞掉刚删的卡片)
+      if(await this._applyInbox()) await this.save(true);   // 兑现 popup 增删：即使 popup 的整份写入被上面 flush 盖掉，也能从收件箱找回
+      await this._maybeAdoptLatest(); });
     // 本机 agent 数据（提醒/日历/AI日报）
     this.refreshAgent();
     // 不再开机自动从云拉取覆盖本地(会用云端旧快照冲掉本地改动)；跨设备同步改为设置里手动「从云恢复」
@@ -121,19 +115,42 @@ class Core {
     this._emit('agent');
   }
 
-  /* 防丢合并：把 latest 里我们内存没有的分组/条目并进来(按 id 并集)，避免覆盖掉如工具栏一键收藏(独立 SW)刚写入的内容 */
-  _mergeIn(latest){ if(!latest||!Array.isArray(latest.groups))return; const mine=this.groups; const byId=new Map(mine.map(g=>[g.id,g]));
-    for(const lg of latest.groups){ const mg=byId.get(lg.id);
-      if(!mg){ mine.push(lg); continue; }                                  // 整组是新的 → 直接并入
-      const have=new Set((mg.items||[]).map(i=>i.id));
-      (lg.items||[]).forEach(it=>{ if(!have.has(it.id)) mg.items.push(it); }); // 组内并入缺失条目
-    } }
+  /* 采纳存储中更新的一份（本机另一上下文写入，如工具栏 popup）。
+     编辑弹层开着时先挂起（_remoteDirty），关弹层再采纳——否则 cfg 被整体替换，弹层里的编辑写到脱钩旧对象上丢失。 */
+  async _maybeAdoptLatest(){ let r; try{ r=await loadConfig(); }catch{ return; }
+    if(!(r && r.config && (r.config.savedAt||0) > (this.cfg.savedAt||0))) return;
+    const bd=$('#fnBackdrop'); if(bd && !bd.hidden){ this._remoteDirty=true; return; }
+    this.cfg=r.config; this.migrate();
+    this._lastBmCfgSig=undefined;   // 新 cfg，旧书签结构签名不再对应（防 bmPush 误导出→bookmarks 事件→二次循环）
+    this.applyTheme(); this.rerender(); this.toast('已更新'); }
+
+  /* popup 收件箱兑现：add=增（目标组丢失可重建；同组同址去重；墓碑跳过），del=删（递归定位）。返回是否改了 cfg */
+  async _applyInbox(){ const ops=await drainInbox(); if(!ops||!ops.length) return false; let changed=false;
+    for(const op of ops){
+      if(op.op==='del' && op.id){ this._tombstones.add(op.id);
+        for(const g of this.groups){ const hit=this.flatItems(g).find(x=>x.item.id===op.id); if(hit){ this._removeItem(g,hit.item); changed=true; break; } } continue; }
+      if(op.op!=='add' || !op.item) continue;
+      const it=op.item;
+      if(this._tombstones.has(it.id) || (op.gid && this._tombstones.has(op.gid))) continue;   // 本会话删过 → 不复活
+      if(this.groups.some(g=>this.flatItems(g).some(x=>x.item.id===it.id))) continue;         // 已存在（popup 整份写入未被覆盖）→ 无事
+      let tg=this.groups.find(g=>g.id===op.gid);
+      if(!tg){ tg={ id:op.gid||uid('g'), name:op.gname||'收藏', icon:op.gicon||'star', color:op.gcolor||'#22c55e', collapsed:false, items:[] }; this.groups.unshift(tg); }
+      const nu=(it.url||'').trim().toLowerCase();
+      if(nu && this.flatItems(tg).some(x=>((x.item.url||'').trim().toLowerCase())===nu)){ this._tombstones.add(it.id); continue; }   // 同组同址已有 → 去重
+      tg.items.push(it); changed=true;
+    }
+    return changed; }
+
+  /* 会话墓碑：删除时登记 id（文件夹/分组含全部后代），收件箱兑现据此拒绝复活 */
+  _markDeleted(it){ if(!it||!it.id) return; this._tombstones.add(it.id); if(this.isFolder(it)) (it.items||[]).forEach(x=>this._markDeleted(x)); }
+  _markDeletedGroup(g){ if(!g) return; if(g.id) this._tombstones.add(g.id); (g.items||[]).forEach(x=>this._markDeleted(x)); }
 
   /* ---- 持久化 ---- */
   save(immediate){ clearTimeout(this._saveT); this._saveT=null;
     // 提为实例字段(run)，便于 onRemoteChange 回灌前 flush（否则防抖窗口内未落盘的改动会被远端旧快照整体覆盖→删除复活）
     const run=this._pendingSave=async()=>{
-      // local 是唯一权威：直接存当前内存，不再做「防丢合并」(那个只加不删的合并正是删除被复活的元凶)
+      // local 是唯一权威：不做整份 diff「防丢合并」(只加不删的合并正是删除复活的元凶)；popup 增删走收件箱兑现
+      try{ await this._applyInbox(); }catch{}
       await this.bmPush();        // 书签双向同步：导航变更 → 镜像到浏览器「Fu 导航」文件夹（内部按结构签名跳过无关变更）
       const r=await saveConfig(this.cfg);
       if(r.synced){ this.flashSync('已同步到所有终端'); this._quotaWarned=false; }
@@ -173,13 +190,7 @@ class Core {
   cloudPush(immediate){ if(!isExtension || !cloudEnabled(this.settings)) return; clearTimeout(this._cloudT);
     const run=async()=>{ const r=await cloudPut(this.settings, this.cfg); this.flashSync(r.ok?'已备份到云':'云备份失败：'+(r.reason||'')); };
     return immediate ? run() : (this._cloudT=setTimeout(run, 3500)); }
-  /* 启动后台拉取：仅当云端 savedAt 严格更新时才覆盖本地 */
-  async cloudPull(){ if(!isExtension || !cloudEnabled(this.settings)) return;
-    try{ const r=await cloudGet(this.settings);
-      if(r.ok && r.config && r.config.groups && (r.config.savedAt||0) > (this.cfg.savedAt||0)){
-        this.cfg=r.config; this.migrate(); this.applyTheme(); this.rerender(); await saveConfig(this.cfg); this.toast('已从云端拉取最新配置','ok'); }
-    }catch{} }
-  /* 手动：一键从云恢复（无条件覆盖本地）*/
+  /* 手动：一键从云恢复（无条件覆盖本地）——跨设备同步的唯一"拉取"入口；不做后台自动拉取（会覆盖本机改动） */
   async cloudRestore(){ const r=await cloudGet(this.settings);
     if(r.ok && r.config && r.config.groups){ this.cfg=r.config; this.migrate(); this.applyTheme(); this.rerender(); await this.save(true); this.toast('已从云端恢复','ok'); return true; }
     this.toast('恢复失败：'+(r.reason||'云端无备份'),'err'); return false; }
@@ -283,7 +294,7 @@ class Core {
   /* 某条目所在的直接文件夹（任意层），无则 null */
   _itemFolder(g, item){ const find=arr=>{ for(const it of arr){ if(this.isFolder(it)){ if((it.items||[]).includes(item))return it; const r=find(it.items||[]); if(r)return r; } } return null; }; return find(g.items||[]); }
   /* 删除条目（跨分组、含文件夹内） */
-  deleteItem(item){ for(const g of this.groups){ if(this._removeItem(g,item)){ this.save(true); this.rerender(); return true; } } return false; }
+  deleteItem(item){ this._markDeleted(item); for(const g of this.groups){ if(this._removeItem(g,item)){ this.save(true); this.rerender(); return true; } } return false; }
   /* 移入文件夹 / 移出文件夹 */
   moveItemToFolder(item, folder, g){ if(item===folder)return; if(this._removeItem(g,item)){ (folder.items||(folder.items=[])).push(item); this.save(true); this.rerender(); } }
   moveItemOutOfFolder(item, folder, g){ const j=(folder.items||[]).indexOf(item); if(j>=0){ folder.items.splice(j,1); g.items.push(item); this.save(true); this.rerender(); } }
@@ -372,9 +383,7 @@ class Core {
     img.onerror=()=>{done=true;clearTimeout(to);}; img.src=origin+'/favicon.ico?_t='+Date.now(); }
 
   /* ---- 搜索 ---- */
-  currentEngine(){ return ENGINES[this.settings.searchEngine]||ENGINES.bing; }
-  cycleEngine(){ const ks=Object.keys(ENGINES); const i=ks.indexOf(this.settings.searchEngine); this.settings.searchEngine=ks[(i+1)%ks.length]; this.save(); this._emit('engine'); }
-  runSearch(q){ if(!q.trim())return; window.open(this.currentEngine().q+encodeURIComponent(q), this.settings.openIn==='_self'?'_self':'_blank'); }
+  /* （旧 searchEngine 三件套已删：首页搜索走 askProvider，设置里的引擎下拉是断线死控件，S3 一并清理） */
   /* 搜索/AI 一体发送 */
   PROVIDERS=PROVIDERS;
   activeProvider(){ return (this.settings.askProvider && PROVIDERS[this.settings.askProvider]) ? this.settings.askProvider : 'bing'; }
@@ -421,7 +430,8 @@ class Core {
     }); }
   openModal(title,body,foot){ $('#fnMTitle').textContent=title; const b=$('#fnMBody'),f=$('#fnMFoot'); b.textContent=''; f.textContent='';
     (Array.isArray(body)?body:[body]).forEach(n=>n&&b.appendChild(n)); (foot||[]).forEach(n=>n&&f.appendChild(n)); $('#fnBackdrop').hidden=false; }
-  closeModal(){ $('#fnBackdrop').hidden=true; }
+  closeModal(){ $('#fnBackdrop').hidden=true;
+    if(this._remoteDirty){ this._remoteDirty=false; this._maybeAdoptLatest(); } }   // 弹层期间挂起的存储更新，关弹层后补采纳
   field(label,input){ const w=el('div','fn-field'); if(label)w.appendChild(el('label',null,label)); w.appendChild(input); return w; }
   inp(v='',ph=''){ const i=el('input'); i.value=v; i.placeholder=ph; return i; }
   btn(t,cls,on,ic){ const b=el('button','fn-btn '+(cls||''));
@@ -483,7 +493,7 @@ class Core {
     const archC=this.toggle('归档此分组（收进侧栏「归档」折叠区，主列表不占位）', group?.archived===true, ()=>{});
     const save=this.btn(isNew?'创建':'保存','primary',()=>{const name=nameI.value.trim()||'新分组'; const icon=urlI.value.trim()||lucideSel; const archived=archC.querySelector('input').checked||undefined;
       if(isNew)this.groups.push({id:uid('g'),name,icon,color,collapsed:false,items:[],archived}); else{group.name=name;group.icon=icon;group.color=color;group.emoji='';group.archived=archived;} this.save(true);this.rerender();this.closeModal();});   // 工作区(page)不在此编辑，改由侧栏右键分组指定
-    const foot=[ isNew?null:this.btn('删除分组','danger',()=>{if(group.items.length&&!confirm(`「${group.name}」内有 ${group.items.length} 个网站，确认删除整组？`))return;this.cfg.groups=this.groups.filter(g=>g!==group);this.save(true);this.rerender();this.closeModal();}), this.btn('取消','ghost',()=>this.closeModal()), save ];
+    const foot=[ isNew?null:this.btn('删除分组','danger',()=>{if(group.items.length&&!confirm(`「${group.name}」内有 ${group.items.length} 个网站，确认删除整组？`))return;this._markDeletedGroup(group);this.cfg.groups=this.groups.filter(g=>g!==group);this.save(true);this.rerender();this.closeModal();}), this.btn('取消','ghost',()=>this.closeModal()), save ];
     this.openModal(isNew?'新建分组':'编辑分组',[this.field('名称',nameI),this.field('图标',iconWrap),this.field('强调色',cg),archC],foot.filter(Boolean));
     setTimeout(()=>{nameI.focus();markLucide();renderSug();},50); }
 
@@ -507,8 +517,8 @@ class Core {
     const clUrl=this.inp(cl.url||'','https://你的群晖DDNS:5006/共享文件夹/'), clUser=this.inp(cl.user||'','WebDAV 账号'), clPass=this.inp(cl.pass||'','密码'); clPass.type='password';
     const clCid=this.inp(cl.gdriveClientId||'','xxxxx.apps.googleusercontent.com');
     const clStatus=el('div','fn-sub','');
-    const DAV_HINT='存到你<b>自己的 WebDAV</b>（群晖「WebDAV Server」套件 / Nextcloud / 任意 WebDAV），数据在自己服务器、不靠第三方账号（仿 Floccus）。<br><b>群晖：</b>装 <code>WebDAV Server</code> 套件→启用 HTTPS（默认 5006）→建共享文件夹→URL 填 <code>https://你的DDNS:5006/文件夹/</code>，账号密码用 DSM 账号。首次「测试/备份」会弹授权该网址，点允许。';
-    const GD_HINT='存到你的 <b>Google Drive</b>（应用隐藏空间 appData，不占可见文件）。需一次性自建 OAuth：<br>① <a href="https://console.cloud.google.com/" target="_blank">Google Cloud Console</a> 建项目→启用 <b>Google Drive API</b>；② 凭据→创建 OAuth 客户端 ID→类型选 <b>Web 应用</b>；③ 「已获授权的重定向 URI」填 <code id="fn-gdredir"></code>（这是本扩展的回调地址）；④ 把客户端 ID 粘到上面。iCloud 无对扩展开放的接口，做不了，用这两种之一。';
+    const DAV_HINT='存到你<b>自己的 WebDAV</b>（群晖「WebDAV Server」套件 / Nextcloud / 任意 WebDAV），数据在自己服务器、不靠第三方账号（仿 Floccus）。<br><b>群晖：</b>装 <code>WebDAV Server</code> 套件→启用 HTTPS（默认 5006）→建共享文件夹→URL 填 <code>https://你的DDNS:5006/文件夹/</code>，账号密码用 DSM 账号。首次「测试/备份」会弹授权该网址，点允许。<br><b>跨设备</b>：另一台设备填同一地址后点「从云恢复」手动拉取——不做后台自动覆盖，本机改动永远优先、不会被云端旧数据冲掉。';
+    const GD_HINT='存到你的 <b>Google Drive</b>（应用隐藏空间 appData，不占可见文件）。需一次性自建 OAuth：<br>① <a href="https://console.cloud.google.com/" target="_blank">Google Cloud Console</a> 建项目→启用 <b>Google Drive API</b>；② 凭据→创建 OAuth 客户端 ID→类型选 <b>Web 应用</b>；③ 「已获授权的重定向 URI」填 <code id="fn-gdredir"></code>（这是本扩展的回调地址）；④ 把客户端 ID 粘到上面。iCloud 无对扩展开放的接口，做不了，用这两种之一。<br>跨设备同步同样通过「从云恢复」手动拉取，不做后台自动覆盖。';
     const davBox=el('div'); const clRow=el('div','fn-row'); const fU=el('div','fn-field'); fU.append(el('label',null,'账号'),clUser); const fP=el('div','fn-field'); fP.append(el('label',null,'密码'),clPass); clRow.append(fU,fP);
     const fUrl=el('div','fn-field'); fUrl.appendChild(clUrl);   // 裸 input 需 .fn-field 皮肤（宽度/底色/焦点环）
     davBox.append(el('div','fn-sub','WebDAV 地址（填到目录）'), fUrl, clRow);
@@ -518,7 +528,7 @@ class Core {
     const showByType=()=>{ cfgBox.hidden=!clToggle.querySelector('input').checked;   // S10: 启用开关驱动配置区显隐
       davBox.hidden=(cl.type!=='webdav'); gdBox.hidden=(cl.type!=='gdrive'); clHint.innerHTML=(cl.type==='gdrive'?GD_HINT:DAV_HINT);
       const re=$('#fn-gdredir',clHint); if(re&&isExtension&&chrome.identity){ try{re.textContent=chrome.identity.getRedirectURL();}catch{} } };
-    const clToggle=this.toggle('启用（改动自动备份 + 启动自动拉取最新）', !!cl.enabled, ()=>showByType());
+    const clToggle=this.toggle('启用（改动自动备份到你的云端）', !!cl.enabled, ()=>showByType());
     const typeSeg=this.seg([['webdav','WebDAV / 群晖'],['gdrive','Google Drive']], cl.type, v=>{ cl.type=v; showByType(); });
     const applyCl=()=>{ cl.url=clUrl.value.trim(); cl.user=clUser.value.trim(); cl.pass=clPass.value; cl.gdriveClientId=clCid.value.trim(); cl.enabled=clToggle.querySelector('input').checked; };
     const missing=()=> cl.type==='webdav' ? !clUrl.value.trim() : !clCid.value.trim();
