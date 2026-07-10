@@ -69,6 +69,7 @@ class Core {
     this.applyTheme();
     if(!config || source==='sync') await this.save(true);   // 无配置或刚从 sync 引导 → 立即落成本机权威副本
     await this.mountLayout(this.settings.layout || 'classic');
+    if(!this.settings.onboarded) import('./tour.js').then(m=>m.startTour(this));
     // 远端变更：仅在 savedAt 严格更新时才回灌，杜绝"自己写入→读到旧/中间态覆盖内存→下次存旧值"的丢失循环
     onRemoteChange(async ()=>{ await this.flushSave();   // 先落盘本地未保存的防抖改动，避免被旧快照整体覆盖(吞掉刚删的卡片)
       if(await this._applyInbox()) await this.save(true);   // 兑现 popup 增删：即使 popup 的整份写入被上面 flush 盖掉，也能从收件箱找回
@@ -624,6 +625,7 @@ class Core {
     const dangerWrap=el('div','fn-wrap'); dangerWrap.append(
       this.btn('恢复默认','ghost',async()=>{if(confirm('用内置默认覆盖当前配置？')){this.cfg=await this.fetchSeed();this.migrate();this.applyTheme();this.rerender();this.save(true);this.closeModal();}},'rotate-ccw'));
     const archiveWrap=el('div','fn-wrap'); archiveWrap.append(this.btn('归档管理','ghost',()=>this.openArchiveManager(),'archive'));
+    const tourWrap=el('div','fn-wrap'); tourWrap.append(this.btn('重看新手引导','ghost',()=>import('./tour.js').then(m=>m.startTour(this)),'graduation-cap'));
     this.openModal('设置',[
       this.sect('常用',[
         this.field('标题',titleI),
@@ -644,6 +646,7 @@ class Core {
       this.sect('高级',[
         this.field('打开方式',this.seg([['_blank','新标签页'],['_self','当前页']],s.openIn,v=>{s.openIn=v;})),
         this.field('归档分组',archiveWrap),
+        this.field('新手引导',tourWrap),
         this.field('危险操作',dangerWrap),
       ]),
     ],[ this.btn('完成','primary',()=>{ s.title=titleI.value.trim()||'Fu 导航'; this.applyTheme(); this.save(true); this.rerender(); this.closeModal(); }) ]); }

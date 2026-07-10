@@ -43,7 +43,7 @@
 
 ## W7 · 新手引导
 
-- [ ] **W7-1** `passes:false` 〔预览〕断言：`localStorage.clear()` 刷新（全新用户）→ 自动进入 5 步引导；步进/上一步/跳过/Esc 均正常；完成或跳过后 `settings.onboarded===true` 且刷新不再出现。验证：操作 + localStorage。
+- [ ] **W7-1** `passes:true` 〔预览〕断言：`localStorage.clear()` 刷新（全新用户）→ 自动进入 5 步引导；步进/上一步/跳过/Esc 均正常；完成或跳过后 `settings.onboarded===true` 且刷新不再出现。验证：操作 + localStorage。
 - [ ] **W7-2** `passes:false` 〔预览〕断言：深/浅两主题下引导气泡与遮罩可读不破版；DevTools 模拟 `prefers-reduced-motion: reduce` 时无过渡动画仍可正常走完；设置→高级「重看新手引导」可再次触发。验证：操作。
 
 ## W8 · 删除撤销

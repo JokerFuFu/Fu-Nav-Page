@@ -237,6 +237,7 @@ input[type="date"]::-webkit-calendar-picker-indicator{ opacity:.55; cursor:point
   box-shadow:var(--shadow); }
 /* 磨砂玻璃仅背景图模式（DESIGN.md），纯色模式回退不透明表层 */
 body.bg-photo .fn-pill{ background:var(--surface-glass); backdrop-filter:blur(10px); }
+.fn-tour-mask{position:fixed;inset:0;z-index:100;background:var(--scrim)}.fn-tour-spot{position:fixed;border:2px solid var(--accent);border-radius:var(--r-md);box-shadow:0 0 0 9999px var(--scrim);pointer-events:none}.fn-tour-pop{position:fixed;z-index:101;left:16px;bottom:16px;width:min(320px,calc(100vw - 32px));background:var(--overlay-bg);border:1px solid var(--border-2);border-radius:var(--r-lg);box-shadow:var(--shadow-lg);padding:var(--s4)}.fn-tour-pop p{color:var(--text-2)}.fn-tour-pop button{min-height:32px;margin-right:var(--s2);padding:var(--s1) var(--s3);border-radius:var(--r-sm);background:var(--surface-2);color:var(--text)}.fn-tour-next{background:var(--accent-strong)!important;color:#fff!important}@media (prefers-reduced-motion:no-preference){.fn-tour-pop{animation:fnPop .14s ease}.fn-tour-spot{transition:.13s}}
 
 /* 通用：编辑模式下显隐 */
 body:not(.editing) .edit-only{ display:none !important; }

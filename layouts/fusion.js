@@ -54,6 +54,7 @@ function buildSidebar(core){
   // 锁定/编辑模式：锁定=日常使用(点开链接/不可改)；解锁=可拖拽排序/编辑/删除卡片
   const editTitle=()=> core.editing ? '编辑模式 — 卡片可拖拽排序 / 悬停出现编辑与删除按钮 / 右键更多；点击锁定' : '已锁定 — 防误改，点击即打开链接；点击解锁可编辑/拖拽/删除';
   const editBtn=sideBtn(core, core.editing?'lock-open':'lock', editTitle(), function(){ core.editing=!core.editing; document.body.classList.toggle('editing',core.editing); setIcon(core,editBtn,core.editing?'lock-open':'lock'); editBtn.classList.toggle('on',core.editing); editBtn.title=editTitle(); core.toast(core.editing?'已解锁：可拖拽排序、编辑、删除卡片':'已锁定：点击即打开链接','ok'); core.rerender(); });
+  editBtn.dataset.tour='lock';
   if(core.editing) editBtn.classList.add('on');
   // 统一视图切换器：全部收藏 / 各工作区 / 隐私模式
   const modeBtn=sideBtn(core, core.settings.privacy?'eye':'layers', modeTitle(core), (e)=>openModeMenu(core,e));
@@ -68,6 +69,7 @@ function buildSidebar(core){
   const cmdBtn=sideBtn(core,'search','搜索 / 命令面板（⌘K 或 /）',()=>core.openPalette());
   // 设置
   const setBtn=sideBtn(core,'settings','设置',()=>core.openSettings());
+  setBtn.dataset.tour='settings';
   foot.append(cmdBtn, addBtn, editBtn, modeBtn, themeBtn, setBtn);
   side.appendChild(foot); setTimeout(markNav,0); return side;
 }
