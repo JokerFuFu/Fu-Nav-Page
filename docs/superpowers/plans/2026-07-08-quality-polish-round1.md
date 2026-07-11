@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: 用 superpowers:executing-plans 逐工作包执行本计划（单会话、用户在旁做检查点）。步骤用 `- [ ]` 复选框跟踪。
 >
-> **本计划由 macmini 上的 claude 会话直接执行**：在 `Fu-Nav-Public` 的本地 clone 里改代码、自测、每工作包一个 commit 到 `main`；不派发、不开 PR。执行顺序 = Task 1→2→3→4→5（即 spec 建议序 ①包1→②包4→③包2→④包3→⑤包5）。
+> **本计划由 本机 claude 会话直接执行**：在 `Fu-Nav-Public` 的本地 clone 里改代码、自测、每工作包一个 commit 到 `main`；不派发、不开 PR。执行顺序 = Task 1→2→3→4→5（即 spec 建议序 ①包1→②包4→③包2→④包3→⑤包5）。
 
 **Goal:** 把 Fu 导航从「合法开源」打磨到「陌生人打开即用」——修掉毁第一印象的 P0、设置页繁琐、UI 局部脱管、一个确定性删除 bug（spec 方案 B）。
 
@@ -25,7 +25,7 @@
 
 ---
 
-## Task 0：执行前置（macmini）
+## Task 0：执行前置（本机）
 
 - [ ] **0.1** 确认在 `Fu-Nav-Public` 的 clone 里、拿到最新计划与 spec
 
