@@ -617,8 +617,10 @@ class Core {
     const typeSeg=this.seg([['webdav','WebDAV / 群晖'],['gdrive','Google Drive']], cl.type, v=>{ cl.type=v; showByType(); });
     const applyCl=()=>{ cl.url=clUrl.value.trim(); cl.user=clUser.value.trim(); cl.pass=clPass.value; cl.gdriveClientId=clCid.value.trim(); cl.enabled=clToggle.querySelector('input').checked; };
     const missing=()=> cl.type==='webdav' ? !clUrl.value.trim() : !clCid.value.trim();
+    const warnInsecure=()=>{ if(cl.type==='webdav' && /^http:\/\//i.test((cl.url||'').trim())){ this.toast('WebDAV 用 http 明文传输账号密码，公网强烈建议改用 https','err'); return true; } return false; };
+    clUrl.onblur=()=>{ applyCl(); clStatus.textContent = (cl.type==='webdav' && /^http:\/\//i.test((cl.url||'').trim())) ? '注意：http 明文传输账号密码，公网建议改用 https' : ''; };
     const clBtns=[
-      this.btn('测试连接','ghost',async()=>{ applyCl(); if(missing()){clStatus.textContent='请先填好上面的字段';return;} clStatus.textContent='测试中…'; if(cl.type==='webdav')await this.ensureCloudPermission(cl.url); const r=await this.cloudTest(); clStatus.textContent=(r.ok?'成功：':'失败：')+r.reason; },'plug-zap'),
+      this.btn('测试连接','ghost',async()=>{ applyCl(); if(missing()){clStatus.textContent='请先填好上面的字段';return;} warnInsecure(); clStatus.textContent='测试中…'; if(cl.type==='webdav')await this.ensureCloudPermission(cl.url); const r=await this.cloudTest(); clStatus.textContent=(r.ok?'成功：':'失败：')+r.reason; },'plug-zap'),
       this.btn('立即备份到云','ghost',async()=>{ applyCl(); if(missing()){clStatus.textContent='请先填好上面的字段';return;} if(cl.type==='webdav')await this.ensureCloudPermission(cl.url); clStatus.textContent='备份中…'; const r=cl.type==='webdav'?await cloudPutBackup(this.settings,this.cfg):await cloudPut(this.settings,this.cfg); clStatus.textContent=r.ok?(r.name?'已生成 '+r.name:'已备份到云'):'失败：'+(r.reason||''); this.save(); },'cloud-upload'),
       this.btn('从云恢复','ghost',async()=>{ applyCl(); if(missing()){clStatus.textContent='请先填好上面的字段';return;} if(cl.type==='webdav')await this.ensureCloudPermission(cl.url);
         if(cl.type==='gdrive'){ if(!confirm('用云端配置覆盖本机当前配置？'))return; clStatus.textContent='恢复中…'; const ok=await this.cloudRestore(); clStatus.textContent=ok?'已从云恢复':'恢复失败'; if(ok)this.closeModal(); return; }
@@ -636,7 +638,7 @@ class Core {
     cfgBox.append(el('div','fn-sub','云端'), typeSeg, davBox, gdBox, this.syncActionRow(clBtns,clStatus), clHint); showByType();
     this.openModal('云同步（WebDAV / Google Drive）',[clToggle, cfgBox],[
       this.btn('关闭','ghost',()=>this.openSettings()),
-      this.btn('保存','primary',async()=>{ applyCl(); if(cl.enabled&&cl.url)await this.ensureCloudPermission(cl.url); this.save(true); this.openSettings(); }) ]); }
+      this.btn('保存','primary',async()=>{ applyCl(); if(cl.enabled&&cl.url){ warnInsecure(); await this.ensureCloudPermission(cl.url); } this.save(true); this.openSettings(); }) ]); }
 
   /* 浏览器书签双向同步 子弹层 —— 从 openSettings 拆出（S1/S4）；关闭/保存回设置 */
   openBmEditor(){ const s=this.settings;
