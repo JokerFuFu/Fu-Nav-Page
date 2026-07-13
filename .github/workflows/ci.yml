@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# 外部 fork 的 PR workflow 默认只读;首次贡献者需维护者批准才会跑
+permissions:
+  contents: read
+
+jobs:
+  syntax:
+    name: JS 语法 + JSON 校验
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 校验所有 .js 语法(ES modules)
+        run: |
+          # 项目是纯 ES modules 但文件用 .js 扩展名且无 package.json,
+          # 临时声明 type:module 让 node --check 以 ESM 模式解析(仅解析不执行)
+          echo '{"type":"module"}' > package.json
+          fail=0
+          while IFS= read -r -d '' f; do
+            node --check "$f" || { echo "::error file=$f::JS 语法错误"; fail=1; }
+          done < <(find . -name '*.js' -not -path './.git/*' -print0)
+          rm -f package.json
+          exit $fail
+
+      - name: 校验关键 JSON 文件
+        run: |
+          fail=0
+          for j in manifest.json data/seed.json; do
+            if [ -f "$j" ]; then
+              node -e "JSON.parse(require('fs').readFileSync('$j','utf8'))" \
+                && echo "✅ $j" \
+                || { echo "::error file=$j::JSON 无效"; fail=1; }
+            fi
+          done
+          exit $fail
