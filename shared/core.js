@@ -12,7 +12,7 @@ import { applyBackground, refreshOnlineBackground, effectiveTheme, DEFAULT_ONLIN
 import { ACCENTS, DEFAULT_ACCENT_ID } from './accent-presets.js';
 import { checkAllLinks as runLinkCheck, maybeAutoCheck } from './link-check.js';
 import { putBgImage, deleteBgImage } from './bg-storage.js';
-import { readFavGrid, rankFavorites, visitItem } from './favorites.js';
+import { readFavGrid, rankFavorites, visitItem, frecencyScore, rankByClicks, rankByFrecency } from './favorites.js';
 import { providerAction } from './provider-action.js';
 
 export const $  = (s,r=document)=>r.querySelector(s);
@@ -397,6 +397,7 @@ class Core {
         {ic:'download',label:'导出备份',run:()=>this.exportConfig()},
         {ic:'upload',label:'导入备份',run:()=>this.importConfig()},
         {ic:'link',label:'检测失效链接',run:async()=>{ this.toast('检测中…'); await this.checkLinksNow(); this.toast('检测完成','ok'); }},
+        {ic:'trophy',label:'使用统计 · 点击排行',run:()=>this.openStats()},
         {ic:'settings',label:'打开设置',run:()=>this.openSettings()},
         {ic:'sun-moon',label:'切换深浅色',run:()=>{ const seq=['auto','dark','light']; const i=seq.indexOf(this.settings.theme||'auto'); this.settings.theme=seq[(i+1)%3]; this.applyTheme(); this.save(); }},
         {ic:'bookmark',label:'导入浏览器书签',run:()=>this.importBookmarks()},
@@ -681,6 +682,7 @@ class Core {
     const archiveWrap=el('div','fn-wrap'); archiveWrap.append(this.btn('归档管理','ghost',()=>this.openArchiveManager(),'archive'));
     const modeWrap=el('div','fn-wrap'); modeWrap.append(this.btn('管理模式','ghost',()=>this.openModeManager(),'layers'));
     const tourWrap=el('div','fn-wrap'); tourWrap.append(this.btn('重看新手引导','ghost',()=>import('./tour.js').then(m=>m.startTour(this)),'graduation-cap'));
+    const statsWrap=el('div','fn-wrap'); statsWrap.append(this.btn('点击排行','ghost',()=>this.openStats(),'trophy'));
     const syncSect=this.sect('同步与备份',[
       this.field('云同步（WebDAV / Google Drive）',cloudWrap),
       this.field('浏览器书签双向同步',bmWrap),
@@ -701,12 +703,45 @@ class Core {
       syncSect,
       this.sect('高级',[
         this.field('打开方式',this.seg([['_blank','新标签页'],['_self','当前页']],s.openIn,v=>{s.openIn=v;})),
+        this.field('使用统计',statsWrap),
         this.field('归档分组',archiveWrap),
         this.field('场景模式',modeWrap),
         this.field('新手引导',tourWrap),
         this.field('危险操作',dangerWrap),
       ]),
     ],[ this.btn('完成','primary',()=>{ s.title=titleI.value.trim()||'Fu 导航'; this.applyTheme(); this.save(true); this.rerender(); this.closeModal(); }) ]); }
+
+  /* ====== 使用统计（小彩蛋）：clicks/frecency 纯读展示，命令面板与设置-高级可达 ====== */
+  openStats(){ const entries=this.allItems();
+    const total=entries.reduce((s,x)=>s+(x.item.clicks||0),0), clicked=entries.filter(x=>(x.item.clicks||0)>0).length;
+    const tiles=el('div','fn-stats-tiles');
+    [[entries.length,'收录网站'],[total,'累计点击'],[clicked,'点过的站']].forEach(([n,lb])=>{
+      const t=el('div','fn-stat-tile'); t.append(el('div','fn-stat-num',String(n)),el('div','fn-stat-lb',lb)); tiles.appendChild(t); });
+    const hint=el('div','fn-hint');   // 网站名是用户数据，DOM 拼接不走 innerHTML
+    const top=rankByClicks(entries,1)[0];
+    if(top) hint.append('你最离不开的是「',el('b',null,top.item.name||top.item.url),'」——已经点开它 ',el('b',null,String(top.item.clicks)),' 次了。');
+    else hint.append('还没有点击记录。从今天起，每一次点击都会被悄悄数着。');
+    const timeAgo=ts=>{ if(!ts)return '刚刚'; const d=Math.max(0,Date.now()-ts);
+      if(d<36e5)return Math.max(1,Math.round(d/6e4))+' 分钟前'; if(d<864e5)return Math.round(d/36e5)+' 小时前';
+      if(d<30*864e5)return Math.round(d/864e5)+' 天前'; return Math.round(d/(30*864e5))+' 个月前'; };
+    const list=el('div','fn-lb'); let mode='clicks';
+    const render=()=>{ list.textContent='';
+      const rows=mode==='clicks'?rankByClicks(entries,10):rankByFrecency(entries,10);
+      if(!rows.length){ list.appendChild(el('div','fn-hint','榜单空着——去点几个网站，再回来看看。')); return; }
+      const max=Math.max(1e-6, mode==='clicks'?(rows[0].item.clicks||0):frecencyScore(rows[0].item));
+      rows.forEach((x,i)=>{ const it=x.item, r=el('button','fn-lb-row'); r.type='button'; r.title=it.url;
+        const ic=el('span','fn-lb-ic'); this.mountIcon(ic,it,26);
+        const line=el('span','fn-lb-line');
+        line.append(el('span','fn-lb-nm',it.name||it.url), el('span','fn-lb-meta', mode==='clicks'?(it.clicks||0)+' 次':timeAgo(it.lastVisit)));
+        const bar=el('span','fn-lb-bar'), fill=el('span','fn-lb-fill');
+        fill.style.width=Math.max(4,Math.round((mode==='clicks'?(it.clicks||0):frecencyScore(it))/max*100))+'%'; bar.appendChild(fill);
+        const mid=el('span','fn-lb-main'); mid.append(line,bar);
+        r.append(el('span','fn-lb-rank'+(i<3?' top':''),String(i+1)), ic, mid);
+        r.onclick=()=>{ this.recordVisit(it); window.open(it.url, this.settings.openIn==='_self'?'_self':'_blank'); };
+        list.appendChild(r); }); };
+    render();
+    this.openModal('使用统计',[tiles,hint,this.seg([['clicks','总点击'],['freq','近期常用']],mode,v=>{ mode=v; render(); }),list],
+      [this.btn('关闭','ghost',()=>this.closeModal())]); }
 
   /* 书签导入 */
   async importBookmarks(){ const tree=await getBookmarksTree(); if(!tree){this.toast('预览模式无法读取浏览器书签','err');return;}

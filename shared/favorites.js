@@ -18,6 +18,16 @@ export function visitItem(item,now=Date.now()){
   item.clicks=(item.clicks||0)+1;
 }
 
+/* 使用统计榜单（openStats）：entries 为 allItems() 的 {item,group} 结构，纯读不写 */
+export function rankByClicks(entries,n){
+  return (entries||[]).filter(x=>(x.item.clicks||0)>0)
+    .sort((a,b)=>(b.item.clicks||0)-(a.item.clicks||0)||(b.item.lastVisit||0)-(a.item.lastVisit||0)).slice(0,n);
+}
+export function rankByFrecency(entries,n,now=Date.now()){
+  return (entries||[]).filter(x=>frecencyScore(x.item,now)>0)
+    .sort((a,b)=>frecencyScore(b.item,now)-frecencyScore(a.item,now)||(b.item.lastVisit||0)-(a.item.lastVisit||0)).slice(0,n);
+}
+
 export function rankFavorites(all,favOrder,fallback,cap,now=Date.now()){
   const list=all||[], byId=new Map(list.map(x=>[x.item.id,x])), out=[], seen=new Set();
   const add=(entry,pinned)=>{ if(!entry || out.length>=cap || seen.has(entry.item.id) || entry.item.fav===false)return; out.push({...entry,pinned}); seen.add(entry.item.id); };

@@ -71,7 +71,7 @@ img{display:block}
 /* 尊重系统「减少动态效果」：关掉过渡/动画/按压位移（design-taste 6.B · a11y）*/
 @media (prefers-reduced-motion: reduce){
   *,*::before,*::after{ transition-duration:.01ms !important; animation-duration:.01ms !important; animation-iteration-count:1 !important; scroll-behavior:auto !important; }
-  .fn-btn:active,.fn-x:active,.lay-fusion .fx-fav:active,.lay-fusion .fx-card:active,.lay-fusion .fx-navitem:active,.lay-fusion .fx-vbtn:active,.lay-fusion .fx-bg-trigger:active{ transform:none !important; }
+  .fn-btn:active,.fn-x:active,.fn-lb-row:active,.lay-fusion .fx-fav:active,.lay-fusion .fx-card:active,.lay-fusion .fx-navitem:active,.lay-fusion .fx-vbtn:active,.lay-fusion .fx-bg-trigger:active{ transform:none !important; }
 }
 ::-webkit-scrollbar{width:10px;height:10px}
 ::-webkit-scrollbar-thumb{background:var(--surface-3);border-radius:8px}
@@ -151,6 +151,24 @@ img{display:block}
 .fn-wrap{ display:flex; flex-wrap:wrap; gap:var(--s2); }
 .fn-hint{ font-size:12px; color:var(--text-3); line-height:1.55; }
 .fn-hint code{ background:var(--surface-2); padding:var(--s1) var(--s1); border-radius:var(--r-sm); }
+
+/* 使用统计（DESIGN.md: stat-tile / leaderboard）*/
+.fn-stats-tiles{ display:grid; grid-template-columns:repeat(3,1fr); gap:var(--s3); }
+.fn-stat-num{ font-size:28px; font-weight:750; letter-spacing:-0.02em; font-variant-numeric:tabular-nums; }
+.fn-stat-lb{ font-size:11px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--text-3); margin-top:var(--s1); }
+.fn-lb{ display:flex; flex-direction:column; gap:var(--s1); }
+.fn-lb-row{ display:flex; align-items:center; gap:var(--s3); width:100%; text-align:left; padding:var(--s2) var(--s3); border-radius:var(--r-md); color:var(--text); transition:background var(--t); }
+.fn-lb-row:hover{ background:var(--surface-2); }
+.fn-lb-row:active{ transform:scale(.99); }
+.fn-lb-rank{ flex:0 0 16px; font-size:11px; font-weight:600; color:var(--text-3); font-variant-numeric:tabular-nums; text-align:center; }
+.fn-lb-rank.top{ color:var(--accent); font-weight:650; }
+.fn-lb-ic{ width:26px; height:26px; border-radius:var(--r-sm); overflow:hidden; display:grid; place-items:center; flex:0 0 26px; background:var(--surface-2); color:var(--text-2); }
+.fn-lb-main{ flex:1; min-width:0; display:flex; flex-direction:column; gap:3px; }   /* 3px：密集微网格例外档 */
+.fn-lb-line{ display:flex; align-items:baseline; justify-content:space-between; gap:var(--s2); }
+.fn-lb-nm{ font-size:14px; font-weight:550; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.fn-lb-meta{ flex:0 0 auto; font-size:11px; color:var(--text-3); font-variant-numeric:tabular-nums; }
+.fn-lb-bar{ height:3px; border-radius:999px; background:var(--surface-2); overflow:hidden; }
+.fn-lb-fill{ display:block; height:100%; border-radius:999px; background:var(--accent); opacity:.55; }
 /* ===== 自定义表单控件（DESIGN.md: toggle/checkbox/field）—— 全应用不留原生外观 ===== */
 body{ color-scheme:var(--scheme); }   /* 原生日期弹层等跟主题 */
 /* 方形勾选框：内容清单勾选（待办完成、书签导入挑选）。✓ 用背景 SVG，input 上伪元素不可用 */
