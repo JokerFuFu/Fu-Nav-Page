@@ -224,4 +224,4 @@ background `#fafafb` · surface `#ffffff` · surface-raised `#f4f4f6` · surface
 - **Don't** 引入第二字体、第二强调色或表外圆角。
 - **Don't** 在菜单/工具条/按钮里用 emoji 或文字符号当图标——UI 骨架的图标语言唯一是 **Lucide 单色遮罩**（`lucide-mask` + currentColor）；emoji 只允许出现在用户自定义的分组图标里。
 - **Don't** 给「空占位」（名称/网址都没填的图标预览）上彩色哈希——空态一律中性 surface-3 底 + text-3 字（`.is-letter.is-empty`）。
-- **Don't** 让装饰（渐变、模糊、动效）抢占内容注意力。**动效分层**：交互微动效（hover / focus / 态切换 / 圆钮位移）统一 130ms（`--t`）；浮层入场（fade/pop）120–160ms、侧栏收折 ~220ms、toast 进出 ~250ms 等较大动作按幅度略长，但不超过 300ms。
+- **Don't** 让装饰（渐变、模糊、动效）抢占内容注意力。**动效分层**：交互微动效（hover / focus / 态切换 / 圆钮位移）统一 130ms（`--t`）；浮层入场（fade/pop）120–160ms、侧栏收折 ~220ms、toast 进出 ~250ms 等较大动作按幅度略长，但不超过 300ms。**进行中指示（spinner）**是唯一允许的循环动画：秒级异步操作（如在线壁纸拉取）把触发按钮的 lucide 图标就地换成 `loader-circle` 匀速旋转（0.8s/圈，linear），完成后换回——反馈必须落在用户视线处（被点的控件上），不能只更新远处的状态文本；同样受 reduced-motion 守卫约束（静止为 loader 形状，配文字状态兜底）。

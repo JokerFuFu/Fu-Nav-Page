@@ -351,6 +351,8 @@ body.bg-photo .lay-fusion .fx-bg-trigger{ background:var(--surface-glass); borde
 .fx-bg-src:hover{ background:var(--surface); border-color:var(--border-2); }
 .fx-bg-src.sel{ border-color:var(--accent); background:var(--surface); }
 .fx-bg-src-ic{ width:16px; height:16px; background:var(--text-2); margin-bottom:2px; }
+.fx-bg-src-ic.spin{ animation:fxSpin .8s linear infinite; }   /* 拉取中就地指示（DESIGN.md 动效分层 spinner 档；reduced-motion 全局守卫会令其静止） */
+@keyframes fxSpin{ to{ transform:rotate(360deg); } }
 .fx-bg-src.sel .fx-bg-src-ic{ background:var(--accent); }
 .fx-bg-src-nm{ font-size:12px; font-weight:550; color:var(--text); }
 .fx-bg-src-ds{ font-size:11px; color:var(--text-3); }

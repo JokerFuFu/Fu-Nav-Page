@@ -140,10 +140,13 @@ function resolveSource(ref){
   return ONLINE_SOURCES.find(s=>s.id===id) || ONLINE_SOURCES.find(s=>s.id===DEFAULT_ONLINE_SOURCE);
 }
 
+let fetchTicket=0;   // last-wins：大图下载要几秒，期间用户再点新源，旧请求完成后不许回头覆盖新选择
 export async function refreshOnlineBackground(core, sourceRef, options={}){
+  const ticket=++fetchTicket;
   const src = resolveSource(sourceRef);
   const url=await sourceUrl(src), blob = await fetchImageBlob(url);
   const directOk=!blob && await validateDirectImage(url);
+  if(ticket!==fetchTicket) return { ok:false, superseded:true, reason:'已切换其他源' };   // 结果作废：不落盘、不应用
   if(!blob && !directOk) return { ok:false, reason:'该地址未返回图片，请检查' };   // 下载失败：不动 settings.background，当前壁纸保持不变
   const bg = core.settings.background;
   const oldId = bg.mode==='online' ? bg.onlineImageId : null;

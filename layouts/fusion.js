@@ -191,10 +191,19 @@ function toggleBgPanel(core, anchor){
     panel.appendChild(el('div','fx-bg-group',group)); const srcRow=el('div','fx-bg-srcrow');
     sources.forEach(s=>{
       const btn=el('button','fx-bg-src'+(bg.mode==='online'&&current===s.id?' sel':'')); btn.type='button'; btn.title=s.name+'：'+s.desc;
-      const ic=el('span','fx-bg-src-ic lucide-mask'); ic.style.webkitMaskImage=ic.style.maskImage=`url("${core.lucide(SRC_ICONS[s.id]||'image')}")`;
+      const ic=el('span','fx-bg-src-ic lucide-mask');
+      const setIc=(name,spin)=>{ ic.style.webkitMaskImage=ic.style.maskImage=`url("${core.lucide(name)}")`; ic.classList.toggle('spin',!!spin); };
+      setIc(SRC_ICONS[s.id]||'image'); btn._resetIc=()=>setIc(SRC_ICONS[s.id]||'image');
       btn.append(ic, el('span','fx-bg-src-nm',s.name), el('span','fx-bg-src-ds',s.desc));
-      btn.onclick=async()=>{ status.textContent='拉取中…'; const r=await core.refreshOnlineBackground({id:s.id});
+      // 大图下载要几秒：反馈就地落在被点按钮上（spinner），不能只靠面板底部的 status 文本（DESIGN.md 动效分层）
+      btn.onclick=async()=>{
+        $$('.fx-bg-src',panel).forEach(x=>x._resetIc&&x._resetIc());   // 改点新源时，把上一个还在转的恢复
+        setIc('loader-circle',true); status.textContent='拉取「'+s.name+'」中…（随机大图下载可能要几秒）';
+        const r=await core.refreshOnlineBackground({id:s.id});
+        if(r.superseded) return;   // 已被更新的点击取代：新请求的回调接管 UI
+        setIc(SRC_ICONS[s.id]||'image');
         status.textContent=r.ok?('已换「'+s.name+'」'):('失败：'+r.reason);
+        if(!r.ok) core.toast('壁纸拉取失败：'+r.reason,'err');
         $$('.fx-bg-src',panel).forEach(x=>x.classList.remove('sel')); if(r.ok)btn.classList.add('sel'); };
       srcRow.appendChild(btn);
     }); panel.appendChild(srcRow);
@@ -203,6 +212,7 @@ function toggleBgPanel(core, anchor){
   const customRow=el('div','fx-bg-custom fn-field'), customI=core.inp(current==='custom'?(bg.onlineSrc.url||''):'','https://example.com/wallpaper.jpg'); customI.type='url';
   const customBtn=core.btn('使用','ghost',async()=>{ const url=customI.value.trim(); try{ const u=new URL(url); if(!/^https?:$/.test(u.protocol))throw 0; }catch{ core.toast('请输入有效的 http(s) 图片地址','err'); return; }
     await core.ensureCloudPermission(url); status.textContent='正在校验图片…'; const r=await core.refreshOnlineBackground({id:'custom',url});
+    if(r.superseded) return;
     status.textContent=r.ok?'已应用自定义壁纸':'该地址未返回图片，请检查'; if(!r.ok)core.toast('该地址未返回图片，请检查','err'); },'link');
   customRow.append(customI,customBtn); panel.appendChild(customRow);
   panel.appendChild(el('div','fx-bg-seclabel','更新频率'));
