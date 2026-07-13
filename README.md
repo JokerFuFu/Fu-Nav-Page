@@ -227,6 +227,16 @@ npx @google/design.md lint DESIGN.md   # 0 errors
 
 内网服务的图标走 Chrome 本地缓存不外发；伴随服务只监听 `127.0.0.1`。
 
+## 🤝 参与贡献
+
+欢迎 PR 和 Issue。**任何人都只能提 PR、由维护者点 Merge 才进 `main`**,所以尽管放心 fork 来改。
+
+- **上手**:纯 ES modules、无构建 —— `python3 -m http.server 8000` 打开 `newtab.html` 即可开发;书签同步 / 授权 / 本机服务这类要在 `chrome://extensions` 加载已解压才测得出。
+- **改 UI 前先读 [DESIGN.md](DESIGN.md)**(视觉唯一事实源),图标走 Lucide、不用 emoji。
+- 完整流程、测试矩阵、PR 自查清单见 **[CONTRIBUTING.md](CONTRIBUTING.md)**。
+
+有想法不确定要不要做?先开 Issue 聊。
+
 ## 📄 License
 
 以 [MIT License](LICENSE) 开源。© 2026 JokerFu
