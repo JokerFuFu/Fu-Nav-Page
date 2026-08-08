@@ -20,6 +20,7 @@ import { applyInboxOps } from './sync-policy.js';
 import { saveSnapshot, listSnapshots, restoreSnapshot } from './config-history.js';
 import { parseImport, applyImport, mergeImportCandidate } from './config-import.js';
 import { countTree, locateNode, moveNode, removeNode, walkTree } from './tree.js';
+import { loadRuntimeState, saveRuntimeState, requestCapability as askCapability, completeOnboarding as buildOnboardingResult } from './runtime-state.js';
 
 export const $  = (s,r=document)=>r.querySelector(s);
 export const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
@@ -61,7 +62,7 @@ const LUCIDE_GROUP_OPTS=['server','hard-drive','network','router','shield-check'
 const COLORS=['#2563eb','#0891b2','#16a34a','#7c3aed','#64748b','#ef4444','#0ea5e9','#f59e0b','#14b8a6','#ec4899','#8b5cf6','#f43f5e','#6366f1','#22c55e','#eab308','#fb7185'];
 
 class Core {
-  constructor(){ this.cfg=null; this.layout=null; this.layoutMod=null; this.root=null; this.editing=false; this.agentData=null; this._saveT=null; this._pendingSave=null; this._quotaWarned=false; this._listeners=[];
+  constructor(){ this.cfg=null; this.runtime=null; this.layout=null; this.layoutMod=null; this.root=null; this.editing=false; this.agentData=null; this._saveT=null; this._pendingSave=null; this._quotaWarned=false; this._listeners=[];
     this._tombstones=new Set();    // 本会话删除过的 id（条目/文件夹/分组）——收件箱兑现时跳过，杜绝"删了又被补回"
     this._seenInboxOps=new Set();
     this._remoteDirty=false; }     // 编辑弹层开着时挂起的"存储有更新"信号，关弹层再采纳（防 cfg 被换导致编辑写丢）
@@ -70,6 +71,7 @@ class Core {
 
   async boot(){
     const { config, source } = await loadConfig();
+    this.runtime = await loadRuntimeState();
     this.cfg = (config && config.groups) ? config : await this.fetchSeed();
     const appMigrated=this.migrate();   // 返回是否发生一次性迁移(如工作区→模式)，据此决定是否落盘
     const normalized=migrateSchema(this.cfg,Date.now());
@@ -80,9 +82,11 @@ class Core {
     this.buildModalHost();
     this.wireChrome();
     this.applyTheme();
+    if(!this.runtime.initialized){ const established=!!config&&this.settings.onboarded===true;
+      this.runtime=await saveRuntimeState({initialized:true,onboarding:{completed:established,weatherConsent:established&&this.settings.showWeather!==false,choice:established?'existing':null}},{current:this.runtime}); }
     if(!config || source==='sync' || migrated) await this.save(true);   // 无配置/从 sync 引导/发生迁移 → 立即落成本机权威副本
     await this.mountLayout(this.settings.layout || 'classic');
-    if(!this.settings.onboarded) import('./tour.js').then(m=>m.startTour(this));
+    if(!this.runtime.onboarding.completed) setTimeout(()=>this.openOnboarding(),80);
     // 远端变更：仅在 savedAt 严格更新时才回灌，杜绝"自己写入→读到旧/中间态覆盖内存→下次存旧值"的丢失循环
     onRemoteChange(async ()=>{ await this.flushSave();   // 先落盘本地未保存的防抖改动，避免被旧快照整体覆盖(吞掉刚删的卡片)
       if(await this._applyInbox()) await this.save(true);   // 兑现 popup 增删：即使 popup 的整份写入被上面 flush 盖掉，也能从收件箱找回
@@ -213,6 +217,33 @@ class Core {
 
   markUserEdited(){ if(this.settings.demoMode){ this.settings.demoMode=false; return true; } return false; }
 
+  async updateRuntime(patch){ this.runtime=await saveRuntimeState(patch,{current:this.runtime}); return this.runtime; }
+  async requestCapability(name){ return askCapability(name,{saveState:async patch=>this.updateRuntime(patch)}); }
+  async enableWeatherConsent(){ await this.updateRuntime({onboarding:{weatherConsent:true}}); this.settings.showWeather=true; await this.save(true); this.rerender(); this.toast('天气已启用，可随时在组件设置中关闭','ok'); return true; }
+  async clearDemoData(){ this.cfg.groups=[]; this.settings.demoMode=false; this.markUserEdited(); await this.save(true); this.rerender(); this.toast('演示数据已清空，可从侧栏新建分组','ok'); }
+
+  openOnboarding(){
+    if(this.runtime?.onboarding?.completed && !this.settings.demoMode) return;
+    const intro=el('div','fn-onboard-intro'); intro.append(el('strong',null,'选择你的起点'),el('span',null,'三种方式只会执行你点选的这一种。关闭窗口会保留当前数据，稍后再次询问。'));
+    const weatherToggle=this.toggle('同时启用天气',false,()=>{});
+    const weatherHint=el('div','fn-hint'); weatherHint.innerHTML='天气会先请求 <b>ipwho.is</b>，失败时使用 <b>get.geojs.io</b> 获取 IP 粗略位置，再向 <b>Open-Meteo</b> 请求预报。不启用就不会连接这些服务。';
+    const grid=el('div','fn-onboard-grid'); let busy=false;
+    const choose=async choice=>{ if(busy)return; busy=true; $$('.fn-onboard-choice',grid).forEach(button=>button.disabled=true);
+      const result=await buildOnboardingResult(choice,{config:this.cfg,runtimeState:this.runtime,weatherConsent:weatherToggle.querySelector('input').checked,requestPermission:name=>this.requestCapability(name)});
+      if(!result.ok){ busy=false; $$('.fn-onboard-choice',grid).forEach(button=>button.disabled=false); this.toast('无法应用首次使用选择','err'); return; }
+      this.cfg=result.config; this.runtime=await saveRuntimeState(result.state,{current:this.runtime}); await this.save(true); this.rerender(); this.closeModal();
+      if(result.permission&&!result.permission.ok) this.toast('未获得书签权限，核心导航仍可使用；之后可在设置中再次启用','err');
+      if(result.shouldImportBookmarks) await this.importBookmarks({skipPermission:true}); };
+    [
+      ['bookmarks','bookmark','导入浏览器书签','读取你选择的浏览器书签文件夹，并按文件夹建立分组。只有点击这里才申请书签权限。'],
+      ['template','layout-template','使用演示模板','保留当前演示分组和网站，首页继续显示“演示数据”标识，首次实际编辑后自动消失。'],
+      ['blank','file-plus-2','从空白开始','清空演示分组，只保留应用设置；之后从侧栏创建自己的第一个分组。'],
+    ].forEach(([choice,icon,title,desc])=>{ const button=el('button','fn-onboard-choice'); button.type='button';
+      const ic=el('span','fn-onboard-icon lucide-mask'); ic.style.webkitMaskImage=ic.style.maskImage=`url("${lucide(icon)}")`; ic.style.background='currentColor';
+      button.append(ic,el('strong',null,title),el('span',null,desc)); button.onclick=()=>choose(choice); grid.appendChild(button); });
+    this.openModal('欢迎使用 Fu 导航',[intro,grid,weatherToggle,weatherHint],[this.btn('稍后决定','ghost',()=>this.closeModal())]);
+  }
+
   /* 把排队中的防抖保存立即落盘——远端回灌(onRemoteChange)前必须调用，
      否则防抖窗口内未落盘的改动(如刚删的卡片)会被远端旧快照整体覆盖，刷新后"复活"。 */
   async flushSave(){ const p=this._pendingSave; if(this._saveT){ clearTimeout(this._saveT); this._saveT=null; } if(p) await p(); }
@@ -224,11 +255,11 @@ class Core {
     try{ const sig=bmCfgSig(this.cfg); if(sig===this._lastBmCfgSig) return;
       const newSig=await bmExport(this.cfg); if(newSig==null) return; this.settings.bmSig=newSig; this._lastBmCfgSig=sig; }catch(e){ console.warn('书签导出失败',e); } }
   /* 手动：立即导出（导航→浏览器） */
-  async bmExportNow(){ if(!bmAvailable()){ this.toast('预览模式无法访问浏览器书签','err'); return false; }
+  async bmExportNow(){ const cap=await this.requestCapability('bookmarks'); if(!cap.ok){ this.toast('未获得书签权限，导航本身仍可正常使用；可稍后重试','err'); return false; } if(!bmAvailable()){ this.toast('当前环境无法访问浏览器书签','err'); return false; }
     try{ const sig=await bmExport(this.cfg); if(sig==null){ this.toast('书签同步正忙，请稍后再试','err'); return false; } this.settings.bmSig=sig; this._lastBmCfgSig=bmCfgSig(this.cfg); await this.save(true);
       this.toast(`已导出到浏览器「${ROOT_TITLE}」文件夹`,'ok'); return true; }catch(e){ this.toast('导出失败：'+(e&&e.message||e),'err'); return false; } }
   /* 手动：立即导入（浏览器→导航） */
-  async bmImportNow(){ if(!bmAvailable()){ this.toast('预览模式无法访问浏览器书签','err'); return false; }
+  async bmImportNow(){ const cap=await this.requestCapability('bookmarks'); if(!cap.ok){ this.toast('未获得书签权限，导航本身仍可正常使用；可稍后重试','err'); return false; } if(!bmAvailable()){ this.toast('当前环境无法访问浏览器书签','err'); return false; }
     try{ const r=await bmImport(this.cfg); this.settings.bmSig=r.sig; this._lastBmCfgSig=bmCfgSig(this.cfg); await this.save(true); this.rerender();
       this.toast(`书签已同步：新增 ${r.added}，移除 ${r.removed}`,'ok'); return true; }catch(e){ this.toast('导入失败：'+(e&&e.message||e),'err'); return false; } }
 
@@ -237,7 +268,8 @@ class Core {
     const run=async()=>{ const r=await cloudPut(this.settings, this.cfg); this.flashSync(r.ok?'已备份到云':'云备份失败：'+(r.reason||'')); };
     return immediate ? run() : (this._cloudT=setTimeout(run, 3500)); }
   /* 手动云恢复只负责读取并打开统一预览；不做后台自动拉取，也不在预览前修改本机配置。 */
-  async cloudRestore(name){ const r=name ? await cloudGetFile(this.settings,name) : await cloudGet(this.settings);
+  async cloudRestore(name){ if(this.settings.cloud?.type==='gdrive'){ const cap=await this.requestCapability('identity'); if(!cap.ok){this.toast('未获得身份权限，Google Drive 操作未开始','err');return false;} }
+    const r=name ? await cloudGetFile(this.settings,name) : await cloudGet(this.settings);
     if(r.ok && r.config){ const result=parseImport(r.config,this.cfg,Date.now()); this._lastRestoreDiff=result.diff;
       this.openImportPreview(result,{kind:'cloud',label:name||'云端自动备份'}); return result.ok; }
     this.toast('恢复失败：'+(r.reason||'云端无备份'),'err'); return false; }
@@ -267,7 +299,7 @@ class Core {
     const rows=snapshots.map(snapshot=>{ const row=el('div','fn-sync-row'); const when=new Date(snapshot.at).toLocaleString();
       row.append(el('div','fn-sync-label',`${when} · ${snapshot.reason} · ${(snapshot.bytes/1024).toFixed(1)} KB`),this.btn('预览恢复','ghost',async()=>{ const candidate=await restoreSnapshot(snapshot.id); const result=parseImport(candidate,this.cfg,Date.now()); this.openImportPreview(result,{kind:'history',label:when}); },'history')); return row; });
     this.openModal('本机恢复历史',rows,[this.btn('返回','primary',()=>this.openSettings())]); }
-  cloudTest(){ return cloudTest(this.settings); }
+  async cloudTest(){ if(this.settings.cloud?.type==='gdrive'){ const cap=await this.requestCapability('identity'); if(!cap.ok)return {ok:false,reason:'未获得身份权限，可稍后重试'}; } return cloudTest(this.settings); }
   /* 通用单输入弹层（替代原生 prompt，R7）：确定时回调非空值 */
   promptModal(title, ph, onOk){ const i=this.inp('',ph); const f=el('div','fn-field'); f.appendChild(i);
     const ok=()=>{ const v=i.value.trim(); if(!v)return; this.closeModal(); onOk(v); };
@@ -304,7 +336,13 @@ class Core {
   /* ---- 图标/天气/工具 透传 ---- */
   mountIcon(box,item,sz){ mountItemIcon(box,item,sz); }
   mountGroupIcon(box,group){ mountGroupIcon(box,group); }
-  weather={ get:getWeather, locate:preciseLocate, wmo }; lucide=lucide; hostOf=hostOf; isPrivateHost=isPrivateHost; COLORS=COLORS; LUCIDE_GROUP_OPTS=LUCIDE_GROUP_OPTS; isExtension=isExtension; uid=uid;
+  weather={
+    get:(force)=>getWeather(force,{consent:!!this.runtime?.onboarding?.weatherConsent}),
+    locate:preciseLocate,
+    wmo,
+    hasConsent:()=>!!this.runtime?.onboarding?.weatherConsent,
+    enable:()=>this.enableWeatherConsent(),
+  }; lucide=lucide; hostOf=hostOf; isPrivateHost=isPrivateHost; COLORS=COLORS; LUCIDE_GROUP_OPTS=LUCIDE_GROUP_OPTS; isExtension=isExtension; uid=uid;
   applyBackground(onHome){ this._onHome=onHome; return applyBackground(this, onHome); }
   refreshOnlineBackground(src){ return refreshOnlineBackground(this, src); }
   applyAccent(){ const a = ACCENTS.find(x=>x.id===this.settings.accentId) || ACCENTS[0];
@@ -597,7 +635,7 @@ class Core {
   openWidgetManager(){ const s=this.settings, ws=s.widgets||(s.widgets=[]), disabled=s.disabledWidgets||(s.disabledWidgets=[]);
     const names={clock:'时钟与问候',weather:'天气',today:'今日',hwmon:'硬件监控'};
     const isEnabled=w=>w.type==='clock'?s.showClock!==false:w.type==='weather'?s.showWeather!==false:!disabled.includes(w.id);
-    const setEnabled=(w,value)=>{ if(w.type==='clock')s.showClock=value; else if(w.type==='weather')s.showWeather=value; else{ const at=disabled.indexOf(w.id); if(value&&at>=0)disabled.splice(at,1); if(!value&&at<0)disabled.push(w.id); }
+    const setEnabled=async(w,value)=>{ if(w.type==='clock')s.showClock=value; else if(w.type==='weather'){ if(value&&!this.weather.hasConsent())await this.enableWeatherConsent(); s.showWeather=value; } else{ const at=disabled.indexOf(w.id); if(value&&at>=0)disabled.splice(at,1); if(!value&&at<0)disabled.push(w.id); }
       this.markUserEdited(); this.save(true); this.rerender(); this.openWidgetManager(); };
     const move=(index,delta)=>{ const target=index+delta; if(target<0||target>=ws.length)return; [ws[index],ws[target]]=[ws[target],ws[index]];
       this.markUserEdited(); this.save(true); this.rerender(); this.openWidgetManager(); };
@@ -660,7 +698,7 @@ class Core {
     clUrl.onblur=()=>{ applyCl(); clStatus.textContent = (cl.type==='webdav' && /^http:\/\//i.test((cl.url||'').trim())) ? '注意：http 明文传输账号密码，公网建议改用 https' : ''; };
     const clBtns=[
       this.btn('测试连接','ghost',async()=>{ applyCl(); if(missing()){clStatus.textContent='请先填好上面的字段';return;} warnInsecure(); clStatus.textContent='测试中…'; if(cl.type==='webdav')await this.ensureCloudPermission(cl.url); const r=await this.cloudTest(); clStatus.textContent=(r.ok?'成功：':'失败：')+r.reason; },'plug-zap'),
-      this.btn('立即备份到云','ghost',async()=>{ applyCl(); if(missing()){clStatus.textContent='请先填好上面的字段';return;} if(cl.type==='webdav')await this.ensureCloudPermission(cl.url); clStatus.textContent='备份中…'; const r=cl.type==='webdav'?await cloudPutBackup(this.settings,this.cfg):await cloudPut(this.settings,this.cfg); clStatus.textContent=r.ok?(r.name?'已生成 '+r.name:'已备份到云'):'失败：'+(r.reason||''); this.save(); },'cloud-upload'),
+      this.btn('立即备份到云','ghost',async()=>{ applyCl(); if(missing()){clStatus.textContent='请先填好上面的字段';return;} if(cl.type==='webdav')await this.ensureCloudPermission(cl.url); else{ const cap=await this.requestCapability('identity'); if(!cap.ok){clStatus.textContent='未获得身份权限，可稍后重试';return;} } clStatus.textContent='备份中…'; const r=cl.type==='webdav'?await cloudPutBackup(this.settings,this.cfg):await cloudPut(this.settings,this.cfg); clStatus.textContent=r.ok?(r.name?'已生成 '+r.name:'已备份到云'):'失败：'+(r.reason||''); this.save(); },'cloud-upload'),
       this.btn('从云恢复','ghost',async()=>{ applyCl(); if(missing()){clStatus.textContent='请先填好上面的字段';return;} if(cl.type==='webdav')await this.ensureCloudPermission(cl.url);
         if(cl.type==='gdrive'){ clStatus.textContent='正在读取云端备份…'; const ok=await this.cloudRestore(); if(!ok)clStatus.textContent='恢复文件无效或读取失败'; return; }
         clStatus.textContent='正在读取备份列表…'; const listed=await cloudListBackups(this.settings);
@@ -677,7 +715,9 @@ class Core {
     cfgBox.append(el('div','fn-sub','云端'), typeSeg, davBox, gdBox, this.syncActionRow(clBtns,clStatus), clHint); showByType();
     this.openModal('云同步（WebDAV / Google Drive）',[clToggle, cfgBox],[
       this.btn('关闭','ghost',()=>this.openSettings()),
-      this.btn('保存','primary',async()=>{ applyCl(); if(cl.enabled&&cl.url){ warnInsecure(); await this.ensureCloudPermission(cl.url); } this.save(true); this.openSettings(); }) ]); }
+      this.btn('保存','primary',async()=>{ applyCl(); if(cl.enabled&&cl.type==='webdav'&&cl.url){ warnInsecure(); await this.ensureCloudPermission(cl.url); }
+        if(cl.enabled&&cl.type==='gdrive'){ const cap=await this.requestCapability('identity'); if(!cap.ok){cl.enabled=false;clToggle.querySelector('input').checked=false;this.toast('身份权限被拒绝，Google Drive 未启用；核心导航不受影响','err');} }
+        this.save(true); this.openSettings(); }) ]); }
 
   /* 浏览器书签双向同步 子弹层 —— 从 openSettings 拆出（S1/S4）；关闭/保存回设置 */
   openBmEditor(){ const s=this.settings;
@@ -691,7 +731,9 @@ class Core {
     const bmHint=el('div','fn-hint'); bmHint.innerHTML='导航的分组/网站 与浏览器「书签栏 / <b>'+ROOT_TITLE+'</b>」文件夹保持一致：导航里增删改写入该文件夹，浏览器里增删改也会同步回导航（其它书签不动）。';
     this.openModal('浏览器书签同步',[bmToggle, this.syncActionRow(bmBtns,bmStatus), bmHint],[
       this.btn('关闭','ghost',()=>this.openSettings()),
-      this.btn('保存','primary',async()=>{ const bmWas=!!bmS.enabled; bmS.enabled=bmToggle.querySelector('input').checked; this.save(true); if(bmS.enabled&&!bmWas)await this.bmExportNow(); this.openSettings(); }) ]); }
+      this.btn('保存','primary',async()=>{ const bmWas=!!bmS.enabled, wants=bmToggle.querySelector('input').checked;
+        if(wants&&!bmWas){ const cap=await this.requestCapability('bookmarks'); if(!cap.ok){ bmS.enabled=false; this.save(true); this.toast('书签权限被拒绝，核心导航不会受影响；之后可从这里再次启用','err'); this.openSettings(); return; } }
+        bmS.enabled=wants; this.save(true); if(bmS.enabled&&!bmWas)await this.bmExportNow(); this.openSettings(); }) ]); }
 
   /* 设置 —— 常用（默认展开）/ 同步与备份 / 高级 三层（S2/S7/S9）；云与书签同步收成「摘要+按钮→子弹层」（S1） */
   openSettings(){ const s=this.settings; const titleI=this.inp(s.title||'Fu 导航');
@@ -738,7 +780,7 @@ class Core {
         this.field('强调色',accentGrid),
         this.field('常用区布局',favGridSeg),
         this.toggle('显示时钟与问候',s.showClock,v=>{s.showClock=v;}),
-        this.toggle('显示天气',s.showWeather,v=>{s.showWeather=v;}),
+        this.toggle('显示天气',s.showWeather,async v=>{ if(v&&!this.weather.hasConsent())await this.enableWeatherConsent(); s.showWeather=v; }),
         this.toggle('内网在线状态探测',s.showStatus,v=>{s.showStatus=v;}),
         el('div','fn-sub','添加卡片（或在首页解锁后右键卡片区添加）'), addRow,
       ], true),
@@ -786,7 +828,8 @@ class Core {
       [this.btn('关闭','ghost',()=>this.closeModal())]); }
 
   /* 书签导入 */
-  async importBookmarks(){ const tree=await getBookmarksTree(); if(!tree){this.toast('预览模式无法读取浏览器书签','err');return;}
+  async importBookmarks(options={}){ if(!options.skipPermission){ const cap=await this.requestCapability('bookmarks'); if(!cap.ok){this.toast('未获得书签权限，未读取任何书签；可稍后重试','err');return false;} }
+    const tree=await getBookmarksTree(); if(!tree){this.toast('当前环境无法读取浏览器书签','err');return false;}
     const roots=[]; (tree[0]?.children||[]).forEach(r=>(r.children||[]).forEach(c=>{if(c.children)roots.push(c);}));
     const cnt=n=>{let c=0;(n.children||[]).forEach(x=>x.url?c++:c+=cnt(x));return c;};
     const flat=n=>{const a=[];(n.children||[]).forEach(x=>x.url?a.push({name:x.title||x.url,url:x.url}):a.push(...flat(x)));return a;};

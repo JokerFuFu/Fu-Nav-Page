@@ -16,10 +16,12 @@
   },
   "permissions": [
     "storage",
-    "bookmarks",
     "favicon",
     "activeTab",
-    "tabs",
+    "tabs"
+  ],
+  "optional_permissions": [
+    "bookmarks",
     "identity"
   ],
   "host_permissions": [

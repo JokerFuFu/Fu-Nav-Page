@@ -483,7 +483,7 @@ Expected after implementation: PASS。
 
 启动本地服务器，验证深/浅主题 × 1440×900、1268×714、1024×768、768×800、390×844；记录 `scrollHeight`、favorites 底边和 console 错误数。
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 git add DESIGN.md layouts/fusion.js layouts/fusion.css shared/core.js data/seed.json tests/home-settings.test.mjs
@@ -506,11 +506,11 @@ git commit -m "feat: 让搜索和常用回到首页首屏"
 **Interfaces:**
 - Produces: `loadRuntimeState()`；`saveRuntimeState(patch)`；`requestCapability(name)`；`completeOnboarding(choice)`。
 
-- [ ] **Step 1: 写 onboarding 状态机测试**
+- [x] **Step 1: 写 onboarding 状态机测试**
 
 三种选择必须产生互斥结果：bookmark 选择只在用户点击后请求权限，template 保留演示数据并去掉提示，blank 清空 groups；三者都设置 `completed:true`。天气在 `weatherConsent:false` 时不得调用定位 fetch。
 
-- [ ] **Step 2: RED、实现、GREEN**
+- [x] **Step 2: RED、实现、GREEN**
 
 Run: `npm test -- tests/onboarding.test.mjs`
 Expected before implementation: FAIL。
@@ -518,11 +518,11 @@ Expected before implementation: FAIL。
 Run: `npm test -- tests/onboarding.test.mjs`
 Expected after implementation: PASS。
 
-- [ ] **Step 3: 构建三选一 onboarding dialog**
+- [x] **Step 3: 构建三选一 onboarding dialog**
 
 对话框解释每个选项的数据结果；关闭等同“稍后决定”，不得静默选模板。启用天气时展示 `ipwho.is/get.geojs.io + Open-Meteo` 数据流说明。
 
-- [ ] **Step 4: 调整权限**
+- [x] **Step 4: 调整权限**
 
 将平台允许按需申请的 `bookmarks`、`identity` 移入 `optional_permissions`；用户拒绝时展示不阻塞的说明。保留角标所需的最小权限，并在 README 准确解释。
 

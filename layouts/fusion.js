@@ -168,9 +168,11 @@ function renderHome(core,main){
 function buildDemoBadge(core){
   const badge=el('aside','fx-demo-badge'); badge.setAttribute('aria-label','演示数据提示');
   badge.appendChild(el('span',null,'正在浏览演示数据'));
-  const close=el('button',null,'关闭提示'); close.type='button'; close.title='关闭演示提示';
+  const replace=el('button',null,'更换'); replace.type='button'; replace.title='更换演示数据'; replace.onclick=()=>core.openOnboarding();
+  const clear=el('button',null,'清空'); clear.type='button'; clear.title='清空演示数据'; clear.onclick=()=>core.clearDemoData();
+  const close=el('button',null,'关闭'); close.type='button'; close.title='关闭演示提示';
   close.onclick=()=>{ core.settings.demoMode=false; core.save(true); badge.remove(); };
-  badge.appendChild(close); return badge;
+  badge.append(replace,clear,close); return badge;
 }
 
 /* ---------- 首页背景切换（悬浮入口 + 快捷面板）---------- */
@@ -454,6 +456,11 @@ function widgetHwmon(core,w){
   return c;
 }
 function fillWeather(core,card){
+  if(!core.weather.hasConsent()){
+    card.textContent=''; card.classList.add('fx-weather-consent');
+    card.append(wcIcon(core,'cloud-sun'),el('div','fx-wcw-cond','天气尚未启用'),el('div','fx-wcw-sub','启用后会连接 ipwho.is / geojs 与 Open-Meteo'));
+    const enable=el('button','fn-btn ghost','了解并启用天气'); enable.type='button'; enable.onclick=async event=>{event.preventDefault();event.stopPropagation();enable.disabled=true;await core.weather.enable();}; card.appendChild(enable); return;
+  }
   core.weather.get().then(d=>{ const keep=[...card.querySelectorAll('.fx-wgrip,.fx-wdel')]; card.textContent=''; keep.forEach(k=>card.appendChild(k));  // 保留拖拽手柄/删除按钮
     if(!d){ card.classList.add('fx-wc-dim'); card.append(wcIcon(core,'cloud-off'), el('div','fx-wcw-cond','天气暂不可用')); return; }
     const top=el('div','fx-wcw-top'); top.append(wcIcon(core,d.icon), el('span','fx-wcw-temp',d.temp+'°'));

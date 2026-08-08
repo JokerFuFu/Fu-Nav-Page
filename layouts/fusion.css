@@ -271,6 +271,21 @@ body.editing .lay-fusion .fx-card{ cursor:grab; }
 .fn-widget-actions{ display:flex; gap:var(--s1); }
 .fn-widget-actions .fn-btn{ padding-inline:var(--s2); }
 .fn-widget-actions .fn-btn:disabled{ opacity:.35; cursor:not-allowed; }
+
+/* 首次使用只提供三个互斥起点，数据结果和权限结果直接写在选择卡上。 */
+.fn-onboard-intro{ display:flex; flex-direction:column; gap:var(--s1); color:var(--text-2); }
+.fn-onboard-intro strong{ color:var(--text); font-size:17px; }
+.fn-onboard-intro span{ font-size:13px; line-height:1.5; }
+.fn-onboard-grid{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:var(--s3); margin:var(--s3) 0; }
+.fn-onboard-choice{ min-height:180px; display:flex; flex-direction:column; align-items:flex-start; gap:var(--s3); padding:var(--s4); text-align:left; border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface); color:var(--text); transition:var(--t); }
+.fn-onboard-choice:hover{ border-color:var(--accent); background:var(--surface-2); transform:translateY(-1px); }
+.fn-onboard-choice:disabled{ opacity:.55; cursor:wait; transform:none; }
+.fn-onboard-choice strong{ font-size:14px; }
+.fn-onboard-choice span:last-child{ color:var(--text-2); font-size:12px; line-height:1.5; }
+.fn-onboard-icon{ width:24px; height:24px; color:var(--accent); }
+.lay-fusion .fx-weather-consent{ gap:var(--s2); }
+.lay-fusion .fx-weather-consent .fx-wcw-ico{ width:24px; height:24px; }
+.lay-fusion .fx-weather-consent .fn-btn{ align-self:flex-start; margin-top:auto; font-size:12px; }
 .lay-fusion .fx-side-empty{ color:var(--text-3); font-size:12px; padding:var(--s2) var(--s3) var(--s1); }
 /* 子文件夹卡片 */
 .lay-fusion .fx-card.fx-folder{ text-align:left; cursor:pointer; width:100%; }
@@ -352,6 +367,8 @@ body:not(.editing) .lay-fusion .fx-card:active{ transform:translateY(0) scale(.9
   .lay-fusion .fx-demo-badge{ position:static; order:-1; align-self:flex-end; }
   .fn-widget-row{ grid-template-columns:1fr auto; }
   .fn-widget-actions{ grid-column:1 / -1; }
+  .fn-onboard-grid{ grid-template-columns:1fr; }
+  .fn-onboard-choice{ min-height:0; }
 }
 
 /* 首页背景切换：悬浮入口 + 快捷面板 */

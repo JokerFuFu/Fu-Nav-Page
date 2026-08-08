@@ -242,7 +242,7 @@ criteria:
       type: command
       run: npm test -- tests/onboarding.test.mjs
       expected: three choices and deferred close cases PASS
-    passes: false
+    passes: true
 
   - id: P1-ONBOARD-002
     priority: P1
@@ -254,7 +254,7 @@ criteria:
         - 确认首页演示标识可见
         - 新增一个网站
       expected: marker is visible before edit and absent after edit
-    passes: false
+    passes: true
 
   - id: P1-WEATHER-001
     priority: P1
@@ -264,7 +264,7 @@ criteria:
       run: npm test -- tests/onboarding.test.mjs
       operation: 清空同意状态并观察首次首页 network log
       expected: no ipwho/geojs/open-meteo request before consent
-    passes: false
+    passes: true
 
   - id: P1-PERM-001
     priority: P1
