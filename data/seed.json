@@ -10,6 +10,7 @@
     "locked": true,
     "layout": "fusion",
     "showWeather": true,
+    "demoMode": true,
     "agentPort": 7842,
     "widgets": [
       {
@@ -68,13 +69,15 @@
           "id": "i005",
           "name": "微博",
           "url": "https://weibo.com/",
-          "note": ""
+          "note": "",
+          "fav": true
         },
         {
           "id": "i006",
           "name": "豆瓣",
           "url": "https://www.douban.com/",
-          "note": ""
+          "note": "",
+          "fav": true
         }
       ]
     },
@@ -135,13 +138,15 @@
           "id": "i012",
           "name": "主路由器",
           "url": "http://192.168.1.1/",
-          "note": "改成你的路由器地址"
+          "note": "改成你的路由器地址",
+          "fav": true
         },
         {
           "id": "i013",
           "name": "AdGuard Home",
           "url": "http://192.168.1.2:3000/",
-          "note": ""
+          "note": "",
+          "fav": true
         }
       ]
     },

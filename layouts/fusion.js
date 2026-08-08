@@ -5,6 +5,7 @@ import { fetchGlances } from '../shared/hwmon.js';
 import { PRESETS } from '../shared/bg-presets.js';
 import { effectiveTheme, ONLINE_SOURCES, DEFAULT_ONLINE_SOURCE } from '../shared/background.js';
 import { filterContent, filterKeyAction } from '../shared/provider-action.js';
+import { homeDensity, visibleWidgets } from '../shared/home-settings.js';
 const DI = s => `https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons@main/svg/${s}.svg`;
 const picon = p => (p.icon && p.icon.startsWith('http')) ? p.icon : DI(p.icon);
 let active='home', clockTimer=null, drag=null, clockEls=null, ctxMenu=null, askOutsideHandler=null;
@@ -144,12 +145,13 @@ function renderMain(core,main){ if(!main)return; main.textContent='';
 
 function renderHome(core,main){
   const am=core.activeModeObj(), priv=am==='privacy';
-  const home=el('div','fx-home'+(priv?' fx-home-priv':''));
-  if(!priv){ const grid=core.favGrid(); home.style.setProperty('--home-scale',grid.rows===3?(grid.cols===8?.76:.84):1); }
+  const density=homeDensity(innerWidth,innerHeight);
+  const home=el('div','fx-home density-'+density+(priv?' fx-home-priv':''));
+  home.dataset.density=density;
+  if(!priv){ const grid=core.favGrid(); const contentScale=grid.rows===3?(grid.cols===8?.76:.84):1; home.style.setProperty('--home-scale',density==='compact'?Math.min(contentScale,.82):contentScale); }
   if(!priv) home.appendChild(buildBgTrigger(core));   // 背景切换悬浮入口（隐私模式不显示，减少干扰）
-  if(core.settings.showClock && !(am&&am!=='privacy'&&(am.hiddenWidgets||[]).includes('w-clock'))) home.appendChild(buildHeroClock(core));   // 时钟+日期 固定 Hero，放在搜索框上方
-  home.appendChild(buildAsk(core));               // 输入框（AI/搜索/收藏检索）
-  home.appendChild(buildWidgetCards(core,priv));   // 时钟/天气/(本机)卡片
+  if(!priv && core.settings.demoMode) home.appendChild(buildDemoBadge(core));
+  home.appendChild(buildAsk(core));               // 搜索是首页第一任务
   if(!priv && !(am&&am.showFavs===false)){ const favs=core.favorites(), grid=core.favGrid();
     if(favs.length){
       const row=el('div','fx-favs'); row.style.setProperty('--fav-cols',grid.cols);
@@ -159,7 +161,16 @@ function renderHome(core,main){
     } else {
       home.appendChild(el('div','fx-home-empty','还没有常用网站 — 解锁后点「添加网站」，或到 设置 → 导入浏览器书签'));   // R5 空态引导
     } }
+  home.appendChild(buildWidgetCards(core,priv));   // 组件始终位于搜索与常用之后
   main.appendChild(home);
+}
+
+function buildDemoBadge(core){
+  const badge=el('aside','fx-demo-badge'); badge.setAttribute('aria-label','演示数据提示');
+  badge.appendChild(el('span',null,'正在浏览演示数据'));
+  const close=el('button',null,'关闭提示'); close.type='button'; close.title='关闭演示提示';
+  close.onclick=()=>{ core.settings.demoMode=false; core.save(true); badge.remove(); };
+  badge.appendChild(close); return badge;
 }
 
 /* ---------- 首页背景切换（悬浮入口 + 快捷面板）---------- */
@@ -294,13 +305,12 @@ function buildAsk(core){
 function buildWidgetCards(core, priv){
   const row=el('div','fx-wcards');
   const am=core.activeModeObj(), hidden=(am&&am!=='privacy')?(am.hiddenWidgets||[]):[];
-  (core.settings.widgets||[]).forEach(w=>{
+  visibleWidgets(core.settings).forEach(w=>{
     if(hidden.includes(w.id)) return;
-    if(w.type==='clock') return;   // 时钟已移到搜索框上方的固定 Hero，不再作为卡片渲染
-    if(w.type==='weather' && !core.settings.showWeather) return;
-    if(priv && w.type!=='weather')   return;   // 隐私模式只留天气卡（时钟是 Hero，另行渲染）
+    if(priv && w.type!=='weather') return;   // 隐私模式只留天气
     let card=null;
     switch(w.type){
+      case 'clock':     card=buildHeroClock(core); break;
       case 'weather':   card=widgetWeather(core); break;
       case 'today':     card=widgetToday(core,w); break;
       case 'hwmon':     card=widgetHwmon(core,w); break;
@@ -344,7 +354,7 @@ function decorateWidget(core, card, w){
   card.addEventListener('contextmenu',e=>widgetMenu(core,e,w));
   return card;
 }
-function buildHeroClock(core){ const c=el('div','fx-hero-clock'); const t=el('div','fx-hero-time'),d=el('div','fx-hero-date'),g=el('div','fx-hero-greet'); c.append(t,d,g); clockEls={time:t,date:d,greet:g}; startClock(core); return c; }
+function buildHeroClock(core){ const c=el('div','fx-wcard fx-hero-clock'); const t=el('div','fx-hero-time'),d=el('div','fx-hero-date'),g=el('div','fx-hero-greet'); c.append(t,d,g); clockEls={time:t,date:d,greet:g}; startClock(core); return c; }
 function widgetWeather(core){ const c=el('div','fx-wcard fx-wc-weather'); c.textContent='天气加载中…'; fillWeather(core,c); return c; }
 /* "今日"卡片：待办 + 倒数日（可多条）+ 日历（只读，来自本机伴随服务），三节纵向堆叠 */
 function widgetToday(core,w){

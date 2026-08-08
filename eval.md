@@ -203,7 +203,7 @@ criteria:
       viewport: 1024x768
       themes: [dark, light]
       expected: search top >= 0, eighth favorite bottom <= 768, horizontal overflow = 0
-    passes: false
+    passes: true
 
   - id: P0-HOME-002
     priority: P0
@@ -213,7 +213,7 @@ criteria:
       run: npm test -- tests/home-settings.test.mjs
       viewports: [1268x714, 1024x768, 768x800]
       expected: compact state PASS and favorites remain before widgets in DOM and visual order
-    passes: false
+    passes: true
 
   - id: P0-HOME-003
     priority: P0
@@ -222,7 +222,7 @@ criteria:
       type: command
       run: npm test -- tests/home-settings.test.mjs
       expected: unconfigured hardware visibility and seed cases PASS
-    passes: false
+    passes: true
 
   - id: P0-HOME-004
     priority: P0
@@ -233,7 +233,7 @@ criteria:
         - 在组件设置中关闭天气并把今日移动到时钟前
         - 保存并刷新新标签页
       expected: weather hidden and remaining order persists
-    passes: false
+    passes: true
 
   - id: P1-ONBOARD-001
     priority: P1

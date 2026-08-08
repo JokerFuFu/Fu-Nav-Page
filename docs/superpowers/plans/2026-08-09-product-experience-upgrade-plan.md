@@ -449,11 +449,11 @@ git commit -m "fix: 统一搜索服务商筛选与网址口径"
 **Interfaces:**
 - Produces: `homeDensity(width, height)` → `comfortable|compact|mobile`；`visibleWidgets(settings)`。
 
-- [ ] **Step 1: 先更新设计规范**
+- [x] **Step 1: 先更新设计规范**
 
 在 `DESIGN.md` 增加首页顺序“搜索 → 常用 → 组件”、高度断点 820px、1024×768 首屏要求、1100px 自动折叠建议和移动抽屉规则；不改变色彩、圆角和字体 token。
 
-- [ ] **Step 2: 写密度与组件可见性失败测试**
+- [x] **Step 2: 写密度与组件可见性失败测试**
 
 ```js
 test('uses compact home and hides unconfigured hardware at laptop height', () => {
@@ -463,7 +463,7 @@ test('uses compact home and hides unconfigured hardware at laptop height', () =>
 });
 ```
 
-- [ ] **Step 3: RED、实现、GREEN**
+- [x] **Step 3: RED、实现、GREEN**
 
 Run: `npm test -- tests/home-settings.test.mjs`
 Expected before implementation: FAIL。
@@ -471,15 +471,15 @@ Expected before implementation: FAIL。
 Run: `npm test -- tests/home-settings.test.mjs`
 Expected after implementation: PASS。
 
-- [ ] **Step 4: 调整 DOM 顺序和 CSS**
+- [x] **Step 4: 调整 DOM 顺序和 CSS**
 
 `renderHome` 依次创建搜索、favorites、widgets。紧凑态将 hero clock 降为 title-scale，日期与问候同行，组件卡高度收紧；1024×768 下前 8 个 favorites 的完整卡片位于 viewport 内。
 
-- [ ] **Step 5: 更新 seed**
+- [x] **Step 5: 更新 seed**
 
 删除默认 `w-hw1`，保留时钟、天气和今日卡；加入 `demoMode:true`，首页显示可关闭的演示标识，直到用户完成 onboarding 或第一次实际编辑。
 
-- [ ] **Step 6: 截图矩阵验证**
+- [x] **Step 6: 截图矩阵验证**
 
 启动本地服务器，验证深/浅主题 × 1440×900、1268×714、1024×768、768×800、390×844；记录 `scrollHeight`、favorites 底边和 console 错误数。
 
