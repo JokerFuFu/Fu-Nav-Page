@@ -1,4 +1,6 @@
 /* ============ 图标映射：服务 → dashboard-icons / Lucide ============ */
+import { classifyDuplicate, normalizeUrl } from './url.js';
+
 const DI = (slug, fmt='svg') => `https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons@main/${fmt}/${slug}.${fmt}`;
 const SIMPLE = (slug) => `https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/${slug}.svg`;
 /* GitHub 项目官方头像：图标库没有时的真实 logo 兜底（稳定 CDN，私网服务也能加载） */
@@ -65,7 +67,8 @@ export function isPrivateHost(host){
   return a===10||a===127||(a===192&&b===168)||(a===172&&b>=16&&b<=31);
 }
 export function hostOf(url){ try{ return new URL(url).hostname; }catch{ return ''; } }
-export const normUrl = u => (u||'').trim().replace(/\/+$/,'').toLowerCase();
+export const normUrl = u => normalizeUrl(u,'strict');
+export { classifyDuplicate, normalizeUrl };
 
 export const FORCE_LETTER = LETTER;
 /* 返回已知服务的品牌图标 URL；LETTER=强制字母块；null=未知(走 favicon) */

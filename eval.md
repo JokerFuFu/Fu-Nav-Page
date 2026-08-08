@@ -131,7 +131,7 @@ criteria:
       type: command
       run: npm test -- tests/provider.test.mjs
       expected: provider switch submits zero times
-    passes: false
+    passes: true
 
   - id: P0-PROVIDER-002
     priority: P0
@@ -141,7 +141,7 @@ criteria:
       run: npm test -- tests/provider.test.mjs
       operation: 在设置中切换 Provider，关闭设置并检查首页按钮，再刷新页面
       expected: test PASS and selected provider remains identical after refresh
-    passes: false
+    passes: true
 
   - id: P0-FILTER-001
     priority: P0
@@ -151,7 +151,7 @@ criteria:
       run: npm test -- tests/provider.test.mjs
       operation: 在分组和二级文件夹分别输入筛选词并按 Enter
       expected: visible cards are filtered and no navigation or new tab occurs
-    passes: false
+    passes: true
 
   - id: P0-LOCK-001
     priority: P0

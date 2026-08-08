@@ -13,7 +13,7 @@ import { ACCENTS, DEFAULT_ACCENT_ID } from './accent-presets.js';
 import { checkAllLinks as runLinkCheck, maybeAutoCheck } from './link-check.js';
 import { putBgImage, deleteBgImage } from './bg-storage.js';
 import { readFavGrid, rankFavorites, visitItem, frecencyScore, rankByClicks, rankByFrecency } from './favorites.js';
-import { providerAction } from './provider-action.js';
+import { setAskProvider as updateAskProvider, submitAsk as runSubmitAsk } from './provider-action.js';
 import { migrateConfig as migrateSchema } from './config-schema.js';
 import { injectSecrets, sanitizeConfig } from './config-secrets.js';
 import { applyInboxOps } from './sync-policy.js';
@@ -468,11 +468,13 @@ class Core {
   /* 搜索/AI 一体发送 */
   PROVIDERS=PROVIDERS;
   activeProvider(){ return (this.settings.askProvider && PROVIDERS[this.settings.askProvider]) ? this.settings.askProvider : 'bing'; }
-  setProvider(id){ if(PROVIDERS[id]){ this.settings.askProvider=id; this.save(); } }
-  ask(id, q){ const p=PROVIDERS[id]||PROVIDERS.bing; const tgt=this.settings.openIn==='_self'?'_self':'_blank'; q=(q||'').trim();
-    const action=providerAction(p,q); if(!q){window.open(action.url,tgt);return;}
-    if(action.shouldCopy){ const copied=copyTextSync(q); if(tgt!=='_self')this.toast(copied?action.successMessage:action.failureMessage,copied?'ok':'err'); }
-    window.open(action.url,tgt); }
+  setAskProvider(id){ const result=updateAskProvider(this.settings,PROVIDERS,id); if(result.ok)this.save(); return result; }
+  setProvider(id){ return this.setAskProvider(id); }
+  submitAsk(text, options={}){ const tgt=this.settings.openIn==='_self'?'_self':'_blank';
+    return runSubmitAsk(text,{settings:this.settings,providers:PROVIDERS,copy:copyTextSync,
+      feedback:(message,kind)=>{ if(options.feedback)options.feedback(message,kind); else this.toast(message,kind); },
+      opener:url=>window.open(url,tgt)}); }
+  ask(id,q){ if(PROVIDERS[id]&&id!==this.activeProvider())this.settings.askProvider=id; return this.submitAsk(q); }
   recordVisit(item){ if(!item)return; visitItem(item); this.save(true); }
   iconSuggestions(name,url){ return iconSearch(name,url).filter(u=>u&&u!=='__letter__').slice(0,10); }
 
@@ -677,6 +679,7 @@ class Core {
 
   /* 设置 —— 常用（默认展开）/ 同步与备份 / 高级 三层（S2/S7/S9）；云与书签同步收成「摘要+按钮→子弹层」（S1） */
   openSettings(){ const s=this.settings; const titleI=this.inp(s.title||'Fu 导航');
+    const providerSel=el('select'); Object.entries(PROVIDERS).forEach(([id,p])=>{const o=el('option',null,p.name);o.value=id;o.selected=id===this.activeProvider();providerSel.appendChild(o);}); providerSel.onchange=()=>this.setAskProvider(providerSel.value);
     const favGrid=this.favGrid(), favGridSeg=this.seg([['6x2','6×2'],['8x2','8×2'],['6x3','6×3'],['8x3','8×3']],`${favGrid.cols}x${favGrid.rows}`,v=>{ const [cols,rows]=v.split('x').map(Number); s.favGrid={cols,rows}; this.save(true); this.rerender(); });
     const accentGrid=el('div','fn-colorgrid');
     ACCENTS.forEach(a=>{ const b=el('button','fn-colorpick'+(s.accentId===a.id?' sel':'')); b.type='button'; b.title=a.name;
@@ -713,6 +716,7 @@ class Core {
     this.openModal('设置',[
       this.sect('常用',[
         this.field('标题',titleI),
+        this.field('默认搜索 / AI',providerSel),
         this.field('主题',this.seg([['auto','跟随系统'],['dark','深色'],['light','浅色']],s.theme,v=>{s.theme=v;this.applyTheme();})),
         this.field('强调色',accentGrid),
         this.field('常用区布局',favGridSeg),

@@ -399,7 +399,7 @@ git commit -m "fix: 统一嵌套树操作和编辑锁定语义"
 **Interfaces:**
 - Produces: `normalizeUrl(url, mode)`；`classifyDuplicate(a, b)`；`setAskProvider(id)`；`submitAsk(text)`。
 
-- [ ] **Step 1: 写 URL 规范化和重复等级测试**
+- [x] **Step 1: 写 URL 规范化和重复等级测试**
 
 ```js
 test('normalizes safe URL differences without collapsing business queries', () => {
@@ -409,11 +409,11 @@ test('normalizes safe URL differences without collapsing business queries', () =
 });
 ```
 
-- [ ] **Step 2: 写 Provider 状态测试**
+- [x] **Step 2: 写 Provider 状态测试**
 
 迁移后的设置只读写 `askProvider`；切换 Provider 返回 `{ submitted:false }` 且不调用 opener；只有 `submitAsk` 调用一次 opener。分组筛选 Enter 只提交本地 filter，不调用 `submitAsk`。
 
-- [ ] **Step 3: RED、实现、GREEN**
+- [x] **Step 3: RED、实现、GREEN**
 
 Run: `npm test -- tests/url.test.mjs tests/provider.test.mjs`
 Expected before implementation: FAIL。
@@ -421,15 +421,15 @@ Expected before implementation: FAIL。
 Run: `npm test -- tests/url.test.mjs tests/provider.test.mjs`
 Expected after implementation: PASS。
 
-- [ ] **Step 4: 修复页面事件**
+- [x] **Step 4: 修复页面事件**
 
 Provider 菜单点击只更新按钮、placeholder 和 settings；首页发送按钮/Enter 调用 `submitAsk`。分组、文件夹输入框的 placeholder、input、keydown 均使用“筛选”，Escape 清空，Enter 不跳出页面。
 
-- [ ] **Step 5: 修复 copy 型 AI 反馈**
+- [x] **Step 5: 修复 copy 型 AI 反馈**
 
 复制成功后在新开标签前更新可访问 live region 和 provider 按钮状态为“已复制，请粘贴”，状态保持至少 8 秒或直到下一次输入。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add shared/url.js shared/core.js shared/icon-map.js layouts/fusion.js popup.js background.js tests/url.test.mjs tests/provider.test.mjs

@@ -2,8 +2,7 @@ import { migrateConfig, validateConfig } from './config-schema.js';
 import { injectSecrets, splitSecrets } from './config-secrets.js';
 import { saveSnapshot } from './config-history.js';
 import { diffRestore } from './sync-policy.js';
-
-const TRACKING_PARAMS = new Set(['fbclid', 'gclid', 'dclid', 'msclkid', 'mc_cid', 'mc_eid']);
+import { normalizeUrl } from './url.js';
 
 function clone(value) {
   if (typeof structuredClone === 'function') return structuredClone(value);
@@ -34,31 +33,13 @@ function walkItems(items, visit) {
   }
 }
 
-function normalizeUrl(value) {
-  const raw = String(value || '').trim();
-  if (!raw) return '';
-  try {
-    const url = new URL(raw);
-    url.protocol = url.protocol.toLowerCase();
-    url.hostname = url.hostname.toLowerCase();
-    for (const key of [...url.searchParams.keys()]) {
-      if (key.toLowerCase().startsWith('utm_') || TRACKING_PARAMS.has(key.toLowerCase())) url.searchParams.delete(key);
-    }
-    url.searchParams.sort();
-    if (url.pathname === '/') url.pathname = '';
-    return url.href.replace(/\/$/, '');
-  } catch {
-    return raw.replace(/\/$/, '').toLowerCase();
-  }
-}
-
 function duplicateIds(config) {
   const seen = new Map();
   const duplicates = [];
   for (const group of config.groups || []) {
     walkItems(group.items, (item) => {
       if (item.type === 'folder') return;
-      const key = normalizeUrl(item.url);
+      const key = normalizeUrl(item.url, 'strict');
       if (!key) return;
       if (seen.has(key)) duplicates.push(item.id);
       else seen.set(key, item.id);

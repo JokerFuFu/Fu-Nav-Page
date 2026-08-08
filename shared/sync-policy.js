@@ -1,3 +1,5 @@
+import { normalizeUrl } from './url.js';
+
 function clone(value) {
   if (typeof structuredClone === 'function') return structuredClone(value);
   return JSON.parse(JSON.stringify(value));
@@ -27,11 +29,11 @@ function locateItem(groups, id) {
 }
 
 function groupHasUrl(group, url) {
-  const target = String(url || '').trim().replace(/\/$/, '').toLowerCase();
+  const target = normalizeUrl(url, 'strict');
   if (!target) return false;
   let found = false;
   walkItems(group.items, (item) => {
-    if (String(item.url || '').trim().replace(/\/$/, '').toLowerCase() === target) found = true;
+    if (normalizeUrl(item.url, 'strict') === target) found = true;
   });
   return found;
 }

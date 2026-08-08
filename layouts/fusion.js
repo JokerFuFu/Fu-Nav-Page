@@ -4,6 +4,7 @@ import { lucide } from '../shared/icon-map.js';
 import { fetchGlances } from '../shared/hwmon.js';
 import { PRESETS } from '../shared/bg-presets.js';
 import { effectiveTheme, ONLINE_SOURCES, DEFAULT_ONLINE_SOURCE } from '../shared/background.js';
+import { filterContent, filterKeyAction } from '../shared/provider-action.js';
 const DI = s => `https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons@main/svg/${s}.svg`;
 const picon = p => (p.icon && p.icon.startsWith('http')) ? p.icon : DI(p.icon);
 let active='home', clockTimer=null, drag=null, clockEls=null, ctxMenu=null, askOutsideHandler=null;
@@ -252,9 +253,13 @@ function buildAsk(core){
   box.append(prov,inp,send);
   const menu=el('div','fx-provmenu'); menu.hidden=true;
   const results=el('div','fx-ask-results'); results.hidden=true;
+  const status=el('div','fx-ask-status'); status.hidden=true; status.setAttribute('role','status'); status.setAttribute('aria-live','polite');
   const cv=prov.querySelector('.fx-ask-prov-cv');
+  let feedbackTimer=null;
+  const clearFeedback=()=>{ clearTimeout(feedbackTimer); status.hidden=true; status.textContent=''; prov.classList.remove('copied'); prov.setAttribute('aria-label','切换搜索引擎 / AI'); prov.title='切换搜索引擎 / AI'; };
+  const showFeedback=(message,kind)=>{ const text=kind==='ok'?'已复制，请粘贴':message; status.textContent=text; status.className='fx-ask-status '+(kind||''); status.hidden=false; prov.classList.toggle('copied',kind==='ok'); prov.setAttribute('aria-label',text); prov.title=text; clearTimeout(feedbackTimer); feedbackTimer=setTimeout(clearFeedback,8000); };
   const setProv=()=>{ const p=core.PROVIDERS[core.activeProvider()]; cv.textContent=''; const img=new Image(); img.onerror=()=>{cv.textContent=p.name[0];}; img.src=picon(p); cv.appendChild(img);
-    inp.placeholder=p.kind==='ai'?`问 ${p.name}…`:`用 ${p.name} 搜索，左侧切换 AI`; };
+    inp.placeholder=p.kind==='ai'?`问 ${p.name}…`:`用 ${p.name} 搜索，左侧切换 AI`; if(status.hidden){prov.title='切换搜索引擎 / AI';prov.setAttribute('aria-label','切换搜索引擎 / AI');} };
   // 下拉：按 搜索引擎 / AI 助手 两组列出全部 provider
   const closeMenu=()=>{ menu.hidden=true; prov.classList.remove('open'); };
   const buildMenu=()=>{ menu.textContent=''; const ids=Object.keys(core.PROVIDERS);
@@ -263,12 +268,12 @@ function buildAsk(core){
       sect.forEach(id=>{ const p=core.PROVIDERS[id]; const cur=id===core.activeProvider(); const it=el('button','fx-provitem'+(cur?' on':'')); it.type='button';
         const ic=el('span','fx-provitem-ico'); const img=new Image(); img.onerror=()=>{ic.textContent=p.name[0];ic.classList.add('txt');}; img.src=picon(p); ic.appendChild(img);
         it.append(ic, el('span','fx-provitem-nm',p.name)); if(cur){ const ck=el('span','fx-provitem-ck'); ck.appendChild(mico('check',12)); it.appendChild(ck); }
-        it.onclick=()=>{ core.setProvider(id); setProv(); closeMenu(); if(inp.value.trim()) core.ask(id,inp.value); else inp.focus(); };
+        it.onclick=()=>{ core.setAskProvider(id); setProv(); closeMenu(); inp.focus(); };
         menu.appendChild(it); });
     }); };
   prov.onclick=e=>{ e.stopPropagation(); if(menu.hidden){ buildMenu(); menu.hidden=false; prov.classList.add('open'); } else closeMenu(); };
   setProv();
-  inp.addEventListener('input',()=>{ const q=inp.value.trim().toLowerCase(); results.textContent=''; if(!q){results.hidden=true;return;}
+  inp.addEventListener('input',()=>{ clearFeedback(); const q=inp.value.trim().toLowerCase(); results.textContent=''; if(!q){results.hidden=true;return;}
     const ms=[]; core.allItems().forEach(({item,group})=>{ if((item.name+' '+item.url+' '+(item.note||'')).toLowerCase().includes(q)) ms.push({it:item,g:group}); });
     if(!ms.length){results.hidden=true;return;}
     results.appendChild(el('div','fx-res-h','我的收藏 · 点击打开'));
@@ -276,12 +281,12 @@ function buildAsk(core){
       const ico=el('span','fx-res-ico'); core.mountIcon(ico,it,32); r.append(ico, el('span','fx-res-nm',it.name), el('span','fx-res-g',g.name)); r.addEventListener('click',()=>core.recordVisit(it)); results.appendChild(r); });
     results.hidden=false; });
   inp.addEventListener('keydown',e=>{ if(e.key==='Escape'){inp.value='';results.hidden=true;closeMenu();} });
-  box.addEventListener('submit',e=>{e.preventDefault();core.ask(core.activeProvider(),inp.value);});
+  box.addEventListener('submit',e=>{e.preventDefault();core.submitAsk(inp.value,{feedback:showFeedback});});
   // D4: 单例外点监听——重挂前先解绑旧的，否则每次 rerender 累积一个持有游离 DOM 的监听器（泄漏）
   if(askOutsideHandler) document.removeEventListener('click', askOutsideHandler);
   askOutsideHandler = e=>{ if(!wrap.contains(e.target)){ results.hidden=true; closeMenu(); } };
   document.addEventListener('click', askOutsideHandler);
-  wrap.append(box,menu,results); setTimeout(()=>inp.focus(),60);
+  wrap.append(box,menu,results,status); setTimeout(()=>inp.focus(),60);
   return wrap;
 }
 
@@ -462,13 +467,15 @@ function agentHead(core,icon,title){ const h=el('div','fx-wca-h'); const i=el('s
 function safe(s){ try{return JSON.parse(s);}catch{return null;} }
 
 /* ---------- 分组视图 ---------- */
+function wireLocalFilter(input,scope){ const apply=()=>{ const cards=$$('.fx-card',scope), entries=cards.map(card=>({card,name:card.textContent,url:card.title||''})); const visible=new Set(filterContent(entries,input.value).map(entry=>entry.card)); cards.forEach(card=>card.style.display=visible.has(card)?'':'none'); };
+  input.addEventListener('input',apply); input.addEventListener('keydown',event=>{ const action=filterKeyAction(event.key); if(!action.prevented)return; event.preventDefault(); if(action.clear){input.value='';apply();} }); }
 function renderGroup(core,main,g){
   if(!g){ active='home'; return renderHome(core,main); }
   const stats=core.treeCount(g.items);
   const top=el('div','fx-gtop');
   const title=el('div','fx-gtitle'); const ico=el('span','fx-gtitle-ico'); core.mountGroupIcon(ico,g); title.append(ico, el('span',null,g.name), el('span','fx-gtitle-ct',`顶层 ${stats.topLevel} 项 · 共 ${stats.sites} 网站`));
   const f=el('form','fx-gsearch'); const si=el('input'); si.placeholder='筛选本组…'; f.appendChild(si); f.addEventListener('submit',e=>e.preventDefault());
-  si.addEventListener('input',()=>{ const q=si.value.trim().toLowerCase(); $$('.fx-card',main).forEach(c=>{ const t=(c.textContent+' '+(c.title||'')).toLowerCase(); c.style.display=(!q||t.includes(q))?'':'none'; }); });
+  wireLocalFilter(si,main);
   const vt=el('div','fx-viewtoggle');
   [['grid','layout-grid','大图'],['list','rows-3','列表'],['detail','list','详情']].forEach(([v,ic,t])=>{ const b=el('button','fx-vbtn'+(core.settings.cardView===v?' on':'')); b.title=t; b.appendChild(mico(ic)); b.onclick=()=>{core.settings.cardView=v;core.save();core.rerender();}; vt.appendChild(b); });
   const acts=el('div','fx-gacts'); acts.append(vt); if(core.editing)acts.append(gbtn('plus','添加网站',()=>core.openItemEditor(null,g.id)), gbtn('folder-plus','新建文件夹',()=>core.openFolderEditor(null,g.id)), gbtn('pencil','编辑分组',()=>core.openGroupEditor(g)));
@@ -488,7 +495,7 @@ function renderFolderPage(core,main,fd,g){
   const fico=el('span','fx-gtitle-ico lucide-mask'); fico.style.webkitMaskImage=fico.style.maskImage=`url("${core.lucide('folder')}")`; fico.style.background='currentColor';
   title.append(crumb, el('span','fx-crumb-sep','›'), fico, el('span',null,fd.name||'文件夹'), el('span','fx-gtitle-ct',`顶层 ${stats.topLevel} 项 · 共 ${stats.sites} 网站`));
   const f=el('form','fx-gsearch'); const si=el('input'); si.placeholder='筛选…'; f.appendChild(si); f.addEventListener('submit',e=>e.preventDefault());
-  si.addEventListener('input',()=>{ const q=si.value.trim().toLowerCase(); $$('.fx-card',main).forEach(c=>{ const t=(c.textContent+' '+(c.title||'')).toLowerCase(); c.style.display=(!q||t.includes(q))?'':'none'; }); });
+  wireLocalFilter(si,main);
   const vt=el('div','fx-viewtoggle'); [['grid','layout-grid','大图'],['list','rows-3','列表'],['detail','list','详情']].forEach(([v,ic,t])=>{ const b=el('button','fx-vbtn'+(core.settings.cardView===v?' on':'')); b.title=t; b.appendChild(mico(ic)); b.onclick=()=>{core.settings.cardView=v;core.save();core.rerender();}; vt.appendChild(b); });
   const acts=el('div','fx-gacts'); acts.append(vt); if(core.editing){ acts.append(gbtn('plus','添加网站',()=>{ core._addToFolder={folder:fd,gid:g.id}; core.openItemEditor(null,g.id); }));
     if(isTop) acts.append(gbtn('folder-plus','新建子文件夹',()=>core.openFolderEditor(null,g.id,fd.items||(fd.items=[]))));
