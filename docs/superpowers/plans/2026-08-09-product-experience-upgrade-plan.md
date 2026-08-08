@@ -165,7 +165,7 @@ git commit -m "test: 建立产品升级验收基线"
 **Interfaces:**
 - Produces: `defaultConfig()`；`migrateConfig(raw, now)`；`validateConfig(raw)`；`splitSecrets(config)`；`injectSecrets(config, secrets)`；`sanitizeConfig(config)`；`loadSecrets()`；`saveSecrets(secrets)`。
 
-- [ ] **Step 1: 写迁移失败测试**
+- [x] **Step 1: 写迁移失败测试**
 
 ```js
 test('migrates v2 provider and extracts cloud credentials idempotently', () => {
@@ -181,7 +181,7 @@ test('migrates v2 provider and extracts cloud credentials idempotently', () => {
 });
 ```
 
-- [ ] **Step 2: 写安全载荷失败测试**
+- [x] **Step 2: 写安全载荷失败测试**
 
 ```js
 test('sanitized config never contains secret keys or values', () => {
@@ -191,29 +191,29 @@ test('sanitized config never contains secret keys or values', () => {
 });
 ```
 
-- [ ] **Step 3: 运行并确认 RED**
+- [x] **Step 3: 运行并确认 RED**
 
 Run: `npm test -- tests/config-schema.test.mjs tests/config-secrets.test.mjs`
 Expected: FAIL，两个模块均不存在。
 
-- [ ] **Step 4: 实现 schema 与 secret 边界**
+- [x] **Step 4: 实现 schema 与 secret 边界**
 
-`migrateConfig` 必须克隆输入、补 `version/revision/savedAt/tombstones/updatedAt`、将有效 `searchEngine` 迁入 `askProvider`、提取 `cloud.user/pass` 和 `agentToken`、返回 `{ config, secrets, warnings }`。`sanitizeConfig` 递归删除 `pass/password/token/agentToken/user/cloudUser/cloudPass` 等 secret 字段，但保留 `gdriveClientId`。
+`migrateConfig` 克隆输入、补 `version/revision/savedAt`、将有效 `searchEngine` 迁入 `askProvider`、提取 `cloud.user/pass` 和 `agentToken`、返回 `{ config, secrets, warnings }`。公开版保持本机权威 + inbox 删除保护，不在同步 config 增加另一套 tombstone 合并协议。`sanitizeConfig` 删除已知 secret 字段和 URL userinfo，但保留公开的 `gdriveClientId`。
 
-`storage.js` 使用键 `fu_nav_secrets_v1` 保存 secrets：扩展环境固定使用 `chrome.storage.local`，预览环境使用独立的 `localStorage` 键；`saveConfig` 只接收已经清洗的同步配置。
+`storage.js` 使用键 `fn_secrets_v1` 保存 secrets：扩展环境固定使用 `chrome.storage.local`，预览环境使用独立的 `localStorage` 键；`saveConfig` 在内部强制拆分 secret，只把安全 config 写入 `fn_config` 和 sync 镜像。
 
-- [ ] **Step 5: Core 启动迁移并持久化凭据**
+- [x] **Step 5: Core 启动迁移并持久化凭据**
 
-`Core.boot()` 调用 `migrateConfig`，先保存提取出的 secrets，再把无 secret 的 config 赋给 `this.cfg`。设置保存 WebDAV 时调用 `saveSecrets`，不得把凭据写回 `settings.cloud`。
+`Core.boot()` 在现有产品迁移后调用 schema migration；运行时按需注入本机 secret 以兼容现有设置和 Agent 调用，`saveConfig`、导出和云上传三道边界都再次清洗。迁移的 `changed` 以清洗后的安全 config 为比较基线，正常 secret 注入不会造成重复迁移保存。
 
-- [ ] **Step 6: 运行测试与静态扫描**
+- [x] **Step 6: 运行测试与静态扫描**
 
 Run: `npm test -- tests/config-schema.test.mjs tests/config-secrets.test.mjs`
 Expected: 全部 PASS。
 Run: `rg -n "cloud\.(user|pass)|agentToken" shared data popup.js background.js`
 Expected: 仅迁移兼容和本机 secret 接口出现，不得出现在导出或云载荷路径。
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 git add shared/config-schema.js shared/config-secrets.js shared/storage.js shared/core.js tests/config-*.test.mjs

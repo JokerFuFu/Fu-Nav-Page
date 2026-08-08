@@ -14,6 +14,8 @@ import { checkAllLinks as runLinkCheck, maybeAutoCheck } from './link-check.js';
 import { putBgImage, deleteBgImage } from './bg-storage.js';
 import { readFavGrid, rankFavorites, visitItem, frecencyScore, rankByClicks, rankByFrecency } from './favorites.js';
 import { providerAction } from './provider-action.js';
+import { migrateConfig as migrateSchema } from './config-schema.js';
+import { injectSecrets, sanitizeConfig } from './config-secrets.js';
 
 export const $  = (s,r=document)=>r.querySelector(s);
 export const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
@@ -64,7 +66,10 @@ class Core {
   async boot(){
     const { config, source } = await loadConfig();
     this.cfg = (config && config.groups) ? config : await this.fetchSeed();
-    const migrated=this.migrate();   // 返回是否发生一次性迁移(如工作区→模式)，据此决定是否落盘
+    const appMigrated=this.migrate();   // 返回是否发生一次性迁移(如工作区→模式)，据此决定是否落盘
+    const normalized=migrateSchema(this.cfg,Date.now());
+    this.cfg=injectSecrets(normalized.config,normalized.secrets);
+    const migrated=appMigrated||normalized.changed;
     try{ if(await this._applyInbox()) await this.save(true); }catch{}   // 兑现 popup 在没有新标签页打开时留下的增删
     const ql=new URLSearchParams(location.search).get('layout'); if(ql) this.settings.layout=ql; // 预览/截图用
     this.buildModalHost();
@@ -85,7 +90,7 @@ class Core {
     maybeAutoCheck(this);   // 距上次探测超 24 小时才会真的跑，不阻塞首屏渲染
   }
   async fetchSeed(){ try{ return await (await fetch('data/seed.json')).json(); }catch{ return {version:2,settings:this.defaults(),groups:[]}; } }
-  defaults(){ return { title:'Fu.', layout:'fusion', theme:'auto', openIn:'_blank', searchEngine:'bing', askProvider:'bing', showClock:true, showWeather:true, showStatus:true, locked:true, cardView:'grid', modes:[], activeMode:null, sideCollapsed:false, agentPort:7842, agentToken:'fu-nav-local', cloud:{ enabled:false, type:'webdav', url:'', user:'', pass:'', gdriveClientId:'' }, bmSync:{ enabled:false }, bmSig:'',
+  defaults(){ return { title:'Fu.', layout:'fusion', theme:'auto', openIn:'_blank', askProvider:'bing', showClock:true, showWeather:true, showStatus:true, locked:true, cardView:'grid', modes:[], activeMode:null, sideCollapsed:false, agentPort:7842, agentToken:'fu-nav-local', cloud:{ enabled:false, type:'webdav', url:'', user:'', pass:'', gdriveClientId:'' }, bmSync:{ enabled:false }, bmSig:'',
       background:{ enabled:true, mode:'preset', presetId:'p01', onlineSrc:{id:DEFAULT_ONLINE_SOURCE}, onlineImageId:'', localImageId:'', refreshEvery:0, lastFetchAt:0, scrimOpacity:0.55 },
       accentId: 'indigo', favGrid:{cols:8,rows:2}, lastDeadCheck: 0,
       widgets:[{id:'w-clock',type:'clock'},{id:'w-weather',type:'weather'},{id:'w-today',type:'today',items:[],countdowns:[]}] }; }
@@ -753,7 +758,7 @@ class Core {
     this.openModal('导入浏览器书签',[el('div','fn-hint','勾选要导入的文件夹（按文件夹建分组，去重）：'),box],
       [this.btn('取消','ghost',()=>this.closeModal()),this.btn('导入','primary',()=>{let n=0;picks.forEach((c,f)=>{if(!c.checked)return;const items=flat(f).map(x=>({id:uid('i'),name:x.name,url:x.url,note:'',icon:''}));if(!items.length)return;let g=this.groups.find(x=>x.name===(f.title||''));if(!g){g={id:uid('g'),name:f.title||'书签',icon:'star',color:COLORS[this.groups.length%COLORS.length],collapsed:false,items:[]};this.groups.push(g);}const seen=new Set(g.items.map(i=>i.url));items.forEach(it=>{if(!seen.has(it.url)){g.items.push(it);n++;}});});this.save(true);this.rerender();this.closeModal();this.toast(`已导入 ${n} 个书签`,'ok');})]); }
 
-  exportConfig(){ const b=new Blob([JSON.stringify(this.cfg,null,2)],{type:'application/json'});const a=el('a');a.href=URL.createObjectURL(b);a.download='fu-nav-backup-'+new Date().toISOString().slice(0,10)+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);this.toast('已导出','ok'); }
+  exportConfig(){ const b=new Blob([JSON.stringify(sanitizeConfig(this.cfg),null,2)],{type:'application/json'});const a=el('a');a.href=URL.createObjectURL(b);a.download='fu-nav-backup-'+new Date().toISOString().slice(0,10)+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);this.toast('已导出','ok'); }
   importConfig(){ const i=el('input');i.type='file';i.accept='.json,.infinity';i.onchange=()=>{const f=i.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);
     if(d && d.data && d.data.site){ return this._mergeInfinity(d); }   // Infinity 备份 → 合并导入
     if(!Array.isArray(d.groups))throw 0;this.cfg=d;this.migrate();this.applyTheme();this.rerender();this.save(true);this.closeModal();this.toast('已导入','ok');}catch{this.toast('文件格式错误','err');}};r.readAsText(f);};i.click(); }

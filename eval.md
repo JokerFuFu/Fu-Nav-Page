@@ -26,7 +26,7 @@ criteria:
       type: command
       run: npm test -- tests/config-secrets.test.mjs
       expected: secret split and sanitize cases PASS
-    passes: false
+    passes: true
 
   - id: P0-SEC-002
     priority: P0
@@ -45,7 +45,7 @@ criteria:
       type: command
       run: npm test -- tests/config-secrets.test.mjs
       expected: cloud payload sanitization PASS
-    passes: false
+    passes: true
 
   - id: P0-SCHEMA-001
     priority: P0
@@ -54,7 +54,7 @@ criteria:
       type: command
       run: npm test -- tests/config-schema.test.mjs
       expected: migration and idempotence cases PASS
-    passes: false
+    passes: true
 
   - id: P0-SYNC-001
     priority: P0
