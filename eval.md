@@ -467,7 +467,7 @@ criteria:
       type: command
       run: npm test -- tests/workspaces.test.mjs
       expected: complete workspace lifecycle PASS
-    passes: false
+    passes: true
 
   - id: P2-WORKSPACE-002
     priority: P2
@@ -476,7 +476,7 @@ criteria:
       type: command
       run: npm test -- tests/workspaces.test.mjs
       expected: detach and delete-groups strategies PASS
-    passes: false
+    passes: true
 
   - id: P2-WORKSPACE-003
     priority: P2
@@ -487,7 +487,7 @@ criteria:
         - 检查侧栏工作区标题区
         - 打开命令面板并搜索管理工作区
       expected: both paths open the same workspace manager
-    passes: false
+    passes: true
 
   - id: P2-RESP-001
     priority: P2

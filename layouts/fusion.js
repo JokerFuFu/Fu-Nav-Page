@@ -52,6 +52,14 @@ function buildSidebar(core){
     if(core.editing){ const addG=el('button','fx-navitem fx-addgroup'); addG.innerHTML=`<span class="fx-ni-ico lucide-mask" style="-webkit-mask-image:url('${lucide('plus')}');mask-image:url('${lucide('plus')}')"></span><span class="fx-ni-nm">新建分组</span>`; addG.onclick=()=>core.openGroupEditor(null); nav.appendChild(addG); }
   }
   if(core.editing) wireSidebarDnD(core,nav); side.appendChild(nav);
+  const modeHub=el('div','fx-mode-hub');
+  const modeCurrent=am==='privacy'?'隐私模式':am?am.name:'全部收藏';
+  const modeSwitch=el('button','fx-mode-hub-main'+(am!==null?' on':'')); modeSwitch.type='button'; modeSwitch.dataset.tour='mode';
+  modeSwitch.title=`工作区：${modeCurrent}（点击切换）`; modeSwitch.setAttribute('aria-label',modeSwitch.title);
+  modeSwitch.append(mico(am==='privacy'?'eye':'layers',16),el('span','fx-mode-hub-copy',null));
+  const modeCopy=modeSwitch.querySelector('.fx-mode-hub-copy'); modeCopy.append(el('small',null,'工作区'),el('strong',null,modeCurrent)); modeSwitch.onclick=e=>openModeMenu(core,e);
+  const modeManage=el('button','fx-mode-hub-manage'); modeManage.type='button'; modeManage.title='管理工作区'; modeManage.setAttribute('aria-label','管理工作区'); modeManage.appendChild(mico('settings-2',14)); modeManage.onclick=()=>core.openModeManager();
+  modeHub.append(modeSwitch,modeManage); side.appendChild(modeHub);
   const foot=el('div','fx-side-foot');
   // 添加网站
   const addBtn=sideBtn(core,'plus','添加网站',()=>core.openItemEditor(null, active!=='home'?active:core.groups[0]?.id));
@@ -60,10 +68,6 @@ function buildSidebar(core){
   const editBtn=sideBtn(core, core.editing?'lock-open':'lock', editTitle(), function(){ const editing=core.setEditing(!core.editing); core.toast(editing?'已解锁：可拖拽排序、编辑、删除卡片':'已锁定：点击即打开链接','ok'); });
   editBtn.dataset.tour='lock';
   if(core.editing) editBtn.classList.add('on');
-  // 场景模式：全部 / 自定义模式 / 隐私
-  const modeBtn=sideBtn(core, am==='privacy'?'eye':'layers', modeTitle(core), (e)=>openModeMenu(core,e));
-  modeBtn.dataset.tour='mode';
-  if(am!==null) modeBtn.classList.add('on');
   // 主题切换：跟随系统 → 浅 → 深 循环（#5 首页左下方按钮）
   const THEMES=[['auto','monitor','跟随系统'],['light','sun','浅色'],['dark','moon','深色']];
   const tcur=()=>{ const i=THEMES.findIndex(t=>t[0]===(core.settings.theme||'auto')); return i<0?0:i; };
@@ -75,7 +79,7 @@ function buildSidebar(core){
   // 设置
   const setBtn=sideBtn(core,'settings','设置',()=>core.openSettings());
   setBtn.dataset.tour='settings';
-  foot.append(cmdBtn); if(core.editing)foot.append(addBtn); foot.append(editBtn, modeBtn, themeBtn, setBtn);
+  foot.append(cmdBtn); if(core.editing)foot.append(addBtn); foot.append(editBtn, themeBtn, setBtn);
   side.appendChild(foot); setTimeout(markNav,0); return side;
 }
 function setIcon(core,btn,name){ const s=btn.querySelector('.fx-sb-ico'); if(s){ s.style.webkitMaskImage=s.style.maskImage=`url("${core.lucide(name)}")`; } }
@@ -98,7 +102,6 @@ function sideBtn(core,icon,title,on){ const b=el('button','fx-sidebtn'); b.title
   const s=el('span','fx-sb-ico lucide-mask'); s.style.webkitMaskImage=s.style.maskImage=`url("${core.lucide(icon)}")`; s.style.background='currentColor';
   b.appendChild(s); return b; }
 /* 场景模式切换器：全部 / 多属分组模式 / 隐私 */
-function modeTitle(core){ const am=core.activeModeObj(); return am==='privacy'?'当前：隐私模式（只搜索/天气）· 点击切换':am?'模式：'+am.name+' · 点击切换':'视图：全部收藏 · 点击切换'; }
 function openModeMenu(core,e){
   if(e){ e.stopPropagation(); e.preventDefault(); }   // 阻止冒泡到 document 的 click→hideCtx 把菜单立刻关掉
   const am=core.activeModeObj();

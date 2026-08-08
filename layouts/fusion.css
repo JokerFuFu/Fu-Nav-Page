@@ -27,6 +27,10 @@ body.bg-photo .lay-fusion .fx-side{
 .lay-fusion.side-collapsed .fx-brand{ justify-content:center; padding:var(--s1) 0 var(--s3); }
 .lay-fusion.side-collapsed .fx-collapse{ align-self:center; margin:0 0 6px; }
 .lay-fusion.side-collapsed .fx-side-foot{ flex-direction:column; }
+.lay-fusion.side-collapsed .fx-mode-hub{ grid-template-columns:1fr; }
+.lay-fusion.side-collapsed .fx-mode-hub-copy{ display:none; }
+.lay-fusion.side-collapsed .fx-mode-hub-main{ justify-content:center; padding-inline:0; }
+.lay-fusion.side-collapsed .fx-mode-hub-manage{ width:100%; }
 .lay-fusion.side-collapsed .fx-addgroup{ justify-content:center; }
 .lay-fusion .fx-brand{ display:flex; align-items:center; gap:var(--s3); padding:var(--s1) var(--s2) var(--s4); width:100%; text-align:left; }
 .lay-fusion .fx-logo{ width:34px; height:34px; border-radius:var(--r-md); }
@@ -54,10 +58,22 @@ body.editing .lay-fusion .fx-navitem[data-gid]{ cursor:grab; }
 .lay-fusion .fx-navfolder .fx-ni-ct{ margin-left:auto; color:var(--text-3); font-size:11px; font-variant-numeric:tabular-nums; }
 .lay-fusion.side-collapsed .fx-ni-caret{ display:none; }
 .lay-fusion.side-collapsed .fx-navfolder{ display:none; }
+.lay-fusion .fx-mode-hub{ display:grid; grid-template-columns:minmax(0,1fr) 34px; gap:var(--s1); padding-top:var(--s2); margin-top:var(--s1); border-top:1px solid var(--border); }
+.lay-fusion .fx-mode-hub-main{ min-width:0; min-height:42px; display:flex; align-items:center; gap:var(--s2); padding:var(--s1) var(--s2); border-radius:var(--r-sm); color:var(--text-2); text-align:left; }
+.lay-fusion .fx-mode-hub-main:hover,.lay-fusion .fx-mode-hub-main.on{ background:var(--surface-2); color:var(--text); }
+.lay-fusion .fx-mode-hub-main.on{ color:var(--accent); }
+.lay-fusion .fx-mode-hub-copy{ min-width:0; display:flex; flex-direction:column; gap:1px; }
+.lay-fusion .fx-mode-hub-copy small{ color:var(--text-3); font-size:10px; line-height:1.1; }
+.lay-fusion .fx-mode-hub-copy strong{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; line-height:1.3; }
+.lay-fusion .fx-mode-hub-manage{ width:34px; min-height:34px; align-self:center; display:grid; place-items:center; border-radius:var(--r-sm); color:var(--text-3); }
+.lay-fusion .fx-mode-hub-manage:hover{ background:var(--surface-2); color:var(--text); }
 .lay-fusion .fx-side-foot{ display:flex; gap:var(--s1); padding-top:var(--s2); margin-top:var(--s1); border-top:1px solid var(--border); }
 .lay-fusion .fx-sidebtn{ flex:1; height:34px; border-radius:var(--r-sm); background:transparent; border:none; color:var(--text-3); display:grid; place-items:center; transition:var(--t); }
 .lay-fusion .fx-sidebtn:hover{ background:var(--surface-2); color:var(--text); }
 .lay-fusion .fx-sb-ico{ width:17px; height:17px; }
+.fn-mode-section-title{ margin-top:var(--s2); color:var(--text-3); font-size:11px; font-weight:700; letter-spacing:.06em; }
+.fn-mode-row{ flex-wrap:wrap; }
+.fn-mode-row .fn-sync-label{ flex:1 0 100%; min-width:150px; }
 
 /* 主区 */
 .lay-fusion .fx-main{ flex:1; min-width:0; padding:0 clamp(16px,4vw,48px); max-width:1320px; margin:0 auto; width:100%; }
@@ -385,6 +401,7 @@ body:not(.editing) .lay-fusion .fx-card:active{ transform:translateY(0) scale(.9
   .lay-fusion .fx-collapse{ display:none; }                                   /* 移动端侧栏不收折 */
   .lay-fusion .fx-navitem{ width:auto; flex:0 0 auto; }                        /* 分组变内联 chips，侧栏不再占满首屏 */
   .lay-fusion .fx-navfolder{ display:none; }                                   /* 子文件夹树桌面专属，移动端点进分组后再进 */
+  .lay-fusion .fx-mode-hub{ width:100%; }
   .lay-fusion .fx-side-foot{ width:100%; justify-content:space-around; }      /* 底部按钮整行排底，不再浮在导航右侧 */
   .lay-fusion .fx-wcard{ flex:1 1 100%; }                                     /* 小组件卡满宽堆叠，宽度一致 */
   .lay-fusion .fx-favs{ --fav-cols:4 !important; width:100%; }                /* 390px 下自动降列，不横向溢出 */

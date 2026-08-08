@@ -33,6 +33,7 @@ function watch(page, label) {
     watch(home, 'home');
     await home.goto(`chrome-extension://${extensionId}/newtab.html?e2e=offline`, { waitUntil: 'domcontentloaded' });
     await home.waitForSelector('.lay-fusion');
+    await home.waitForTimeout(160);
     console.log('offline-check:online-page-ready');
     const defer = home.getByRole('button', { name: '稍后决定' });
     if (await defer.isVisible().catch(() => false)) await defer.click();
@@ -42,6 +43,7 @@ function watch(page, label) {
     await context.setOffline(true);
     await home.reload({ waitUntil: 'domcontentloaded' });
     await home.waitForSelector('.lay-fusion');
+    await home.waitForTimeout(160);
     console.log('offline-check:offline-page-ready');
     const deferOffline = home.getByRole('button', { name: '稍后决定' });
     if (await deferOffline.isVisible().catch(() => false)) await deferOffline.click();

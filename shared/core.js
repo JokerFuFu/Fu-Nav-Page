@@ -24,6 +24,7 @@ import { loadRuntimeState, saveRuntimeState, requestCapability as askCapability,
 import { buildSearchIndex, querySearchIndex } from './search-index.js';
 import { applyBulkOperation, clusterDuplicates, updateSelection } from './library-manager.js';
 import { agentStatusPatch, buildDiagnostics, cloudStatusPatch, conflictStatusPatch, exportSafeBackup, saveStatusPatch } from './diagnostics.js';
+import { archiveMode as archiveModeState, createMode as createModeState, deleteMode as deleteModeState, listModes, renameMode as renameModeState, reorderModes as reorderModesState, restoreMode as restoreModeState } from './modes.js';
 
 export const $  = (s,r=document)=>r.querySelector(s);
 export const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
@@ -323,8 +324,8 @@ class Core {
   async mountLayout(name){
     this.layout=name; this.settings.layout=name;
     if(!this.root){ this.root=$('#root'); }
-    try{ this.layoutMod = await import(`../layouts/${name}.js?v=3.24.3`); }
-    catch(e){ console.error('布局加载失败',name,e); if(name!=='fusion'){ this.layout='fusion'; this.settings.layout='fusion'; try{ this.layoutMod=await import('../layouts/fusion.js?v=3.24.3'); }catch{ this.layoutMod=null; } } else this.layoutMod=null; }
+    try{ this.layoutMod = await import(`../layouts/${name}.js?v=3.25.3`); }
+    catch(e){ console.error('布局加载失败',name,e); if(name!=='fusion'){ this.layout='fusion'; this.settings.layout='fusion'; try{ this.layoutMod=await import('../layouts/fusion.js?v=3.25.3'); }catch{ this.layoutMod=null; } } else this.layoutMod=null; }
     this.rerender();
     $$('.layout-switch [data-l]').forEach(b=>b.classList.toggle('on', b.dataset.l===name));
   }
@@ -382,13 +383,23 @@ class Core {
     const cm=this.groups.find(g=>/常用|收藏|favorite|book/i.test(g.name));
     return rankFavorites(all,this.cfg.favOrder,cm?this.flatItems(cm):[],cols*rows); }
   /* 场景模式：模式持有分组 id，允许一个分组归属多个模式。 */
-  modes(){ return this.settings.modes||(this.settings.modes=[]); }
-  activeModeObj(){ const active=this.settings.activeMode; if(active==='privacy')return 'privacy'; return this.modes().find(m=>m.id===active)||null; }
+  modes(){ return listModes(this.settings); }
+  archivedModes(){ return listModes(this.settings,{status:'archived'}); }
+  allModes(){ return listModes(this.settings,{status:'all'}); }
+  activeModeObj(){ const active=this.settings.activeMode; if(active==='privacy')return 'privacy'; return this.allModes().find(m=>m.id===active&&!m.archived)||null; }
   setActiveMode(value){ const next=value==='privacy'?'privacy':(value===null||this.modes().some(m=>m.id===value)?value:null); this.settings.activeMode=next; if(next==='privacy')this._navTo='home'; this.save(true); this.rerender(); }
-  createMode(name){ const mode={id:uid('m'),name:(name||'新模式').trim()||'新模式',groupIds:[],hiddenWidgets:[],showFavs:true}; this.modes().push(mode); this.save(true); return mode; }
-  deleteMode(id){ const modes=this.modes(), idx=modes.findIndex(m=>m.id===id); if(idx<0)return false; const mode=modes[idx], wasActive=this.settings.activeMode===id;
-    modes.splice(idx,1); if(wasActive)this.settings.activeMode=null; this.save(true); this.rerender();
-    this._offerUndo('模式「'+mode.name+'」',()=>{ modes.splice(idx,0,mode); if(wasActive)this.settings.activeMode=id; }); return true; }
+  createMode(name){ const result=createModeState(this.settings,name,{idFactory:()=>uid('m')}); if(!result.ok){this.toast(result.code==='duplicate-name'?'已有同名工作区':'请输入工作区名称','err');return null;} this.save(true); return result.mode; }
+  renameMode(id,name){ const result=renameModeState(this.settings,id,name); if(!result.ok){this.toast(result.code==='duplicate-name'?'已有同名工作区':'请输入工作区名称','err');return null;} this.save(true); return result.mode; }
+  reorderModes(ids){ const result=reorderModesState(this.settings,ids); if(result.ok)this.save(true); return result.ok; }
+  archiveMode(id){ const result=archiveModeState(this.settings,id); if(result.ok){this.save(true);this.rerender();} return result.ok; }
+  restoreMode(id){ const result=restoreModeState(this.settings,id); if(result.ok){this.save(true);this.rerender();} return result.ok; }
+  async deleteMode(id,strategy='detach'){ const mode=this.allModes().find(item=>item.id===id); if(!mode)return false;
+    if(strategy==='delete-groups')await saveSnapshot(this.cfg,'workspace-delete-groups');
+    const result=deleteModeState(this.settings,id,{strategy,groups:this.groups,markDeleted:group=>this._markDeletedGroup(group)}); if(!result.ok)return false;
+    await this.save(true); this.rerender();
+    if(strategy==='detach'){ const modes=this.settings.modes; this._offerUndo('工作区「'+result.mode.name+'」',()=>{modes.splice(result.index,0,result.mode);if(result.wasActive)this.settings.activeMode=id;}); }
+    else this.toast(`已删除工作区及 ${result.deletedGroupIds.length} 个分组；可从恢复历史找回`,'ok');
+    return true; }
   toggleModeGroup(mode,gid){ if(!mode)return; const ids=mode.groupIds||(mode.groupIds=[]), at=ids.indexOf(gid); if(at<0)ids.push(gid); else ids.splice(at,1); this.save(true); }
   toggleModeWidget(mode,wid){ if(!mode)return; const ids=mode.hiddenWidgets||(mode.hiddenWidgets=[]), at=ids.indexOf(wid); if(at<0)ids.push(wid); else ids.splice(at,1); this.save(true); }
   setModeShowFavs(mode,value){ if(!mode)return; mode.showFavs=!!value; this.save(true); }
@@ -461,8 +472,10 @@ class Core {
       const actions=[
         {ic:'plus',label:'新建网站',run:()=>this.openItemEditor(null, this.groups[0]&&this.groups[0].id)},
         {ic:'library-big',label:'打开书签库',run:()=>this.openLibrary()},
-        {ic:'layers',label:'新建模式',run:()=>this.promptModal('新建模式','模式名称，如 学习 / 工作 / 生活',name=>{
-          const mode=this.createMode(name); this.openModeEditor(mode); })},
+        {ic:'layers',label:'新建场景模式 / 工作区',keywords:'模式 工作区 workspace',run:()=>this.promptModal('新建工作区','名称，如 学习 / 工作 / 生活',name=>{const mode=this.createMode(name);if(mode)this.openModeEditor(mode);})},
+        {ic:'settings-2',label:'管理场景模式 / 工作区',keywords:'管理模式 管理工作区 workspace',run:()=>this.openModeManager()},
+        ...(this.archivedModes().length?[{ic:'archive-restore',label:'恢复归档模式 / 工作区',keywords:'归档 恢复 模式 工作区',run:()=>this.openModeManager('archived')}]:[]),
+        ...this.modes().map(mode=>({ic:'layers',label:`切换工作区：${mode.name}`,keywords:`场景 模式 workspace ${mode.name}`,run:()=>this.setActiveMode(mode.id)})),
         {ic:'cpu',label:'硬件监控设置',run:()=>{ const w=(this.settings.widgets||[]).find(x=>x.type==='hwmon'); w?this.openHwmonEditor(w):this.addWidget('hwmon'); }},
         {ic:'download',label:'导出备份',run:()=>this.exportConfig()},
         {ic:'upload',label:'导入备份',run:()=>this.importConfig()},
@@ -471,7 +484,7 @@ class Core {
         {ic:'settings',label:'打开设置',run:()=>this.openSettings()},
         {ic:'sun-moon',label:'切换深浅色',run:()=>{ const seq=['auto','dark','light']; const i=seq.indexOf(this.settings.theme||'auto'); this.settings.theme=seq[(i+1)%3]; this.applyTheme(); this.save(); }},
         {ic:'bookmark',label:'导入浏览器书签',run:()=>this.importBookmarks()},
-      ].filter(a=>!q || a.label.toLowerCase().includes(q));
+      ].filter(a=>!q || `${a.label} ${a.keywords||''}`.toLowerCase().includes(q));
       if(actions.length){ sec('操作'); actions.forEach(a=>mkRow({ic:a.ic,label:a.label,run:()=>{ this.closePalette(); a.run(); }})); }
       const groups=this.groups.filter(g=>!q || (g.name||'').toLowerCase().includes(q)).slice(0,6);
       if(groups.length){ sec('分组'); groups.forEach(g=>mkRow({group:g,label:g.name,sub:(g.archived?'已归档 · ':'')+this.flatItems(g).length+' 个',run:()=>{ this.closePalette(); this.gotoGroup(g.id); }})); }
@@ -649,7 +662,7 @@ class Core {
     if(type==='clock')this.settings.showClock=true; if(type==='weather')this.settings.showWeather=true;   // 加时钟/天气同时确保未被隐藏
     ws.push(w); this.markUserEdited(); this.save(); this.rerender(); if(type==='hwmon') this.openHwmonEditor(w); }   // 硬件监控加完即弹端点设置
   deleteGroup(group){ const idx=this.groups.indexOf(group); if(idx<0)return false; const affected=[];
-    this.modes().forEach(mode=>{ const hadAt=(mode.groupIds||[]).indexOf(group.id); if(hadAt>=0){ affected.push({mode,hadAt}); mode.groupIds.splice(hadAt,1); } });
+    this.allModes().forEach(mode=>{ const hadAt=(mode.groupIds||[]).indexOf(group.id); if(hadAt>=0){ affected.push({mode,hadAt}); mode.groupIds.splice(hadAt,1); } });
     this._markDeletedGroup(group); this.groups.splice(idx,1); this.save(true); this.rerender();
     this._offerUndo(group.name+'（'+this.flatItems(group).length+' 个网站）',()=>{ this.groups.splice(idx,0,group); affected.forEach(({mode,hadAt})=>mode.groupIds.splice(hadAt,0,group.id)); this._clearDeletedGroup(group); }); return true; }
   removeWidget(id){ const ws=this.settings.widgets||[], idx=ws.findIndex(w=>w.id===id); if(idx<0)return false; const w=ws[idx];
@@ -685,22 +698,36 @@ class Core {
     }) : [el('div','fn-hint','没有归档的分组')];
     this.openModal('归档管理',body,[this.btn('关闭','ghost',()=>this.openSettings())]); }
 
-  /* 场景模式管理：模式持有分组成员关系，配置即时落盘。 */
-  openModeManager(){ const modes=this.modes();
-    const body=modes.length?modes.map(mode=>{ const row=el('div','fn-sync-row');
-      row.append(el('div','fn-sync-label',mode.name+' · '+(mode.groupIds||[]).length+' 个分组'));
-      row.append(this.btn('编辑','ghost',()=>this.openModeEditor(mode),'pencil'));
-      row.append(this.btn('删除','danger',()=>{ this.deleteMode(mode.id); this.openModeManager(); },'trash-2'));
-      return row;
-    }):[el('div','fn-hint','还没有模式——新建一个，按场景定制首屏')];
-    this.openModal('管理模式',body,[this.btn('关闭','ghost',()=>this.openSettings()),this.btn('新建模式','primary',()=>this.promptModal('新建模式','模式名称，如 学习 / 工作 / 生活',name=>{ const mode=this.createMode(name); this.openModeEditor(mode); }),'plus')]); }
+  /* 场景模式（工作区）管理：只复用 settings.modes，不建立第二份模型。 */
+  openModeManager(view='active'){ const modes=this.modes(), archived=this.archivedModes(), body=[];
+    const move=(index,delta)=>{ const ids=modes.map(mode=>mode.id),next=index+delta;if(next<0||next>=ids.length)return;[ids[index],ids[next]]=[ids[next],ids[index]];this.reorderModes(ids);this.openModeManager(); };
+    body.push(el('div','fn-mode-section-title','使用中的工作区'));
+    if(!modes.length)body.push(el('div','fn-hint','还没有工作区——新建一个，按场景定制分组、首页常用和组件。'));
+    modes.forEach((mode,index)=>{ const row=el('div','fn-sync-row fn-mode-row'); row.dataset.modeId=mode.id;
+      const affected=(mode.groupIds||[]).filter(id=>this.groups.some(group=>group.id===id)).length;
+      row.append(el('div','fn-sync-label',mode.name+' · '+affected+' 个分组'));
+      const up=this.btn('上移','ghost',()=>move(index,-1),'arrow-up'),down=this.btn('下移','ghost',()=>move(index,1),'arrow-down');up.disabled=index===0;down.disabled=index===modes.length-1;
+      row.append(up,down,this.btn('编辑','ghost',()=>this.openModeEditor(mode),'pencil'),this.btn('归档','ghost',()=>{this.archiveMode(mode.id);this.openModeManager('archived');},'archive'),this.btn('删除','danger',()=>this.openModeDeleteConfirm(mode),'trash-2')); body.push(row); });
+    body.push(el('div','fn-mode-section-title','已归档'));
+    if(!archived.length)body.push(el('div','fn-hint','没有归档的工作区。归档会保留名称、分组和组件配置。'));
+    archived.forEach(mode=>{ const row=el('div','fn-sync-row fn-mode-row fn-mode-archived'); row.dataset.modeId=mode.id; const affected=(mode.groupIds||[]).filter(id=>this.groups.some(group=>group.id===id)).length;
+      row.append(el('div','fn-sync-label',mode.name+' · '+affected+' 个分组'),this.btn('恢复','ghost',()=>{this.restoreMode(mode.id);this.openModeManager();},'archive-restore'),this.btn('编辑','ghost',()=>this.openModeEditor(mode),'pencil'),this.btn('删除','danger',()=>this.openModeDeleteConfirm(mode),'trash-2')); body.push(row); });
+    this.openModal('管理场景模式 / 工作区',body,[this.btn('关闭','ghost',()=>this.openSettings()),this.btn('新建工作区','primary',()=>this.promptModal('新建工作区','名称，如 学习 / 工作 / 生活',name=>{const mode=this.createMode(name);if(mode)this.openModeEditor(mode);else this.openModeManager();}),'plus')]);
+    if(view==='archived')setTimeout(()=>document.querySelector('.fn-mode-archived')?.scrollIntoView({block:'center'}),30); }
+  openModeDeleteConfirm(mode){ if(!mode)return this.openModeManager(); const ids=new Set(mode.groupIds||[]),groups=this.groups.filter(group=>ids.has(group.id)),sites=groups.reduce((sum,group)=>sum+this.flatItems(group).length,0);
+    const hint=el('div','fn-hint',`「${mode.name}」关联 ${groups.length} 个分组、${sites} 个网站。默认只删除工作区，分组和网站仍保留在“全部收藏”。`);
+    const warning=el('div','fn-import-errors'); warning.append(el('div','fn-sub','只有选择“同时删除分组”才会移除这些分组并写入删除墓碑；执行前会保存恢复快照。'));
+    const buttons=[this.btn('返回','ghost',()=>this.openModeManager(mode.archived?'archived':'active'))];
+    if(groups.length)buttons.push(this.btn(`同时删除 ${groups.length} 个分组`,'danger',async()=>{await this.deleteMode(mode.id,'delete-groups');this.openModeManager();},'trash-2'));
+    buttons.push(this.btn('仅删除工作区','primary',async()=>{await this.deleteMode(mode.id,'detach');this.openModeManager();},'layers'));
+    this.openModal('删除工作区',[hint,warning],buttons); }
   openModeEditor(mode){ if(!mode)return this.openModeManager(); const nameI=this.inp(mode.name||'','模式名称');
     const typeName={clock:'时钟',weather:'天气',today:'今日',hwmon:'硬件监控'};
     const groups=this.groups.length?this.groups.map(g=>this.toggle(g.name,(mode.groupIds||[]).includes(g.id),()=>this.toggleModeGroup(mode,g.id))):[el('div','fn-hint','还没有分组可加入')];
     const widgets=(this.settings.widgets||[]).length?this.settings.widgets.map(w=>this.toggle(typeName[w.type]||w.type,!(mode.hiddenWidgets||[]).includes(w.id),()=>this.toggleModeWidget(mode,w.id))):[el('div','fn-hint','还没有可配置的小组件')];
     const favs=this.toggle('显示常用区',mode.showFavs!==false,value=>this.setModeShowFavs(mode,value));
-    const done=this.btn('完成','primary',()=>{ mode.name=nameI.value.trim()||'未命名模式'; this.save(true); this.openModeManager(); });
-    this.openModal('编辑模式',[this.field('名称',nameI),this.sect('分组',groups,true),this.sect('小组件',widgets),favs],[this.btn('返回','ghost',()=>this.openModeManager()),done]); setTimeout(()=>nameI.focus(),50); }
+    const done=this.btn('完成','primary',()=>{ if(this.renameMode(mode.id,nameI.value))this.openModeManager(mode.archived?'archived':'active'); });
+    this.openModal('编辑工作区',[this.field('名称',nameI),this.sect('分组',groups,true),this.sect('小组件',widgets),favs],[this.btn('返回','ghost',()=>this.openModeManager(mode.archived?'archived':'active')),done]); setTimeout(()=>nameI.focus(),50); }
 
 
   /* 云同步（WebDAV / Google Drive）子弹层 —— 从 openSettings 拆出（S1/S4），结构照 openHwmonEditor；关闭/保存回设置 */
@@ -792,7 +819,7 @@ class Core {
     const dangerWrap=el('div','fn-wrap'); dangerWrap.append(
       this.btn('恢复默认','ghost',async()=>{if(confirm('用内置默认覆盖当前配置？')){this.cfg=await this.fetchSeed();this.migrate();this.applyTheme();this.rerender();this.save(true);this.closeModal();}},'rotate-ccw'));
     const archiveWrap=el('div','fn-wrap'); archiveWrap.append(this.btn('归档管理','ghost',()=>this.openArchiveManager(),'archive'));
-    const modeWrap=el('div','fn-wrap'); modeWrap.append(this.btn('管理模式','ghost',()=>this.openModeManager(),'layers'));
+    const modeWrap=el('div','fn-wrap'); modeWrap.append(this.btn('管理场景模式 / 工作区','ghost',()=>this.openModeManager(),'layers'));
     const tourWrap=el('div','fn-wrap'); tourWrap.append(this.btn('重看新手引导','ghost',()=>import('./tour.js').then(m=>m.startTour(this)),'graduation-cap'));
     const statsWrap=el('div','fn-wrap'); statsWrap.append(this.btn('点击排行','ghost',()=>this.openStats(),'trophy'));
     const libraryWrap=el('div','fn-wrap'); libraryWrap.append(this.btn('打开书签库','ghost',()=>this.openLibrary(),'library-big'));
@@ -841,7 +868,7 @@ class Core {
       this.sect('高级与诊断',[
         this.field('使用统计',statsWrap),
         this.field('归档分组',archiveWrap),
-        this.field('场景模式',modeWrap),
+        this.field('场景模式 / 工作区',modeWrap),
         this.field('新手引导',tourWrap),
         this.field('诊断状态',diagWrap),
         this.field('危险操作',dangerWrap),

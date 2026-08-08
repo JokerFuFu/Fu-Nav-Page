@@ -768,7 +768,7 @@ git commit -m "fix: 固定核心图标并收紧网络权限"
 
 **Files:**
 - Create: `shared/modes.js`
-- Create: `tests/modes.test.mjs`
+- Create: `tests/workspaces.test.mjs`
 - Modify: `shared/core.js`
 - Modify: `layouts/fusion.js`
 - Modify: `layouts/fusion.css`
@@ -776,30 +776,30 @@ git commit -m "fix: 固定核心图标并收紧网络权限"
 **Interfaces:**
 - Produces: `listModes(settings)`；`createMode(settings, name)`；`renameMode(settings, id, name)`；`reorderModes(settings, ids)`；`archiveMode(settings, id)`；`restoreMode(settings, id)`；`deleteMode(settings, id)`。
 
-- [ ] **Step 1: 写工作区影响测试**
+- [x] **Step 1: 写工作区影响测试**
 
 基于现有 `settings.modes`：创建名称去空格且拒绝重复；重命名保留 mode id 和 groupIds；排序只改变 modes 顺序；归档保留完整配置但不出现在常用切换列表；恢复后原配置不变；删除模式不删除分组，若正在激活则回到全部收藏。
 
-- [ ] **Step 2: RED、实现、GREEN**
+- [x] **Step 2: RED、实现、GREEN**
 
-Run: `npm test -- tests/modes.test.mjs`
+Run: `npm test -- tests/workspaces.test.mjs`
 Expected before implementation: FAIL。
 实现纯函数。
-Run: `npm test -- tests/modes.test.mjs`
+Run: `npm test -- tests/workspaces.test.mjs`
 Expected after implementation: PASS。
 
-- [ ] **Step 3: 构建管理界面**
+- [x] **Step 3: 构建管理界面**
 
 扩展现有侧栏模式入口和管理 dialog，显示分组数、创建、重命名、排序、归档、恢复和删除。删除前明确说明只删除模式、不删除分组。
 
-- [ ] **Step 4: 命令面板接入**
+- [x] **Step 4: 命令面板接入**
 
 保留切换/新建操作，新增“管理场景模式”和“恢复归档模式”，搜索结果使用统一 search index；用户搜索“工作区”也能命中这些操作。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
-git add shared/modes.js shared/core.js layouts/fusion.js layouts/fusion.css tests/modes.test.mjs
+git add shared/modes.js shared/core.js layouts/fusion.js layouts/fusion.css tests/workspaces.test.mjs
 git commit -m "feat: 完成场景模式管理闭环"
 ```
 
