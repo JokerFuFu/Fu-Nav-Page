@@ -21,6 +21,8 @@ import { saveSnapshot, listSnapshots, restoreSnapshot } from './config-history.j
 import { parseImport, applyImport, mergeImportCandidate } from './config-import.js';
 import { countTree, locateNode, moveNode, removeNode, walkTree } from './tree.js';
 import { loadRuntimeState, saveRuntimeState, requestCapability as askCapability, completeOnboarding as buildOnboardingResult } from './runtime-state.js';
+import { buildSearchIndex, querySearchIndex } from './search-index.js';
+import { applyBulkOperation, clusterDuplicates, updateSelection } from './library-manager.js';
 
 export const $  = (s,r=document)=>r.querySelector(s);
 export const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
@@ -451,6 +453,7 @@ class Core {
       const open=it=>{ this.recordVisit(it); window.open(it.url, this.settings.openIn==='_self'?'_self':'_blank'); this.closePalette(); };
       const actions=[
         {ic:'plus',label:'新建网站',run:()=>this.openItemEditor(null, this.groups[0]&&this.groups[0].id)},
+        {ic:'library-big',label:'打开书签库',run:()=>this.openLibrary()},
         {ic:'layers',label:'新建模式',run:()=>this.promptModal('新建模式','模式名称，如 学习 / 工作 / 生活',name=>{
           const mode=this.createMode(name); this.openModeEditor(mode); })},
         {ic:'cpu',label:'硬件监控设置',run:()=>{ const w=(this.settings.widgets||[]).find(x=>x.type==='hwmon'); w?this.openHwmonEditor(w):this.addWidget('hwmon'); }},
@@ -465,8 +468,8 @@ class Core {
       if(actions.length){ sec('操作'); actions.forEach(a=>mkRow({ic:a.ic,label:a.label,run:()=>{ this.closePalette(); a.run(); }})); }
       const groups=this.groups.filter(g=>!q || (g.name||'').toLowerCase().includes(q)).slice(0,6);
       if(groups.length){ sec('分组'); groups.forEach(g=>mkRow({group:g,label:g.name,sub:(g.archived?'已归档 · ':'')+this.flatItems(g).length+' 个',run:()=>{ this.closePalette(); this.gotoGroup(g.id); }})); }
-      const sites=this.allItems().filter(({item})=>!q || (item.name+' '+item.url+' '+(item.note||'')).toLowerCase().includes(q)).slice(0,9);
-      if(sites.length){ sec('网站'); sites.forEach(({item,group})=>mkRow({item,label:item.name,sub:group.name,run:()=>open(item)})); }
+      const sites=querySearchIndex(buildSearchIndex(this.cfg),q,{limit:9});
+      if(sites.length){ sec('网站'); sites.forEach(entry=>mkRow({item:entry.item,label:entry.name,sub:[entry.groupName,...entry.folderPath].join(' / '),run:()=>open(entry.item)})); }
       if(!rows.length) list.appendChild(el('div','fn-pal-empty','没有匹配项'));
       sel=0; markSel(); };
     inp.value=''; render(); setTimeout(()=>inp.focus(),20);
@@ -543,7 +546,7 @@ class Core {
       if(e.key==='/'&&!typing&&$('#fnPalBack').hidden&&$('#fnBackdrop').hidden&&$('#fnFrameBack').hidden){ e.preventDefault(); this.openPalette(); return; }
       if(e.key==='Escape'){ if(!$('#fnPalBack').hidden){this.closePalette();return;} if(!$('#fnFrameBack').hidden){this.closeFrame();return;} if(!$('#fnBackdrop').hidden)this.closeModal(); }
     }); }
-  openModal(title,body,foot){ $('#fnMTitle').textContent=title; const b=$('#fnMBody'),f=$('#fnMFoot'); b.textContent=''; f.textContent='';
+  openModal(title,body,foot,options={}){ $('#fnMTitle').textContent=title; const b=$('#fnMBody'),f=$('#fnMFoot'),modal=$('#fnBackdrop .fn-modal'); b.textContent=''; f.textContent=''; modal?.classList.toggle('fn-modal-wide',!!options.wide);
     (Array.isArray(body)?body:[body]).forEach(n=>n&&b.appendChild(n)); (foot||[]).forEach(n=>n&&f.appendChild(n)); $('#fnBackdrop').hidden=false; }
   closeModal(){ $('#fnBackdrop').hidden=true;
     if(this._remoteDirty){ this._remoteDirty=false; this._maybeAdoptLatest(); } }   // 弹层期间挂起的存储更新，关弹层后补采纳
@@ -564,6 +567,7 @@ class Core {
   /* 网站 增/改 —— 链接等信息可编辑 */
   openItemEditor(item, gid){ const isNew=!item; const addTo=this._addToFolder; this._addToFolder=null;   // 从文件夹弹层「＋添加到此」进来时，新条目落入该文件夹
     const nameI=this.inp(item?.name||'','名称'), urlI=this.inp(item?.url||'','https://…'), noteI=this.inp(item?.note||'','备注/副标题（可选）');
+    const tagsI=this.inp((item?.tags||[]).join(', '),'标签，逗号分隔'), aliasesI=this.inp((item?.aliases||[]).join(', '),'别名，逗号分隔');
     const sel=el('select'); this.groups.forEach(g=>{const o=el('option',null,g.name);o.value=g.id;if(g.id===gid)o.selected=true;sel.appendChild(o);});
     const favC=this.toggle('固定到首页常用（不勾则按访问次数自动上榜）', item?.fav===true, ()=>{});
     const frameC=this.toggle('点击在面板内打开（iframe，适合内网后台，不跳页）', item?.frame===true, ()=>{});
@@ -574,14 +578,16 @@ class Core {
     const save=this.btn(isNew?'添加':'保存','primary',()=>{ let url=urlI.value.trim(); if(!url){this.toast('请填写网址','err');return;}
       if(/^\s*(javascript|data|vbscript):/i.test(url)){ this.toast('不支持 javascript:/data: 等协议','err'); return; }   // 拒绝可执行伪协议(存储型 XSS 防护)
       if(!/^[a-z]+:\/\//i.test(url)&&!/^(chrome|edge|about):/i.test(url)) url='https://'+url;
-      const data={name:nameI.value.trim()||hostOf(url)||url,url,note:noteI.value.trim(),icon:iconEd.getIcon(),fav:favC.querySelector('input').checked?true:undefined,frame:frameC.querySelector('input').checked?true:undefined};
+      const csv=value=>[...new Set(value.split(/[,，]/).map(part=>part.trim()).filter(Boolean))];
+      const data={name:nameI.value.trim()||hostOf(url)||url,url,note:noteI.value.trim(),tags:csv(tagsI.value),aliases:csv(aliasesI.value),icon:iconEd.getIcon(),fav:favC.querySelector('input').checked?true:undefined,frame:frameC.querySelector('input').checked?true:undefined};
       const tg=this.groups.find(g=>g.id===sel.value);
       if(!tg){ this.toast('目标分组已不存在','err'); return; }
       if(isNew){ data.id=uid('i'); if(addTo && addTo.gid===tg.id && this.isFolder(addTo.folder)){ (addTo.folder.items||(addTo.folder.items=[])).push(data); } else tg.items.push(data); } else { const keep=item.id; Object.assign(item,data); item.id=keep; const cur=this.groups.find(g=>this._containsItem(g,item)); if(cur&&cur!==tg){ this._removeItem(cur,item); tg.items.push(item); } }
       this.markUserEdited(); this.save(true);this.rerender();this.closeModal(); });
     const foot=[ isNew?null:this.btn('删除','danger',()=>{this.deleteItem(item);this.closeModal();}), this.btn('取消','ghost',()=>this.closeModal()), save ];   // deleteItem 递归定位（含文件夹内），与卡片悬停删除同一条路径
     const row=el('div','fn-row'); row.append(this.field('所属分组',sel),this.field('备注',noteI));
-    this.openModal(isNew?'添加网站':'编辑网站',[this.field('名称',nameI),this.field('网址',urlI),row,this.field('图标',iconEd.node),favC,frameC],foot.filter(Boolean));
+    const metaRow=el('div','fn-row'); metaRow.append(this.field('标签',tagsI),this.field('别名',aliasesI));
+    this.openModal(isNew?'添加网站':'编辑网站',[this.field('名称',nameI),this.field('网址',urlI),row,metaRow,this.field('图标',iconEd.node),favC,frameC],foot.filter(Boolean));
     setTimeout(()=>urlI.focus(),50); }
 
   /* 分组 增/改 */
@@ -766,6 +772,7 @@ class Core {
     const modeWrap=el('div','fn-wrap'); modeWrap.append(this.btn('管理模式','ghost',()=>this.openModeManager(),'layers'));
     const tourWrap=el('div','fn-wrap'); tourWrap.append(this.btn('重看新手引导','ghost',()=>import('./tour.js').then(m=>m.startTour(this)),'graduation-cap'));
     const statsWrap=el('div','fn-wrap'); statsWrap.append(this.btn('点击排行','ghost',()=>this.openStats(),'trophy'));
+    const libraryWrap=el('div','fn-wrap'); libraryWrap.append(this.btn('打开书签库','ghost',()=>this.openLibrary(),'library-big'));
     const syncSect=this.sect('同步与备份',[
       this.field('云同步（WebDAV / Google Drive）',cloudWrap),
       this.field('浏览器书签双向同步',bmWrap),
@@ -779,6 +786,7 @@ class Core {
         this.field('主题',this.seg([['auto','跟随系统'],['dark','深色'],['light','浅色']],s.theme,v=>{s.theme=v;this.applyTheme();})),
         this.field('强调色',accentGrid),
         this.field('常用区布局',favGridSeg),
+        this.field('书签库',libraryWrap),
         this.toggle('显示时钟与问候',s.showClock,v=>{s.showClock=v;}),
         this.toggle('显示天气',s.showWeather,async v=>{ if(v&&!this.weather.hasConsent())await this.enableWeatherConsent(); s.showWeather=v; }),
         this.toggle('内网在线状态探测',s.showStatus,v=>{s.showStatus=v;}),
@@ -794,6 +802,52 @@ class Core {
         this.field('危险操作',dangerWrap),
       ]),
     ],[ this.btn('完成','primary',()=>{ s.title=titleI.value.trim()||'Fu 导航'; this.applyTheme(); this.save(true); this.rerender(); this.closeModal(); }) ]); }
+
+  /* ====== 书签库：统一索引、筛选、多选、批量与重复处理 ====== */
+  openLibrary(){
+    const index=buildSearchIndex(this.cfg), selected=new Set(), clusters=clusterDuplicates(index.entries);
+    const duplicateLevel=new Map(); clusters.forEach(cluster=>cluster.items.forEach(item=>duplicateLevel.set(item.id,cluster.level)));
+    const root=el('div','fn-library'), filters=el('div','fn-library-filters'), actions=el('div','fn-library-actions'), results=el('div','fn-library-results');
+    const search=this.inp('','搜索名称、拼音、URL、备注、标签或别名'); search.type='search';
+    const makeSelect=(options,label)=>{ const select=el('select'); select.setAttribute('aria-label',label); options.forEach(([value,text])=>{const option=el('option',null,text);option.value=value;select.appendChild(option);}); return select; };
+    const groupFilter=makeSelect([['','全部分组'],...this.groups.map(group=>[group.id,group.name])],'分组筛选');
+    const folders=walkTree(this.groups).filter(entry=>this.isFolder(entry.node));
+    const folderFilter=makeSelect([['','全部文件夹'],...folders.map(entry=>[entry.node.id,entry.group.name+' / '+entry.node.name])],'文件夹筛选');
+    const tags=[...new Set(index.entries.flatMap(entry=>entry.tags))].sort((a,b)=>a.localeCompare(b,'zh-CN'));
+    const tagFilter=makeSelect([['','全部标签'],...tags.map(tag=>[tag,tag])],'标签筛选');
+    const statusFilter=makeSelect([['','全部状态'],['dead','失效链接'],['exact','精确重复'],['possible','可能重复']],'状态筛选');
+    filters.append(search,groupFilter,folderFilter,tagFilter,statusFilter);
+    const count=el('div','fn-library-count'); count.setAttribute('aria-live','polite');
+    const selectCurrent=this.btn('全选当前结果','ghost',null,'list-checks');
+    const destination=makeSelect(this.groups.flatMap(group=>[[`g:${group.id}`,`移动到 ${group.name}`],...this.allFolders(group).map(entry=>[`f:${group.id}:${entry.folder.id}`,`移动到 ${group.name} / ${entry.folder.name}`])]),'批量移动目标');
+    const moveButton=this.btn('批量移动','ghost',null,'folder-input'), deleteButton=this.btn('批量删除','danger',null,'trash-2');
+    actions.append(count,selectCurrent,destination,moveButton,deleteButton);
+    let visible=[];
+    const render=()=>{ const state=statusFilter.value;
+      visible=querySearchIndex(index,search.value,{groupId:groupFilter.value||undefined,folderId:folderFilter.value||undefined,tag:tagFilter.value||undefined,deadOnly:state==='dead'});
+      if(state==='exact'||state==='possible')visible=visible.filter(entry=>duplicateLevel.get(entry.id)===state);
+      results.textContent=''; count.textContent=`当前 ${visible.length} 个 · 已选 ${selected.size} 个`;
+      if(!visible.length){results.appendChild(el('div','fn-hint','没有符合当前筛选的书签'));return;}
+      visible.forEach(entry=>{ const row=el('div','fn-library-row'), check=el('input'); check.type='checkbox'; check.checked=selected.has(entry.id); check.setAttribute('aria-label','选择 '+entry.name);
+        check.onchange=()=>{ const next=updateSelection(selected,[entry.id],'toggle'); selected.clear(); next.forEach(id=>selected.add(id)); render(); };
+        const icon=el('span','fn-library-icon'); this.mountIcon(icon,entry.item,28);
+        const body=el('button','fn-library-main'); body.type='button'; body.onclick=()=>this.openItemEditor(entry.item,entry.groupId);
+        const line=el('span','fn-library-name'); line.append(el('strong',null,entry.name),el('small',null,[entry.groupName,...entry.folderPath].join(' / ')));
+        body.append(line,el('span','fn-library-url',entry.url));
+        const level=duplicateLevel.get(entry.id); if(level)body.appendChild(el('span','fn-library-badge '+level,level==='exact'?'精确重复':'可能重复'));
+        row.append(check,icon,body); results.appendChild(row); }); };
+    [search,groupFilter,folderFilter,tagFilter,statusFilter].forEach(control=>control.addEventListener(control===search?'input':'change',render));
+    selectCurrent.onclick=()=>{ const next=updateSelection(selected,visible.map(entry=>entry.id),'select-all'); selected.clear();next.forEach(id=>selected.add(id));render(); };
+    moveButton.onclick=async()=>{ const ids=[...selected]; if(!ids.length){this.toast('请先选择要移动的书签','err');return;} const [kind,groupId,folderId]=destination.value.split(':');
+      await saveSnapshot(this.cfg,'library-bulk-move'); const result=applyBulkOperation(this.cfg,ids,{type:'move',destination:{groupId,folderId:kind==='f'?folderId:undefined}});
+      if(!result.ok){this.toast(`移动完成 ${result.affected} 项，失败 ${result.errors.length} 项`,'err');return;} this.cfg=result.config;this.markUserEdited();await this.save(true);this.rerender();this.toast(`已移动 ${result.affected} 项`,'ok');this.openLibrary(); };
+    deleteButton.onclick=()=>{ const ids=[...selected]; if(!ids.length){this.toast('请先选择要删除的书签','err');return;}
+      this.openModal('确认批量删除',[el('div','fn-hint',`将删除 ${ids.length} 个书签。执行前会自动保存恢复快照。`)],[this.btn('返回','ghost',()=>this.openLibrary()),this.btn(`删除 ${ids.length} 项`,'danger',async()=>{
+        await saveSnapshot(this.cfg,'library-bulk-delete'); const result=applyBulkOperation(this.cfg,ids,{type:'delete'}); result.tombstones.forEach(id=>this._tombstones.add(id));
+        this.cfg=result.config;this.markUserEdited();await this.save(true);this.rerender();this.toast(`已删除 ${result.affected} 项，可从恢复历史回滚`,'ok');this.openLibrary(); },'trash-2')]); };
+    root.append(filters,actions,results); render();
+    this.openModal('书签库',[root],[this.btn('关闭','primary',()=>this.closeModal())],{wide:true}); setTimeout(()=>search.focus(),40);
+  }
 
   /* ====== 使用统计（小彩蛋）：clicks/frecency 纯读展示，命令面板与设置-高级可达 ====== */
   openStats(){ const entries=this.allItems();

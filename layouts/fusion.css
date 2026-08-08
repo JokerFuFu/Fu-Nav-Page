@@ -286,6 +286,27 @@ body.editing .lay-fusion .fx-card{ cursor:grab; }
 .lay-fusion .fx-weather-consent{ gap:var(--s2); }
 .lay-fusion .fx-weather-consent .fx-wcw-ico{ width:24px; height:24px; }
 .lay-fusion .fx-weather-consent .fn-btn{ align-self:flex-start; margin-top:auto; font-size:12px; }
+
+/* 书签库是高密度管理面板，沿用表层与 8px 栅格，不引入另一套视觉语言。 */
+.fn-modal.fn-modal-wide{ width:min(920px,calc(100vw - 32px)); }
+.fn-library{ display:flex; flex-direction:column; gap:var(--s3); }
+.fn-library-filters{ display:grid; grid-template-columns:minmax(220px,2fr) repeat(4,minmax(120px,1fr)); gap:var(--s2); }
+.fn-library-filters input,.fn-library-filters select,.fn-library-actions select{ min-width:0; width:100%; background-color:var(--surface-2); border:1px solid var(--border); border-radius:var(--r-sm); padding:var(--s2) var(--s3); color:var(--text); font:inherit; font-size:12px; }
+.fn-library-actions{ display:grid; grid-template-columns:minmax(150px,1fr) auto minmax(180px,1fr) auto auto; gap:var(--s2); align-items:center; }
+.fn-library-count{ color:var(--text-2); font-size:12px; font-variant-numeric:tabular-nums; }
+.fn-library-results{ max-height:52vh; overflow:auto; display:flex; flex-direction:column; border:1px solid var(--border); border-radius:var(--r-md); }
+.fn-library-row{ display:grid; grid-template-columns:20px 32px minmax(0,1fr); gap:var(--s3); align-items:center; min-height:58px; padding:var(--s2) var(--s3); border-bottom:1px solid var(--border); }
+.fn-library-row:last-child{ border-bottom:0; }
+.fn-library-row:hover{ background:var(--surface-2); }
+.fn-library-icon{ width:28px; height:28px; display:grid; place-items:center; overflow:hidden; border-radius:var(--r-sm); }
+.fn-library-icon img{ width:100%; height:100%; object-fit:contain; }
+.fn-library-main{ min-width:0; display:grid; grid-template-columns:minmax(140px,1fr) minmax(180px,1.4fr) auto; align-items:center; gap:var(--s3); text-align:left; }
+.fn-library-name{ min-width:0; display:flex; flex-direction:column; gap:var(--s1); }
+.fn-library-name strong,.fn-library-name small,.fn-library-url{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.fn-library-name strong{ font-size:13px; font-weight:600; color:var(--text); }
+.fn-library-name small,.fn-library-url{ color:var(--text-3); font-size:11px; }
+.fn-library-badge{ padding:var(--s1) var(--s2); border-radius:999px; font-size:11px; color:var(--text-2); background:var(--surface-3); white-space:nowrap; }
+.fn-library-badge.exact{ color:var(--warning); }
 .lay-fusion .fx-side-empty{ color:var(--text-3); font-size:12px; padding:var(--s2) var(--s3) var(--s1); }
 /* 子文件夹卡片 */
 .lay-fusion .fx-card.fx-folder{ text-align:left; cursor:pointer; width:100%; }
@@ -369,6 +390,11 @@ body:not(.editing) .lay-fusion .fx-card:active{ transform:translateY(0) scale(.9
   .fn-widget-actions{ grid-column:1 / -1; }
   .fn-onboard-grid{ grid-template-columns:1fr; }
   .fn-onboard-choice{ min-height:0; }
+  .fn-library-filters{ grid-template-columns:1fr; }
+  .fn-library-actions{ grid-template-columns:1fr 1fr; }
+  .fn-library-actions select{ grid-column:1 / -1; }
+  .fn-library-main{ grid-template-columns:1fr; gap:var(--s1); }
+  .fn-library-url{ display:none; }
 }
 
 /* 首页背景切换：悬浮入口 + 快捷面板 */

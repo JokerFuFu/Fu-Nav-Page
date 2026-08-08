@@ -285,7 +285,7 @@ criteria:
       type: command
       run: npm test -- tests/search-index.test.mjs
       expected: all search dimensions PASS
-    passes: false
+    passes: true
 
   - id: P1-SEARCH-002
     priority: P1
@@ -294,7 +294,7 @@ criteria:
       type: command
       run: npm test -- tests/search-index.test.mjs
       expected: incremental rebuild and deletion cases PASS
-    passes: false
+    passes: true
 
   - id: P1-LIBRARY-001
     priority: P1
@@ -303,7 +303,7 @@ criteria:
       type: command
       run: npm test -- tests/library-manager.test.mjs
       expected: selection, move, delete, tombstone and snapshot hooks PASS
-    passes: false
+    passes: true
 
   - id: P1-LIBRARY-002
     priority: P1
@@ -312,7 +312,7 @@ criteria:
       type: command
       run: npm test -- tests/url.test.mjs tests/library-manager.test.mjs
       expected: duplicate classification and clustering PASS
-    passes: false
+    passes: true
 
   - id: P1-LIBRARY-003
     priority: P1
@@ -323,7 +323,7 @@ criteria:
         - 打开书签库
         - 依次应用失效、分组、文件夹和标签筛选
       expected: each filter changes result set and count consistently
-    passes: false
+    passes: true
 
   - id: P1-POPUP-001
     priority: P1

@@ -526,7 +526,7 @@ Expected after implementation: PASS。
 
 将平台允许按需申请的 `bookmarks`、`identity` 移入 `optional_permissions`；用户拒绝时展示不阻塞的说明。保留角标所需的最小权限，并在 README 准确解释。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add shared/runtime-state.js shared/storage.js shared/weather.js shared/core.js layouts/fusion.js layouts/fusion.css manifest.json README.md tests/onboarding.test.mjs
@@ -550,11 +550,11 @@ git commit -m "feat: 增加首次使用与按需授权流程"
 **Interfaces:**
 - Produces: `buildSearchIndex(config)`；`querySearchIndex(index, query, options)`；`clusterDuplicates(items)`；`applyBulkOperation(config, ids, operation)`。
 
-- [ ] **Step 1: 固定第三方源码与许可证**
+- [x] **Step 1: 固定第三方源码与许可证**
 
 从 `pinyin-pro@3.18.2` 官方发布包提取浏览器 ESM 构建，保存完整 MIT LICENSE；在 README Third-party 区记录版本、用途和上游地址。源码不得从 CDN 动态加载。
 
-- [ ] **Step 2: 写拼音和模糊搜索失败测试**
+- [x] **Step 2: 写拼音和模糊搜索失败测试**
 
 ```js
 test('matches Chinese names by full pinyin, initials and typo-tolerant latin text', () => {
@@ -565,11 +565,11 @@ test('matches Chinese names by full pinyin, initials and typo-tolerant latin tex
 });
 ```
 
-- [ ] **Step 3: 写批量操作与重复聚类测试**
+- [x] **Step 3: 写批量操作与重复聚类测试**
 
 批量移动深层网站保留 ID 和 metadata；批量删除写墓碑；精确重复自动成组，possible 重复只提示不自动合并，业务查询不同保持 distinct。
 
-- [ ] **Step 4: RED、实现、GREEN**
+- [x] **Step 4: RED、实现、GREEN**
 
 Run: `npm test -- tests/search-index.test.mjs tests/library-manager.test.mjs`
 Expected before implementation: FAIL。
@@ -577,11 +577,11 @@ Expected before implementation: FAIL。
 Run: `npm test -- tests/search-index.test.mjs tests/library-manager.test.mjs`
 Expected after implementation: PASS。
 
-- [ ] **Step 5: 构建书签库 UI**
+- [x] **Step 5: 构建书签库 UI**
 
 命令面板和设置增加“打开书签库”。书签库包含搜索、分组/状态筛选、结果计数、多选、全选当前结果、批量移动/删除、重复组和失效链接视图。所有危险操作先显示影响数量并创建快照。
 
-- [ ] **Step 6: 接入标签、别名与备注**
+- [x] **Step 6: 接入标签、别名与备注**
 
 网站编辑器增加 `tags:string[]` 和 `aliases:string[]`，输入使用逗号分隔并规范化去重；搜索索引包含 name/url/note/tags/aliases/group/folder path。
 

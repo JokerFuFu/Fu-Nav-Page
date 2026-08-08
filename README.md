@@ -42,6 +42,7 @@
 - **首次使用**：首次打开可选择导入浏览器书签、使用演示模板或从空白开始；关闭不会替你做选择。天气、浏览器书签和 Google Drive 都只在用户明确启用后开始授权或联网。
 - **内置图标库**：图标编辑「在线」里内置近百个（96 个）常用服务/homelab 图标，可搜索点选，免 favicon 抓取失败。
 - **易操作**：右上/侧栏 `＋` 加站；卡片编辑（链接、名称、备注、图标、所属分组、是否首页常用）；编辑模式锁定/解锁；一键导入浏览器书签；导入/导出备份。
+- **书签库**：名称、中文、全拼、拼音首字母、URL、备注、标签和别名统一搜索；支持分组/文件夹/标签/失效/重复筛选、全选当前结果、批量移动与批量删除，危险操作前自动保存恢复快照。
 - **内网在线状态**：对 `192.168.1.x` 这类内网服务 best-effort 探测，装伴随服务（目前仅 macOS）后为真实在线状态。
 - **搜索 + AI**：站内过滤 + 搜索引擎（Bing/Google/百度）与 AI（Kimi/ChatGPT/Claude/Perplexity/豆包/DeepSeek）在搜索框左侧一键切换，快捷键 `/` 聚焦；深/浅色主题。
 - **内置演示配置**：首次安装即见完整示例（分组、文件夹、常用大卡、监控卡），可一键导入自己的浏览器书签后替换。
@@ -193,6 +194,9 @@ shared/
   agent.js             # 本机伴随服务对接
   background.js / bg-presets.js / bg-storage.js / accent-presets.js   # 背景壁纸与主题强调色（此 background.js 是壁纸应用层，非 Service Worker）
   base.css             # 设计 token + 基础组件样式
+vendor/
+  pinyin-pro.esm.js    # 固定版本的中文拼音检索实现（本地加载，无运行时 CDN）
+  pinyin-pro.LICENSE   # 上游 MIT 许可证
 layouts/
   fusion.{js,css}      # 融合布局：侧栏 + Hero + 分组面板
 agent/                 # 可选本机伴随服务（见 agent/README.md）
@@ -218,6 +222,10 @@ npx @google/design.md lint DESIGN.md   # 0 errors
 - [homarr-labs/dashboard-icons](https://github.com/homarr-labs/dashboard-icons) / [Lucide](https://lucide.dev)：品牌图标与线性图标库。
 - [eryajf/awesome-navigation](https://github.com/eryajf/awesome-navigation)：导航方案选型对比。
 - 采用扩展而非自托管的原因见顶部「为什么是扩展」一节。
+
+### Third-party
+
+- [`pinyin-pro` 3.18.2](https://www.npmjs.com/package/pinyin-pro)：用于书签库的中文全拼与首字母索引。本仓库固定保存官方 npm 发布包中的浏览器 ESM 构建及完整 MIT LICENSE，不动态加载远程代码。
 
 ## 🔒 隐私
 

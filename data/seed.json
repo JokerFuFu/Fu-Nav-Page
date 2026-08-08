@@ -42,6 +42,8 @@
           "name": "GitHub",
           "url": "https://github.com/",
           "note": "",
+          "tags": ["开发", "代码"],
+          "aliases": ["代码托管"],
           "fav": true
         },
         {
@@ -98,7 +100,9 @@
               "id": "i007",
               "name": "DSM 管理",
               "url": "https://192.168.1.10:5001/",
-              "note": "群晖/绿联等 NAS 后台，改成你的 IP"
+              "note": "群晖/绿联等 NAS 后台，改成你的 IP",
+              "tags": ["内网", "NAS"],
+              "aliases": ["群晖"]
             },
             {
               "id": "i008",
