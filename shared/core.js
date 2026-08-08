@@ -1,11 +1,11 @@
 /* ============ Fu 导航 · 共享内核 ============ */
 import { isExtension, loadConfig, saveConfig, onRemoteChange, getBookmarksTree, drainInbox } from './storage.js';
-import { mountItemIcon, mountGroupIcon } from './icons.js?v=3.24.5';
+import { mountItemIcon, mountGroupIcon } from './icons.js?v=3.25.0';
 import { getWeather, preciseLocate, wmo } from './weather.js';
 import { fetchAgentData, agentProbe } from './agent.js';
 import { cloudEnabled, cloudGet, cloudPut, cloudTest, cloudPutBackup, cloudListBackups, cloudGetFile } from './cloud.js';
-import { lucide, hostOf, isPrivateHost, brandIcon, faviconCandidates, iconSearch } from './icon-map.js';
-import { createIconEditor } from './icon-editor.js?v=3.24.5';
+import { lucide, hostOf, isPrivateHost, brandIcon, faviconCandidates, iconSearch } from './icon-map.js?v=3.25.0';
+import { createIconEditor } from './icon-editor.js?v=3.25.0';
 import { infinityToGroups, mergeInfinity } from './import-infinity.js';
 import { exportConfig as bmExport, importConfig as bmImport, cfgSignature as bmCfgSig, bmAvailable, ROOT_TITLE } from './bmsync.js';
 import { applyBackground, refreshOnlineBackground, effectiveTheme, DEFAULT_ONLINE_SOURCE } from './background.js';

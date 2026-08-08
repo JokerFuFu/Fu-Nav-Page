@@ -1,13 +1,12 @@
 /* ============ 融合布局 v3.1：极简AI首页 + 时钟/天气卡 + 右键编辑 + 拖拽 ============ */
 import { $, $$, el, safeHref } from '../shared/core.js';
-import { lucide } from '../shared/icon-map.js';
+import { dashboardIcon, lucide } from '../shared/icon-map.js?v=3.25.0';
 import { fetchGlances } from '../shared/hwmon.js';
 import { PRESETS } from '../shared/bg-presets.js';
 import { effectiveTheme, ONLINE_SOURCES, DEFAULT_ONLINE_SOURCE } from '../shared/background.js';
 import { filterContent, filterKeyAction } from '../shared/provider-action.js';
 import { homeDensity, visibleWidgets } from '../shared/home-settings.js';
-const DI = s => `https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons@main/svg/${s}.svg`;
-const picon = p => (p.icon && p.icon.startsWith('http')) ? p.icon : DI(p.icon);
+const picon = p => (p.icon && p.icon.startsWith('http')) ? p.icon : dashboardIcon(p.icon);
 let active='home', clockTimer=null, drag=null, clockEls=null, ctxMenu=null, ctxTrigger=null, askOutsideHandler=null;
 
 document.addEventListener('click', ()=>hideCtx());

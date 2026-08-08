@@ -411,7 +411,7 @@ criteria:
         - 触发一次成功本机保存和一次模拟云失败
         - 打开高级与诊断
       expected: all named fields are visible with timestamps or explicit unavailable state
-    passes: false
+    passes: true
 
   - id: P2-DIAG-002
     priority: P2
@@ -420,7 +420,7 @@ criteria:
       type: command
       run: npm test -- tests/diagnostics.test.mjs
       expected: redaction cases PASS
-    passes: false
+    passes: true
 
   - id: P2-SETTINGS-001
     priority: P2
@@ -429,7 +429,7 @@ criteria:
       type: browser-measurement
       viewport: 1024x720
       expected: header and primary action intersect viewport while content region scrolls independently
-    passes: false
+    passes: true
 
   - id: P2-OFFLINE-001
     priority: P2
@@ -438,7 +438,7 @@ criteria:
       type: command
       run: npm test -- tests/offline-static.test.mjs
       expected: local core icon and pinned dependency rules PASS
-    passes: false
+    passes: true
 
   - id: P2-OFFLINE-002
     priority: P2
@@ -449,7 +449,7 @@ criteria:
         - 断开网络并重新加载已解压扩展
         - 遍历首页、分组、文件夹、设置、编辑和 popup
       expected: core actions work, every item has a recognizable icon fallback, console error count is 0
-    passes: false
+    passes: true
 
   - id: P2-PERM-001
     priority: P2
@@ -458,7 +458,7 @@ criteria:
       type: command
       run: npm run verify:static
       expected: manifest and network disclosure rules PASS
-    passes: false
+    passes: true
 
   - id: P2-WORKSPACE-001
     priority: P2

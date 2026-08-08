@@ -713,7 +713,7 @@ Expected after implementation: PASS。
 
 设置 WebDAV 凭据后导出备份并调用 cloud payload builder，对两个 JSON 运行 secret 扫描，必须零命中。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add shared/core.js shared/base.css shared/storage.js shared/cloud.js layouts/fusion.js tests/diagnostics.test.mjs
@@ -734,30 +734,30 @@ git commit -m "feat: 重组设置并增加同步诊断"
 **Interfaces:**
 - Produces: 本地 `lucide(name)` 映射；`brandIconCandidates(item)` 的本地优先候选列表。
 
-- [ ] **Step 1: 写静态失败测试**
+- [x] **Step 1: 写静态失败测试**
 
 禁止运行时代码出现 `@latest`、`@main`、未固定 jsDelivr 包地址；manifest 禁止 `v1.hitokoto.cn`；README 权限表必须覆盖 manifest permissions/host permissions。
 
-- [ ] **Step 2: 运行 RED**
+- [x] **Step 2: 运行 RED**
 
 Run: `npm test -- tests/offline-static.test.mjs`
 Expected: FAIL，列出当前远程图标和未使用权限。
 
-- [ ] **Step 3: 打包核心图标并提供 fallback**
+- [x] **Step 3: 打包核心图标并提供 fallback**
 
 将代码实际引用的 Lucide SVG 固定在本地模块；品牌图标候选顺序为扩展 favicon API → 本机缓存 → 固定版本远程源 → 字母 fallback。断网不得产生未捕获错误。
 
-- [ ] **Step 4: 清理 manifest 与 HTML**
+- [x] **Step 4: 清理 manifest 与 HTML**
 
 移除 hitokoto host 权限和无字体样式对应的 gstatic/jsDelivr preconnect；核对所有剩余 host 权限均有源码调用和 README 解释。
 
-- [ ] **Step 5: GREEN 与离线手测**
+- [x] **Step 5: GREEN 与离线手测**
 
 Run: `npm test -- tests/offline-static.test.mjs`
 Expected: PASS。
 浏览器离线后打开新标签页，分组、搜索、编辑、设置和 popup 均可识别并无 console error。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add shared/icon-map.js shared/icons.js newtab.html manifest.json README.md tools/verify-static.mjs tests/offline-static.test.mjs

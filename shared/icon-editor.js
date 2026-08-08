@@ -4,11 +4,11 @@
  * 被 core.openItemEditor 与工具栏 popup 复用，保证两处不漂移。
  */
 import { mountItemIcon } from './icons.js?v=3.24.5';
-import { iconSearch } from './icon-map.js';
+import { dashboardIcon, iconSearch } from './icon-map.js?v=3.25.0';
 
 export const ICON_COLORS = ['#ef4444','#f97316','#f59e0b','#22c55e','#06b6d4','#3b82f6','#8b5cf6','#ec4899','#64748b'];
 const DEF_FONT = 45;   // 纯色字号默认（% of tile）
-const DI = s => `https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons@main/svg/${s}.svg`;
+const DI = dashboardIcon;
 /* 内置精选图标库（dashboard-icons slug，常用 homelab + 主流站点），免 favicon 抓取失败 */
 const ICON_LIB = ['synology','plex','jellyfin','emby','portainer','docker','grafana','prometheus','home-assistant','adguard-home','pi-hole','nginx','nginx-proxy-manager','traefik','gitea','github','gitlab','jenkins','sonarr','radarr','prowlarr','bazarr','jellyseerr','overseerr','qbittorrent','transmission','sabnzbd','tautulli','uptime-kuma','vaultwarden','nextcloud','immich','paperless-ngx','frigate','proxmox','truenas','unraid','openwrt','pfsense','opnsense','wireguard','tailscale','cloudflare','authentik','keycloak','jackett','calibre-web','audiobookshelf','navidrome','filebrowser','code-server','n8n','node-red','influxdb','mariadb','postgresql','redis','mongodb','minio','rclone','duplicati','watchtower','dozzle','glances','netdata','homepage','homarr','heimdall','dashy','jdownloader','aria2','rustdesk','guacamole','wikijs','bookstack','mealie','firefly-iii','stirling-pdf','it-tools','excalidraw','kavita','komga','mastodon','element','jitsi','rocket-chat','mattermost','steam','kodi','youtube','bilibili','spotify','google','notion','obsidian','figma'];
 

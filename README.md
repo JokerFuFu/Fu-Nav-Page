@@ -31,7 +31,7 @@
 - **融合布局**：左侧分组侧边栏（Lucide 线性图标 + 计数，点击平滑跳转）、大屏 Hero（大时钟 + 问候 + 天气 + 大搜索框）、常用大卡 + 紧凑分组面板（信息密度借鉴 [gethomepage/homepage](https://github.com/gethomepage/homepage)）。
 - **智能常用区**：锁定段 + 自动段两段式——右键卡片「锁定到常用」固定位置（带 pin 角标、可拖拽排序），其余按 **frecency**（点击次数 × 时间衰减）自动流动，最近常用的自己浮上来；网格规格可选 **6×2 / 8×2 / 6×3 / 8×3**（设置 → 常用）。
 - **分组导航**（一等概念）：homelab 服务按设备/用途分组（NAS、软路由、虚拟化平台、网络设备…），网页书签按主题分组，统一在一个页面。
-- **真实图标**：homelab 服务用 [dashboard-icons](https://github.com/homarr-labs/dashboard-icons) 品牌图标（DSM/Gitea/Plex/qBittorrent/AdGuard…），分组头用 [Lucide](https://lucide.dev) 线性图标，任意网站走 Google faviconV2（128px 高清）自动抓取，全部带字母色块兜底（编辑图标时还可手动搜 apple-touch-icon / icon.horse 候选）。
+- **真实图标**：分组与核心操作的线性图标随扩展打包；网站优先读取 Chrome 本地 favicon，已知 homelab 服务再使用固定版本的 [dashboard-icons](https://github.com/homarr-labs/dashboard-icons)，最后落到高对比度字母色块。只有用户主动打开“在线图标”编辑器时，才会搜索 Google favicon / apple-touch-icon / icon.horse 候选。
 - **小组件**：大时钟 + 问候；天气（[open-meteo](https://open-meteo.com) 免 key + IP 定位，带缓存，点天气可切精确定位）。
 - **多端同步**：`chrome.storage.sync` 切片存储（绕过 8KB/项限制）+ `local` 离线兜底 + 跨端实时刷新；改动立即落盘 + `savedAt` 时间戳择新，重载不丢。
 - **工具栏收藏弹窗**：点扩展图标即弹出编辑框收藏当前页——网站名称 + 四模式图标（自动 / 纯色字母 / 在线候选 / 本地上传）+ 选分组；**已收藏的页面工具栏图标显示 ✓ 角标**，再点进入编辑/删除，确定后首页自动刷新。
@@ -229,14 +229,18 @@ npx @google/design.md lint DESIGN.md   # 0 errors
 
 ## 🔒 隐私
 
-纯本地 + 浏览器账号同步，**没有自建服务器，你的数据不经任何第三方中转**（可选的 WebDAV / Google Drive 云备份除外——那是你自己指定的存储）。字体已本地自托管，**不向 Google Fonts 外链**。为如实起见，逐项列出会发生的外部请求：
+纯本地 + 浏览器账号同步，**没有自建服务器，你的数据不经任何第三方中转**（可选的 WebDAV / Google Drive 云备份除外——那是你自己指定的存储）。字体和核心线性图标均随扩展打包，**不向 Google Fonts 外链**。运行时可能发生的网络访问如下：
 
-- **每次打开新标签页**：品牌/线性图标从 `cdn.jsdelivr.net` 取（[dashboard-icons](https://github.com/homarr-labs/dashboard-icons) / [Lucide](https://lucide.dev)）；公网站点的 favicon 走 Google `t3.gstatic.com`（faviconV2），个别服务品牌图标可能取 `avatars.githubusercontent.com` 头像。
-- **开启天气时**：`ipwho.is` / `get.geojs.io`（IP 粗定位）+ `api.open-meteo.com`（天气数据）。
-- **选用在线壁纸源时**：`t.alcy.cc` / `picsum.photos` / `www.bing.com`（仅当前所选源）。
-- **手动在图标编辑器里搜候选图标时**：目标站 `apple-touch-icon` + `t3.gstatic.com` + `icon.horse`。
-- **配置了云同步时**：你自己的 WebDAV 地址，或 Google Drive（`googleapis.com`，需你自建 OAuth）。
-- **主动用搜索/AI 时**：跳转到对应引擎（Bing/Google/百度）或 AI（Kimi/ChatGPT/Claude 等）——这是你点击发起的正常导航。
+| 触发时机 | 访问目标 | 发送内容与用途 |
+|---|---|---|
+| 显示已知服务品牌图标且本地 favicon 不可用 | `cdn.jsdelivr.net`、`avatars.githubusercontent.com` | 仅请求固定版本 dashboard/simple icon 或少数项目头像；失败后使用本地字母图标 |
+| 用户主动打开“在线图标”编辑器 | 目标站自身、`t3.gstatic.com`、`icon.horse`、`cdn.jsdelivr.net` | 仅按名称/域名查找候选图标，不上传书签清单 |
+| 用户明确启用天气 | `ipwho.is`、`get.geojs.io`、`api.open-meteo.com` | IP 粗定位与天气请求；同意前零请求 |
+| 用户选择在线壁纸 | `www.bing.com`、`*.alcy.cc`（如 `t.alcy.cc`）、`picsum.photos` 或用户自定义地址 | 下载当前选择的图片并缓存到本机 |
+| 用户启用 Google Drive | `accounts.google.com`、`www.googleapis.com` | OAuth 授权与脱敏配置备份 |
+| 用户启用 WebDAV / 自定义硬件监控 | 用户填写的地址（由 `optional_host_permissions` 的 `*://*/*` 按站点请求） | 备份配置或读取硬件指标；不启用不申请 |
+| 安装本机伴随服务 | `127.0.0.1:7842` | 读取本机日历、提醒、日报或硬件数据 |
+| 用户主动搜索 / 打开网站 | 用户选择的搜索引擎、AI 或书签目标 | 正常页面导航，不是后台遥测 |
 
 内网服务的图标走 Chrome 本地缓存不外发；伴随服务只监听 `127.0.0.1`。
 
