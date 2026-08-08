@@ -344,7 +344,7 @@ git commit -m "feat: 增加导入预览校验与回滚"
 **Interfaces:**
 - Produces: `walkTree(groups)`；`locateNode(groups, id)`；`removeNode(groups, id)`；`moveNode(groups, id, destination)`；`countTree(items)`；`canMoveNode(groups, id, destination)`。
 
-- [ ] **Step 1: 写两级嵌套移动和删除测试**
+- [x] **Step 1: 写两级嵌套移动和删除测试**
 
 ```js
 test('moves a nested site to another group and deletes it recursively', () => {
@@ -357,11 +357,11 @@ test('moves a nested site to another group and deletes it recursively', () => {
 });
 ```
 
-- [ ] **Step 2: 写循环与深度限制测试**
+- [x] **Step 2: 写循环与深度限制测试**
 
 移动文件夹到自身或后代、创建第三级文件夹必须返回 `{ ok:false, code:'invalid-destination' }`，且原树不变。
 
-- [ ] **Step 3: RED、实现、GREEN**
+- [x] **Step 3: RED、实现、GREEN**
 
 Run: `npm test -- tests/tree.test.mjs`
 Expected before implementation: FAIL。
@@ -369,15 +369,15 @@ Expected before implementation: FAIL。
 Run: `npm test -- tests/tree.test.mjs`
 Expected after implementation: PASS。
 
-- [ ] **Step 4: 收口编辑模式**
+- [x] **Step 4: 收口编辑模式**
 
 `wireSidebarDnD`、`wireGridDnD`、folder drop 和 favorite drag 仅在 `core.editing` 时绑定；所有 draggable 属性、抓取光标、编辑帮助文案和卡片操作按钮均从 `core.editing` 派生。解锁/锁定入口使用一个 `core.setEditing(boolean)` 方法。
 
-- [ ] **Step 5: 增加页面计数**
+- [x] **Step 5: 增加页面计数**
 
 分组标题显示“顶层 N 项 · 共 M 网站”，文件夹卡显示“X 网站 · Y 子文件夹”；grid/detail 两种视图都可见。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add shared/tree.js shared/core.js shared/bmsync.js layouts/fusion.js layouts/fusion.css popup.js tests/tree.test.mjs

@@ -19,6 +19,7 @@ import { injectSecrets, sanitizeConfig } from './config-secrets.js';
 import { applyInboxOps } from './sync-policy.js';
 import { saveSnapshot, listSnapshots, restoreSnapshot } from './config-history.js';
 import { parseImport, applyImport, mergeImportCandidate } from './config-import.js';
+import { countTree, locateNode, moveNode, removeNode, walkTree } from './tree.js';
 
 export const $  = (s,r=document)=>r.querySelector(s);
 export const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
@@ -350,42 +351,42 @@ class Core {
   /* 锁定到常用区 */
   pinFavorite(item){ if(!item)return; item.fav=true; this.save(true); }
   setFavOrder(ids){ this.cfg.favOrder=ids; this.save(true); }
+  setEditing(value){ this.editing=!!value; this.settings.locked=!this.editing; document.body.classList.toggle('editing',this.editing); this.rerender(); return this.editing; }
   /* 递归定位（任意层级，含文件夹内）后移动到目标分组顶层；同组顶层为无操作，同组文件夹内=移出文件夹 */
-  moveItemToGroup(iid, toGid){ const to=this.groups.find(g=>g.id===toGid); if(!to)return false;
-    for(const g of this.groups){ const hit=this.flatItems(g).find(x=>x.item.id===iid);
-      if(!hit) continue;
-      if(g===to && !hit.folder) return false;
-      this._removeItem(g, hit.item); to.items.push(hit.item); this.save(true); return true; }
-    return false; }
+  moveItemToGroup(iid, toGid){ const hit=locateNode(this.groups,iid); if(!hit || (hit.group.id===toGid&&!hit.parent))return false;
+    const moved=moveNode(this.groups,iid,{groupId:toGid}); if(!moved.ok)return false; this.save(true); return true; }
 
   /* ===== 子文件夹（分组 → 文件夹 → 网站，两级）===== */
   isFolder(it){ return !!(it && it.type==='folder'); }
+  treeCount(items){ return countTree(items); }
   /* 展平一个分组的全部可点击网站（任意层文件夹内），返回 [{item,group,folder?}] —— 搜索/常用用 */
-  flatItems(g){ const out=[]; const walk=(arr,folder)=>{ (arr||[]).forEach(it=>{ if(this.isFolder(it)) walk(it.items,it); else out.push({item:it,group:g,folder}); }); }; walk(g.items,null); return out; }
+  flatItems(g){ return walkTree([g]).filter(x=>!this.isFolder(x.node)).map(x=>({item:x.node,group:g,folder:x.parent})); }
   /* 全部网站（跨分组，含文件夹内） */
   allItems(){ const out=[]; this.groups.forEach(g=>out.push(...this.flatItems(g))); return out; }
   /* 递归：该分组里（任意层）是否包含此条目 */
-  _containsItem(g, item){ const has=arr=>(arr||[]).includes(item)||(arr||[]).some(it=>this.isFolder(it)&&has(it.items||[])); return has(g.items||[]); }
+  _containsItem(g, item){ const hit=item&&locateNode(this.groups,item.id); return !!hit&&hit.group===g&&hit.node===item; }
   /* 递归：从某分组（任意层）移除条目 */
-  _removeItem(g, item){ const rm=arr=>{ const i=arr.indexOf(item); if(i>=0){ arr.splice(i,1); return true; } for(const it of arr){ if(this.isFolder(it) && rm(it.items||(it.items=[]))) return true; } return false; }; return rm(g.items||[]); }
-  _itemLocation(item){ for(const g of this.groups){ const find=arr=>{ const idx=arr.indexOf(item); if(idx>=0)return {arr,idx,group:g}; for(const it of arr){ if(this.isFolder(it)){ const hit=find(it.items||[]); if(hit)return hit; } } return null; }; const hit=find(g.items||[]); if(hit)return hit; } return null; }
+  _removeItem(g, item){ const hit=item&&locateNode(this.groups,item.id); if(!hit||hit.group!==g||hit.node!==item)return false; return removeNode(this.groups,item.id).ok; }
+  _itemLocation(item){ const hit=item&&locateNode(this.groups,item.id); return hit&&hit.node===item?{arr:hit.parentItems,idx:hit.index,group:hit.group,parent:hit.parent}:null; }
   /* 递归：所有文件夹（任意层），带 depth（0=顶层） —— 移入子菜单/侧栏树用 */
-  allFolders(g){ const out=[]; const walk=(arr,depth)=>{ (arr||[]).forEach(it=>{ if(this.isFolder(it)){ out.push({folder:it,depth}); walk(it.items,depth+1); } }); }; walk(g.items,0); return out; }
+  allFolders(g){ return walkTree([g]).filter(x=>this.isFolder(x.node)).map(x=>({folder:x.node,depth:x.depth})); }
   /* 某文件夹的直接父容器数组 + 所在分组 */
-  _folderParent(folder){ for(const g of this.groups){ const find=arr=>{ if(arr.includes(folder))return arr; for(const it of arr){ if(this.isFolder(it)){ const r=find(it.items||[]); if(r)return r; } } return null; }; const arr=find(g.items||[]); if(arr) return {arr,group:g}; } return null; }
+  _folderParent(folder){ const hit=folder&&locateNode(this.groups,folder.id); return hit&&hit.node===folder?{arr:hit.parentItems,group:hit.group,parent:hit.parent}:null; }
   /* 某条目所在的直接文件夹（任意层），无则 null */
-  _itemFolder(g, item){ const find=arr=>{ for(const it of arr){ if(this.isFolder(it)){ if((it.items||[]).includes(item))return it; const r=find(it.items||[]); if(r)return r; } } return null; }; return find(g.items||[]); }
+  _itemFolder(g, item){ const hit=item&&locateNode(this.groups,item.id); return hit&&hit.group===g&&hit.node===item?hit.parent:null; }
   /* 删除条目（跨分组、含文件夹内） */
   deleteItem(item){ const hit=this._itemLocation(item); if(!hit)return false;
     this._markDeleted(item); hit.arr.splice(hit.idx,1); this.save(true); this.rerender();
     this._offerUndo(item.name||'条目',()=>{ hit.arr.splice(hit.idx,0,item); this._clearDeleted(item); }); return true; }
   /* 移入文件夹 / 移出文件夹 */
-  moveItemToFolder(item, folder, g){ if(item===folder)return; if(this._removeItem(g,item)){ (folder.items||(folder.items=[])).push(item); this.save(true); this.rerender(); } }
-  moveItemOutOfFolder(item, folder, g){ const j=(folder.items||[]).indexOf(item); if(j>=0){ folder.items.splice(j,1); g.items.push(item); this.save(true); this.rerender(); } }
+  moveItemToFolder(item, folder, g){ const moved=moveNode(this.groups,item?.id,{groupId:g?.id,folderId:folder?.id}); if(!moved.ok){this.toast('不能移动到该位置','err');return false;} this.save(true); this.rerender(); return true; }
+  moveItemOutOfFolder(item, folder, g){ const moved=moveNode(this.groups,item?.id,{groupId:g?.id}); if(!moved.ok)return false; this.save(true); this.rerender(); return true; }
   /* 新建/重命名/删除文件夹 */
   openFolderEditor(folder, gid, container){ const isNew=!folder; const nameI=this.inp(folder?.name||'', container?'子文件夹名称':'文件夹名称');
     const save=this.btn(isNew?'创建':'保存','primary',()=>{ const name=nameI.value.trim()||'新文件夹';
-      if(isNew){ const arr = container || (this.groups.find(x=>x.id===gid)||{}).items; if(arr) arr.push({ id:uid('f'), type:'folder', name, icon:'folder', items:[] }); }
+      if(isNew){ const group=this.groups.find(x=>x.id===gid), parent=container?walkTree(this.groups).find(x=>x.node.items===container):null;
+        if(!group || (container&&(!parent||parent.group!==group||parent.depth>=1))){this.toast('文件夹最多两级','err');return;}
+        const arr=container||group.items; arr.push({ id:uid('f'), type:'folder', name, icon:'folder', items:[] }); }
       else { folder.name=name; }
       this.save(true); this.rerender(); this.closeModal(); });
     const del = isNew ? null : this.btn('删除文件夹','danger',()=>{ if(this.deleteItem(folder))this.closeModal(); });   // R7: 已有 5 秒撤销兜底，去掉双重 confirm

@@ -5,6 +5,7 @@
 import { loadConfig, saveConfig, pushInbox } from './shared/storage.js';
 import { createIconEditor } from './shared/icon-editor.js';
 import { hostOf, normUrl } from './shared/icon-map.js';
+import { locateNode, moveNode, removeNode, walkTree } from './shared/tree.js';
 
 const uid = p => p + Math.random().toString(36).slice(2,7) + Date.now().toString(36).slice(-3);
 const E = (t,c,x)=>{ const e=document.createElement(t); if(c)e.className=c; if(x!=null)e.textContent=x; return e; };
@@ -19,23 +20,11 @@ const btn = (t,cls,on)=>{ const b=E('button','fn-btn '+(cls||''),t); b.type='but
 function locateFavorite(groups, url){
   const target = normUrl(url);
   if(!target) return null;
-  for(const g of (groups||[])){
-    const hit = findInItems(g.items, target, [g.name || '未命名分组']);
-    if(hit) return { item: hit.item, group: g, holder: hit.holder, path: hit.path };
-  }
-  return null;
-}
-function findInItems(items, target, path){
-  for(const it of (items||[])){
-    if(!it) continue;
-    if(it.type==='folder'){
-      const r = findInItems(it.items, target, [...path, it.name || '文件夹']);
-      if(r) return r;
-    } else if(normUrl(it.url)===target){
-      return { item: it, holder: items, path };
-    }
-  }
-  return null;
+  const hit=walkTree(groups).find(entry=>entry.node.type!=='folder'&&normUrl(entry.node.url)===target);
+  if(!hit)return null;
+  const folders=[]; let parent=hit.parent;
+  while(parent){ folders.unshift(parent.name||'文件夹'); const up=locateNode(groups,parent.id); parent=up&&up.parent; }
+  return { item:hit.node, group:hit.group, holder:hit.parentItems, path:[hit.group.name||'未命名分组',...folders] };
 }
 
 const pop = document.getElementById('pop');
@@ -108,7 +97,7 @@ function render(cfg, ctx){
   // 底部按钮
   const foot=[];
   if(ctx.existing) foot.push(btn('删除','danger',()=>{
-    const holder=ctx.existingHolder; if(holder){ const i=holder.indexOf(ctx.existing); if(i>=0) holder.splice(i,1); }
+    removeNode(cfg.groups,ctx.existing.id);
     persist(cfg, status, '已删除', [{op:'del', id: ctx.existing.id}]); }));   // 冗余记收件箱：防开着的新标签页用旧内存把删除盖回来
   foot.push(btn('取消','ghost',()=>window.close()));
   foot.push(btn(ctx.existing?'保存':'确定','primary',()=>{
@@ -118,8 +107,7 @@ function render(cfg, ctx){
     if(ctx.existing){ const keep=ctx.existing.id; Object.assign(ctx.existing, data); ctx.existing.id=keep;
       // 跨组移动：目标分组跟当前顶层分组不一样才移，从实际所在的 holder（可能在文件夹内）挪出去
       const tg=resolveGroup(cfg, sel.value); if(tg && ctx.existingGroup && tg!==ctx.existingGroup){
-        const holder=ctx.existingHolder; if(holder){ const i=holder.indexOf(ctx.existing); if(i>=0) holder.splice(i,1); }
-        tg.items.push(ctx.existing);
+        moveNode(cfg.groups,ctx.existing.id,{groupId:tg.id});
       }
       // 编辑也记收件箱(评审P1)：改名/换图标/跨组移动 同样可能被开着的新标签页旧内存覆盖，op:edit 按 id 重放补回
       persist(cfg, status, '已保存', [{op:'edit', id: ctx.existing.id, patch: data, tgid: tg ? tg.id : undefined}]);

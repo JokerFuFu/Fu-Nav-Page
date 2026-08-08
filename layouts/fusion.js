@@ -47,15 +47,15 @@ function buildSidebar(core){
     const visibleGroups=core.groups.filter(g=>inMode(g)&&!g.archived);
     visibleGroups.forEach(g=> navGroup(core,g).forEach(n=>nav.appendChild(n)));
     if(!visibleGroups.length) nav.appendChild(el('div','fx-side-empty',am===null?'还没有分组 — 从「新建分组」开始':'这个模式还没有分组 — 到「管理模式」勾选分组'));
-    const addG=el('button','fx-navitem fx-addgroup'+(core.groups.length?' edit-only':'')); addG.innerHTML=`<span class="fx-ni-ico lucide-mask" style="-webkit-mask-image:url('${lucide('plus')}');mask-image:url('${lucide('plus')}')"></span><span class="fx-ni-nm">新建分组</span>`; addG.onclick=()=>core.openGroupEditor(null); nav.appendChild(addG);
+    if(core.editing){ const addG=el('button','fx-navitem fx-addgroup'); addG.innerHTML=`<span class="fx-ni-ico lucide-mask" style="-webkit-mask-image:url('${lucide('plus')}');mask-image:url('${lucide('plus')}')"></span><span class="fx-ni-nm">新建分组</span>`; addG.onclick=()=>core.openGroupEditor(null); nav.appendChild(addG); }
   }
-  wireSidebarDnD(core,nav); side.appendChild(nav);
+  if(core.editing) wireSidebarDnD(core,nav); side.appendChild(nav);
   const foot=el('div','fx-side-foot');
   // 添加网站
   const addBtn=sideBtn(core,'plus','添加网站',()=>core.openItemEditor(null, active!=='home'?active:core.groups[0]?.id));
   // 锁定/编辑模式：锁定=日常使用(点开链接/不可改)；解锁=可拖拽排序/编辑/删除卡片
   const editTitle=()=> core.editing ? '编辑模式 — 卡片可拖拽排序 / 悬停出现编辑与删除按钮 / 右键更多；点击锁定' : '已锁定 — 防误改，点击即打开链接；点击解锁可编辑/拖拽/删除';
-  const editBtn=sideBtn(core, core.editing?'lock-open':'lock', editTitle(), function(){ core.editing=!core.editing; document.body.classList.toggle('editing',core.editing); setIcon(core,editBtn,core.editing?'lock-open':'lock'); editBtn.classList.toggle('on',core.editing); editBtn.title=editTitle(); core.toast(core.editing?'已解锁：可拖拽排序、编辑、删除卡片':'已锁定：点击即打开链接','ok'); core.rerender(); });
+  const editBtn=sideBtn(core, core.editing?'lock-open':'lock', editTitle(), function(){ const editing=core.setEditing(!core.editing); core.toast(editing?'已解锁：可拖拽排序、编辑、删除卡片':'已锁定：点击即打开链接','ok'); });
   editBtn.dataset.tour='lock';
   if(core.editing) editBtn.classList.add('on');
   // 场景模式：全部 / 自定义模式 / 隐私
@@ -73,7 +73,7 @@ function buildSidebar(core){
   // 设置
   const setBtn=sideBtn(core,'settings','设置',()=>core.openSettings());
   setBtn.dataset.tour='settings';
-  foot.append(cmdBtn, addBtn, editBtn, modeBtn, themeBtn, setBtn);
+  foot.append(cmdBtn); if(core.editing)foot.append(addBtn); foot.append(editBtn, modeBtn, themeBtn, setBtn);
   side.appendChild(foot); setTimeout(markNav,0); return side;
 }
 function setIcon(core,btn,name){ const s=btn.querySelector('.fx-sb-ico'); if(s){ s.style.webkitMaskImage=s.style.maskImage=`url("${core.lucide(name)}")`; } }
@@ -83,6 +83,7 @@ function navItem(core,key,icon,name,count,on,group){
   if(group) core.mountGroupIcon(ico,group); else { ico.classList.add('lucide-mask'); ico.style.webkitMaskImage=ico.style.maskImage=`url("${core.lucide(icon)}")`; ico.style.background='currentColor'; }
   a.append(ico, el('span','fx-ni-nm',name)); if(count!=null)a.appendChild(el('span','fx-ni-ct',String(count)));
   a.onclick=on; if(group) a.oncontextmenu=e=>{ e.preventDefault();
+    if(!core.editing){ showCtx(e.clientX,e.clientY,[{ic:'lock-open',label:'解锁后可编辑分组',on:()=>core.setEditing(true)}]); return; }
     const menu=[{ic:'pencil', label:'编辑分组', on:()=>core.openGroupEditor(group)}];
     if(core.modes().length){ menu.push('-'); core.modes().forEach(mode=>{ const has=mode.groupIds.includes(group.id);
       menu.push({ic:'layers',sel:has,label:mode.name,on:()=>{ core.toggleModeGroup(mode,group.id); core.toast(has?('已移出「'+mode.name+'」'):('已加入「'+mode.name+'」'),'ok'); }}); }); }
@@ -152,7 +153,7 @@ function renderHome(core,main){
     if(favs.length){
       const row=el('div','fx-favs'); row.style.setProperty('--fav-cols',grid.cols);
       favs.forEach(({item,group,pinned})=>row.appendChild(favCard(core,item,group,pinned)));
-      wireFavDnD(core,row);
+      if(core.editing) wireFavDnD(core,row);
       home.appendChild(row);
     } else {
       home.appendChild(el('div','fx-home-empty','还没有常用网站 — 解锁后点「添加网站」，或到 设置 → 导入浏览器书签'));   // R5 空态引导
@@ -320,8 +321,8 @@ function buildWidgetCards(core, priv){
   // 加卡片不再占首页位置：解锁🔓 时右键卡片区空白处添加；或到 设置→小组件 管理
   if(!priv) row.addEventListener('contextmenu',e=>{ if(e.target.closest('.fx-wcard'))return;   // 点在卡片上交给卡片自身菜单
     e.preventDefault(); if(core.editing) addWidgetMenu(core,e);
-    else showCtx(e.clientX,e.clientY,[{ic:'lock-open', label:'解锁后可在此添加/管理卡片', on:()=>{ core.editing=true; document.body.classList.add('editing'); core.rerender(); }}]); });
-  wireWidgetDnD(core,row);
+    else showCtx(e.clientX,e.clientY,[{ic:'lock-open', label:'解锁后可在此添加/管理卡片', on:()=>core.setEditing(true)}]); });
+  if(core.editing) wireWidgetDnD(core,row);
   return row;
 }
 /* 卡片本身始终可交互(待办勾选、天气点刷新)；拖拽手柄+✕删除 仅解锁🔓时出现 */
@@ -393,7 +394,7 @@ function widgetToday(core,w){
   return c;
 }
 function widgetMenu(core,e,w){ e.preventDefault(); e.stopPropagation();
-  if(!core.editing){ showCtx(e.clientX,e.clientY,[{ic:'lock-open', label:'解锁后可移除/编辑卡片', on:()=>{ core.editing=true; document.body.classList.add('editing'); core.rerender(); }}]); return; }
+  if(!core.editing){ showCtx(e.clientX,e.clientY,[{ic:'lock-open', label:'解锁后可移除/编辑卡片', on:()=>core.setEditing(true)}]); return; }
   const items=[];
   if(w.type==='hwmon') items.push({ic:'pencil', label:'设置监控端点', on:()=>core.openHwmonEditor(w)});
   items.push({ic:'trash-2', label:'移除卡片', danger:true, on:()=>{ core.removeWidget(w.id); }});
@@ -403,6 +404,7 @@ function addWidgetMenu(core,e){ const types=[['today','今日'],['hwmon','硬件
   if((core.settings.hiddenAgentCards||[]).length) items.push('-', {ic:'eye', label:'恢复隐藏的本机服务卡片', on:()=>{ core.settings.hiddenAgentCards=[]; core.save(true); core.rerender(); core.toast('已恢复本机服务卡片','ok'); }});
   showCtx(e.clientX,e.clientY, items); }
 function wireWidgetDnD(core,row){
+  if(!core.editing)return;
   row.addEventListener('dragover',e=>{ if(!drag||drag.type!=='widget')return; e.preventDefault(); const after=afterEl(row,'.fx-wcard[data-wid]',e.clientX,e.clientY); const d=row.querySelector('.fx-wcard.fx-dragging'); if(!d)return; if(after==null) row.appendChild(d); else row.insertBefore(d,after); });
   row.addEventListener('drop',e=>{ if(!drag||drag.type!=='widget')return; e.preventDefault(); const order=$$('.fx-wcard[data-wid]',row).map(c=>c.dataset.wid); core.settings.widgets.sort((a,b)=>order.indexOf(a.id)-order.indexOf(b.id)); drag=null; core.save(true); }); }
 /* 本机/NAS 硬件容量卡（需伴随服务上报 agentData.resources，有则显示）*/
@@ -462,37 +464,39 @@ function safe(s){ try{return JSON.parse(s);}catch{return null;} }
 /* ---------- 分组视图 ---------- */
 function renderGroup(core,main,g){
   if(!g){ active='home'; return renderHome(core,main); }
+  const stats=core.treeCount(g.items);
   const top=el('div','fx-gtop');
-  const title=el('div','fx-gtitle'); const ico=el('span','fx-gtitle-ico'); core.mountGroupIcon(ico,g); title.append(ico, el('span',null,g.name), el('span','fx-gtitle-ct',core.flatItems(g).length+' 个'));
-  const f=el('form','fx-gsearch'); const si=el('input'); si.placeholder='筛选本组…'; f.appendChild(si); f.addEventListener('submit',e=>{e.preventDefault();core.ask(core.activeProvider(),si.value);});
+  const title=el('div','fx-gtitle'); const ico=el('span','fx-gtitle-ico'); core.mountGroupIcon(ico,g); title.append(ico, el('span',null,g.name), el('span','fx-gtitle-ct',`顶层 ${stats.topLevel} 项 · 共 ${stats.sites} 网站`));
+  const f=el('form','fx-gsearch'); const si=el('input'); si.placeholder='筛选本组…'; f.appendChild(si); f.addEventListener('submit',e=>e.preventDefault());
   si.addEventListener('input',()=>{ const q=si.value.trim().toLowerCase(); $$('.fx-card',main).forEach(c=>{ const t=(c.textContent+' '+(c.title||'')).toLowerCase(); c.style.display=(!q||t.includes(q))?'':'none'; }); });
   const vt=el('div','fx-viewtoggle');
   [['grid','layout-grid','大图'],['list','rows-3','列表'],['detail','list','详情']].forEach(([v,ic,t])=>{ const b=el('button','fx-vbtn'+(core.settings.cardView===v?' on':'')); b.title=t; b.appendChild(mico(ic)); b.onclick=()=>{core.settings.cardView=v;core.save();core.rerender();}; vt.appendChild(b); });
-  const acts=el('div','fx-gacts'); acts.append(vt, gbtn('plus','添加网站',()=>core.openItemEditor(null,g.id)), gbtn('folder-plus','新建文件夹',()=>core.openFolderEditor(null,g.id)), gbtn('pencil','编辑分组',()=>core.openGroupEditor(g)));
+  const acts=el('div','fx-gacts'); acts.append(vt); if(core.editing)acts.append(gbtn('plus','添加网站',()=>core.openItemEditor(null,g.id)), gbtn('folder-plus','新建文件夹',()=>core.openFolderEditor(null,g.id)), gbtn('pencil','编辑分组',()=>core.openGroupEditor(g)));
   top.append(title,f,acts); main.appendChild(top);
-  main.appendChild(el('div','fx-draghint','拖拽卡片可排序，拖到分组导航上可移动归类；右键卡片可编辑/删除'));
+  if(core.editing)main.appendChild(el('div','fx-draghint','拖拽卡片可排序，拖到分组导航上可移动归类；右键卡片可编辑/删除'));
   const grid=el('div','fx-grid view-'+(core.settings.cardView||'grid')); if(!g.items.length)grid.appendChild(el('div','fx-empty','空分组 — 点上方「添加网站」'));
-  g.items.forEach(it=>grid.appendChild(card(core,g,it))); wireGridDnD(core,grid,g); main.appendChild(grid);
+  g.items.forEach(it=>grid.appendChild(card(core,g,it))); if(core.editing)wireGridDnD(core,grid,g); main.appendChild(grid);
 }
 
 /* ---------- 文件夹页（二级菜单：子网站/子文件夹当作页面，非弹层）---------- */
 function renderFolderPage(core,main,fd,g){
   const isTop=(g.items||[]).includes(fd);   // 顶层文件夹才可再建子文件夹（封顶两级）
+  const stats=core.treeCount(fd.items||[]);
   const top=el('div','fx-gtop');
   const title=el('div','fx-gtitle');
   const crumb=el('button','fx-crumb',g.name); crumb.title='返回 '+g.name; crumb.onclick=()=>go(core,g.id);
   const fico=el('span','fx-gtitle-ico lucide-mask'); fico.style.webkitMaskImage=fico.style.maskImage=`url("${core.lucide('folder')}")`; fico.style.background='currentColor';
-  title.append(crumb, el('span','fx-crumb-sep','›'), fico, el('span',null,fd.name||'文件夹'), el('span','fx-gtitle-ct',(fd.items||[]).length+' 项'));
-  const f=el('form','fx-gsearch'); const si=el('input'); si.placeholder='筛选…'; f.appendChild(si); f.addEventListener('submit',e=>{e.preventDefault();core.ask(core.activeProvider(),si.value);});
+  title.append(crumb, el('span','fx-crumb-sep','›'), fico, el('span',null,fd.name||'文件夹'), el('span','fx-gtitle-ct',`顶层 ${stats.topLevel} 项 · 共 ${stats.sites} 网站`));
+  const f=el('form','fx-gsearch'); const si=el('input'); si.placeholder='筛选…'; f.appendChild(si); f.addEventListener('submit',e=>e.preventDefault());
   si.addEventListener('input',()=>{ const q=si.value.trim().toLowerCase(); $$('.fx-card',main).forEach(c=>{ const t=(c.textContent+' '+(c.title||'')).toLowerCase(); c.style.display=(!q||t.includes(q))?'':'none'; }); });
   const vt=el('div','fx-viewtoggle'); [['grid','layout-grid','大图'],['list','rows-3','列表'],['detail','list','详情']].forEach(([v,ic,t])=>{ const b=el('button','fx-vbtn'+(core.settings.cardView===v?' on':'')); b.title=t; b.appendChild(mico(ic)); b.onclick=()=>{core.settings.cardView=v;core.save();core.rerender();}; vt.appendChild(b); });
-  const acts=el('div','fx-gacts'); acts.append(vt, gbtn('plus','添加网站',()=>{ core._addToFolder={folder:fd,gid:g.id}; core.openItemEditor(null,g.id); }));
-  if(isTop) acts.append(gbtn('folder-plus','新建子文件夹',()=>core.openFolderEditor(null,g.id,fd.items||(fd.items=[]))));
-  acts.append(gbtn('pencil','重命名/删除文件夹',()=>core.openFolderEditor(fd,g.id)));
+  const acts=el('div','fx-gacts'); acts.append(vt); if(core.editing){ acts.append(gbtn('plus','添加网站',()=>{ core._addToFolder={folder:fd,gid:g.id}; core.openItemEditor(null,g.id); }));
+    if(isTop) acts.append(gbtn('folder-plus','新建子文件夹',()=>core.openFolderEditor(null,g.id,fd.items||(fd.items=[]))));
+    acts.append(gbtn('pencil','重命名/删除文件夹',()=>core.openFolderEditor(fd,g.id))); }
   top.append(title,f,acts); main.appendChild(top);
-  main.appendChild(el('div','fx-draghint','点击子文件夹进入下一级；右键卡片可编辑/删除/移动；拖拽可排序'));
+  if(core.editing)main.appendChild(el('div','fx-draghint','点击子文件夹进入下一级；右键卡片可编辑/删除/移动；拖拽可排序'));
   const grid=el('div','fx-grid view-'+(core.settings.cardView||'grid')); if(!(fd.items||[]).length)grid.appendChild(el('div','fx-empty','空文件夹 — 点上方「添加网站」'));
-  (fd.items||[]).forEach(it=>grid.appendChild(card(core,g,it,isTop?1:2))); wireGridDnD(core,grid,g,fd.items); main.appendChild(grid);
+  (fd.items||[]).forEach(it=>grid.appendChild(card(core,g,it,isTop?1:2))); if(core.editing)wireGridDnD(core,grid,g,fd.items); main.appendChild(grid);
 }
 
 /* ---------- 卡片 ---------- */
@@ -510,11 +514,11 @@ function favCard(core,it,g,pinned){
   const ico=el('span','fx-fav-ico'); core.mountIcon(ico,it,128);
   const pin=pinned?el('span','fx-fav-pin'):null; if(pin)pin.appendChild(mico('pin',10));
   const dead=el('span','fx-dead-badge'); dead.hidden=!it.deadSince; dead.appendChild(mico('alert-triangle',9));
-  a.append(ico, el('span','fx-fav-nm',it.name)); if(pin)a.appendChild(pin); a.append(dead, cardActions(core,it,g));
+  a.append(ico, el('span','fx-fav-nm',it.name)); if(pin)a.appendChild(pin); a.appendChild(dead); if(core.editing)a.appendChild(cardActions(core,it,g));
   a.addEventListener('contextmenu',e=>cardMenu(core,e,it,g));
   a.addEventListener('click',e=>{ if(core.editing){e.preventDefault();core.openItemEditor(it,g&&g.id);} else if(it.frame){e.preventDefault();core.openFrame(it);} else core.recordVisit(it); });
-  a.addEventListener('dragstart',e=>{ if(!core.editing||!pinned){e.preventDefault();return;} drag={type:'fav',iid:it.id}; a.classList.add('fx-dragging'); e.dataTransfer.effectAllowed='move'; });
-  a.addEventListener('dragend',()=>{a.classList.remove('fx-dragging');drag=null;});
+  if(core.editing&&pinned){ a.addEventListener('dragstart',e=>{ drag={type:'fav',iid:it.id}; a.classList.add('fx-dragging'); e.dataTransfer.effectAllowed='move'; });
+    a.addEventListener('dragend',()=>{a.classList.remove('fx-dragging');drag=null;}); }
   return a;
 }
 function card(core,g,it,depth){
@@ -524,11 +528,11 @@ function card(core,g,it,depth){
   const meta=el('span','fx-card-meta'); meta.append(el('span','fx-card-nm',it.name)); if(it.note)meta.append(el('span','fx-card-note',it.note)); meta.append(el('span','fx-card-url',it.url));
   const dot=el('span','fx-dot'); dot.hidden=true;
   const dead=el('span','fx-dead-badge'); dead.hidden=!it.deadSince; dead.appendChild(mico('alert-triangle',9));
-  a.append(ico,meta,dot,dead,cardActions(core,it,g));
+  a.append(ico,meta,dot,dead); if(core.editing)a.appendChild(cardActions(core,it,g));
   a.addEventListener('contextmenu',e=>cardMenu(core,e,it,g));
   a.addEventListener('click',e=>{ if(core.editing){e.preventDefault();core.openItemEditor(it,g.id);} else if(it.frame){e.preventDefault();core.openFrame(it);} else core.recordVisit(it); });
-  a.addEventListener('dragstart',e=>{ if(!core.editing){e.preventDefault();return;} drag={type:'card',gid:g.id,iid:it.id}; a.classList.add('fx-dragging'); e.dataTransfer.effectAllowed='move'; try{e.dataTransfer.setData('text/plain',it.id);}catch{} });
-  a.addEventListener('dragend',()=>{a.classList.remove('fx-dragging');drag=null;});
+  if(core.editing){ a.addEventListener('dragstart',e=>{ drag={type:'card',gid:g.id,iid:it.id}; a.classList.add('fx-dragging'); e.dataTransfer.effectAllowed='move'; try{e.dataTransfer.setData('text/plain',it.id);}catch{} });
+    a.addEventListener('dragend',()=>{a.classList.remove('fx-dragging');drag=null;}); }
   core.probeStatus(dot,it); return a;
 }
 
@@ -552,20 +556,20 @@ function folderActions(core, fd, g){
 }
 function folderCard(core,g,fd,depth){
   const a=el('button','fx-card fx-folder'); a.type='button'; a.title=fd.name||'文件夹'; a.dataset.iid=fd.id; a.draggable=!!core.editing;
-  const nSub=(fd.items||[]).filter(x=>core.isFolder(x)).length, nSite=(fd.items||[]).length-nSub;
+  const stats=core.treeCount(fd.items||[]);
   const ico=el('span','fx-card-ico fx-folder-mini'); renderFolderMini(core,ico,fd);
-  const meta=el('span','fx-card-meta'); meta.append(el('span','fx-card-nm',fd.name||'文件夹'), el('span','fx-card-url', nSite+' 网站'+(nSub?(' · '+nSub+' 子夹'):'')));
-  a.append(ico,meta, folderActions(core,fd,g));
+  const meta=el('span','fx-card-meta'); meta.append(el('span','fx-card-nm',fd.name||'文件夹'), el('span','fx-card-url', `${stats.sites} 网站 · ${stats.folders} 子文件夹`));
+  a.append(ico,meta); if(core.editing)a.appendChild(folderActions(core,fd,g));
   a.addEventListener('click',e=>{ e.preventDefault(); if(core.editing) core.openFolderEditor(fd,g.id); else go(core,fd.id); });   // 进入文件夹页（二级菜单，非弹层）
   a.addEventListener('contextmenu',e=>folderMenu(core,e,fd,g,depth||0));
   // 文件夹本身可拖拽重排（作为一张卡）
-  a.addEventListener('dragstart',e=>{ if(!core.editing){e.preventDefault();return;} drag={type:'card',gid:g.id,iid:fd.id}; a.classList.add('fx-dragging'); e.dataTransfer.effectAllowed='move'; try{e.dataTransfer.setData('text/plain',fd.id);}catch{} });
-  a.addEventListener('dragend',()=>{a.classList.remove('fx-dragging');drag=null;});
-  // 拖一张卡到文件夹上 → 移入（Toby 式显式落入，非 Infinity 悬停叠夹）
-  a.addEventListener('dragover',e=>{ if(drag&&drag.type==='card'&&drag.iid!==fd.id){ e.preventDefault(); e.stopPropagation(); a.classList.add('fx-folder-drop'); } });
-  a.addEventListener('dragleave',()=>a.classList.remove('fx-folder-drop'));
-  a.addEventListener('drop',e=>{ a.classList.remove('fx-folder-drop'); if(drag&&drag.type==='card'&&drag.iid!==fd.id){ e.preventDefault(); e.stopPropagation();
-    const item=findItemById(core,g,drag.iid); if(item && !core.isFolder(item)){ core.moveItemToFolder(item,fd,g); core.toast('已移入「'+(fd.name||'文件夹')+'」','ok'); } drag=null; } });
+  if(core.editing){ a.addEventListener('dragstart',e=>{ drag={type:'card',gid:g.id,iid:fd.id}; a.classList.add('fx-dragging'); e.dataTransfer.effectAllowed='move'; try{e.dataTransfer.setData('text/plain',fd.id);}catch{} });
+    a.addEventListener('dragend',()=>{a.classList.remove('fx-dragging');drag=null;});
+    // 拖一张卡到文件夹上 → 移入（纯树策略会拒绝自身、后代和第三级）
+    a.addEventListener('dragover',e=>{ if(drag&&drag.type==='card'&&drag.iid!==fd.id){ e.preventDefault(); e.stopPropagation(); a.classList.add('fx-folder-drop'); } });
+    a.addEventListener('dragleave',()=>a.classList.remove('fx-folder-drop'));
+    a.addEventListener('drop',e=>{ a.classList.remove('fx-folder-drop'); if(drag&&drag.type==='card'&&drag.iid!==fd.id){ e.preventDefault(); e.stopPropagation();
+      const item=findItemById(core,g,drag.iid); if(item && core.moveItemToFolder(item,fd,g)) core.toast('已移入「'+(fd.name||'文件夹')+'」','ok'); drag=null; } }); }
   return a;
 }
 function findItemById(core,g,iid){ const find=arr=>{ for(const it of (arr||[])){ if(it.id===iid)return it; if(core.isFolder(it)){ const r=find(it.items); if(r)return r; } } return null; }; return find(g.items); }
@@ -574,7 +578,7 @@ function folderMenu(core,e,fd,g,depth){ e.preventDefault(); depth=depth||0;
   if(core.editing){ items.push('-', {ic:'pencil', label:'重命名', on:()=>core.openFolderEditor(fd,g.id)});
     if(depth<1) items.push({ic:'folder-plus', label:'新建子文件夹', on:()=>core.openFolderEditor(null,g.id,fd.items||(fd.items=[]))});
     items.push({ic:'trash-2', label:'删除文件夹', danger:true, on:()=>core.openFolderEditor(fd,g.id)}); }
-  else items.push('-', {ic:'lock-open', label:'解锁后可编辑', on:()=>{ core.editing=true; document.body.classList.add('editing'); core.rerender(); }});
+  else items.push('-', {ic:'lock-open', label:'解锁后可编辑', on:()=>core.setEditing(true)});
   showCtx(e.clientX,e.clientY,items);
 }
 
@@ -599,7 +603,7 @@ function cardMenu(core,e,it,g){
     }
     items.push('-', {ic:'trash-2', label:'删除', danger:true, on:()=>core.deleteItem(it)});
   } else {
-    items.push('-', {ic:'lock-open', label:'解锁后可编辑/删除', on:()=>{ core.editing=true; document.body.classList.add('editing'); core.rerender(); }});
+    items.push('-', {ic:'lock-open', label:'解锁后可编辑/删除', on:()=>core.setEditing(true)});
   }
   showCtx(e.clientX, e.clientY, items);
 }
@@ -617,10 +621,12 @@ function hideCtx(){ if(ctxMenu){ctxMenu.remove();ctxMenu=null;} }
 
 /* ---------- 拖拽（默认即可拖，无需编辑模式）---------- */
 function wireGridDnD(core,grid,g,arr){ arr=arr||g.items;
+  if(!core.editing)return;
   grid.addEventListener('dragover',e=>{ if(!drag||drag.type!=='card'||drag.gid!==g.id)return; e.preventDefault(); const after=afterEl(grid,'.fx-card',e.clientX,e.clientY); const d=grid.querySelector('.fx-card.fx-dragging'); if(!d)return; if(after==null)grid.appendChild(d); else grid.insertBefore(d,after); });
   grid.addEventListener('drop',e=>{ if(!drag||drag.type!=='card')return; e.preventDefault(); const order=$$('.fx-card',grid).map(c=>c.dataset.iid); arr.sort((a,b)=>order.indexOf(a.id)-order.indexOf(b.id)); drag=null; core.save(true); });
 }
 function wireFavDnD(core,row){
+  if(!core.editing)return;
   row.addEventListener('dragover',e=>{ if(!drag||drag.type!=='fav')return; e.preventDefault();
     const after=afterEl(row,'.fx-fav[data-pinned="true"]',e.clientX,e.clientY); const d=row.querySelector('.fx-fav.fx-dragging'); if(!d)return;
     if(after==null) row.insertBefore(d,row.querySelector('.fx-fav[data-pinned="false"]')); else row.insertBefore(d,after); });
@@ -630,6 +636,7 @@ function wireFavDnD(core,row){
     drag=null; });
 }
 function wireSidebarDnD(core,nav){
+  if(!core.editing)return;
   const add=nav.querySelector('.fx-addgroup');
   nav.addEventListener('dragover',e=>{ if(drag&&drag.type==='group'){ e.preventDefault(); const after=afterEl(nav,'.fx-navitem[data-gid]',e.clientX,e.clientY); const d=nav.querySelector('.fx-navitem.fx-dragging'); if(!d)return; if(after==null)nav.insertBefore(d,add); else nav.insertBefore(d,after); } });
   nav.addEventListener('drop',e=>{ if(drag&&drag.type==='group'){ e.preventDefault(); const order=$$('.fx-navitem[data-gid]',nav).map(c=>c.dataset.gid); core.groups.sort((a,b)=>order.indexOf(a.id)-order.indexOf(b.id)); drag=null; core.save(true); } });

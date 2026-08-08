@@ -163,7 +163,7 @@ criteria:
         - 检查卡片与分组 DOM 属性和 computed cursor
         - 尝试拖动网站、文件夹、分组和常用卡
       expected: no draggable true, cursor is not grab, order and storage remain unchanged
-    passes: false
+    passes: true
 
   - id: P0-TREE-001
     priority: P0
@@ -172,7 +172,7 @@ criteria:
       type: command
       run: npm test -- tests/tree.test.mjs
       expected: recursive move and delete cases PASS
-    passes: false
+    passes: true
 
   - id: P0-TREE-002
     priority: P0
@@ -181,7 +181,7 @@ criteria:
       type: command
       run: npm test -- tests/tree.test.mjs
       expected: cycle and depth guards PASS
-    passes: false
+    passes: true
 
   - id: P0-COUNT-001
     priority: P0
@@ -193,7 +193,7 @@ criteria:
         - 切换 grid 与 detail
         - 打开 NAS 文件夹
       expected: counts match recursive tree and remain visible in both views
-    passes: false
+    passes: true
 
   - id: P0-HOME-001
     priority: P0

@@ -312,7 +312,6 @@ body:not(.editing) .lay-fusion .fx-card:active{ transform:translateY(0) scale(.9
 /* 卡片拖到分组上的放置高亮 */
 .lay-fusion .fx-navitem.fx-droptarget{ background:var(--accent-strong); color:#fff; box-shadow:0 0 0 2px var(--accent); }
 .lay-fusion .fx-navitem.fx-droptarget .fx-ni-ico{ color:#fff; }
-.lay-fusion .fx-card{ cursor:grab; }
 
 @media (max-width:760px){
   .lay-fusion .fx-wrap{ flex-direction:column; }
