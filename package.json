@@ -1,0 +1,9 @@
+{
+  "name": "fu-nav-page",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "verify:static": "node tools/verify-static.mjs"
+  }
+}

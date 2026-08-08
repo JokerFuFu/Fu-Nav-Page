@@ -17,7 +17,7 @@ criteria:
       type: command
       run: npm run verify:static
       expected: trilogy rule PASS and exit 0
-    passes: false
+    passes: true
 
   - id: P0-SEC-001
     priority: P0

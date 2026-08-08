@@ -88,7 +88,7 @@
 **Interfaces:**
 - Produces: `npm test -- <file>`；`npm run verify:static`；`makeConfig()`、`makeGroup()`、`makeSite()`、`makeFolder()`。
 
-- [ ] **Step 1: 写测试入口和夹具测试**
+- [x] **Step 1: 写测试入口和夹具测试**
 
 ```js
 // tests/baseline.test.mjs
@@ -105,12 +105,12 @@ test('fixture returns isolated versioned configs', () => {
 });
 ```
 
-- [ ] **Step 2: 运行测试并确认因夹具缺失而失败**
+- [x] **Step 2: 运行测试并确认因夹具缺失而失败**
 
 Run: `node --test tests/baseline.test.mjs`
 Expected: FAIL，提示无法导入 `tests/helpers/fixtures.mjs`。
 
-- [ ] **Step 3: 创建 package 与测试夹具**
+- [x] **Step 3: 创建 package 与测试夹具**
 
 ```json
 {
@@ -134,18 +134,18 @@ export function makeConfig(extra = {}) {
 }
 ```
 
-- [ ] **Step 4: 创建首版静态检查器**
+- [x] **Step 4: 创建首版静态检查器**
 
 `tools/verify-static.mjs` 递归读取受控源码文件，输出每条规则的 PASS/FAIL，并在任意失败时设置 `process.exitCode = 1`。首版规则检查 `eval.md`、spec、plan 均存在，后续任务逐项增加安全、权限和可访问性规则。
 
-- [ ] **Step 5: 运行基线**
+- [x] **Step 5: 运行基线**
 
 Run: `npm test -- tests/baseline.test.mjs`
 Expected: 1 test passed, 0 failed。
 Run: `npm run verify:static`
 Expected: 三件套存在性检查 PASS。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add package.json tests tools/verify-static.mjs
