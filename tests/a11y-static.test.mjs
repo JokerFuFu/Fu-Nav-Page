@@ -31,6 +31,8 @@ test('generated form labels and icon-only controls have accessible names', async
   }
   assert.match(iconEditor, /label\.htmlFor=control\.id/);
   assert.match(iconEditor, /setAttribute\('aria-label',`选择 \$\{slug\} 图标`\)/);
+  assert.match(core, /agentTokenI\.type='password'/);
+  assert.match(core, /this\.field\('本机 Agent Token',agentTokenI\)/);
 });
 
 test('custom menus implement the ARIA menu keyboard model', async () => {

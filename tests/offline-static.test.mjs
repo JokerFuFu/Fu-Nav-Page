@@ -19,6 +19,13 @@ test('runtime icon dependencies are local or pinned to an immutable version', as
   assert.doesNotMatch(await read('popup.html'), /rel=["']preconnect["']/i);
 });
 
+test('the layout reuses the exact core module URL so boot runs only once', async () => {
+  const [newtab, fusion] = await Promise.all([read('newtab.html'), read('layouts/fusion.js')]);
+  const entry = newtab.match(/src=["']shared\/core\.js(\?v=[^"']+)?["']/)?.[1] || '';
+  const dependency = fusion.match(/from ["']\.\.\/shared\/core\.js(\?v=[^"']+)?["']/)?.[1] || '';
+  assert.equal(dependency, entry);
+});
+
 test('core and arbitrary group icons resolve to bundled data URLs', async () => {
   const { lucide, LOCAL_LUCIDE_NAMES } = await import('../shared/icon-map.js');
   for (const name of ['server', 'folder', 'search', 'settings', 'menu', 'cloud-rain', 'unknown-user-icon']) {

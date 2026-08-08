@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeConfig, makeFolder, makeGroup, makeSite } from './helpers/fixtures.mjs';
-import { applyInboxOps, diffRestore } from '../shared/sync-policy.js';
+import { applyInboxOps, diffRestore, rebaseLocalOps } from '../shared/sync-policy.js';
 
 test('delete wins stale edit while unrelated edit survives and replay is idempotent', () => {
   const config = makeConfig({
@@ -22,6 +22,21 @@ test('delete wins stale edit while unrelated edit survives and replay is idempot
   assert.equal(first.skipped, 1);
   assert.equal(second.applied, 0);
   assert.equal(second.skipped, 3);
+});
+
+test('stale editor rebases its local operation onto a newer cross-tab deletion', () => {
+  const stale = makeConfig({ groups: [makeGroup('g1', [makeSite('gone'), makeSite('kept')])] });
+  stale.savedAt = 100;
+  const latest = makeConfig({ groups: [makeGroup('g1', [makeSite('kept')])] });
+  latest.savedAt = 200;
+
+  const result = rebaseLocalOps(stale, latest, [
+    { opId: 'local-edit', op: 'edit', id: 'kept', patch: { name: 'edited in stale tab' } },
+  ]);
+
+  assert.equal(result.rebased, true);
+  assert.equal(JSON.stringify(result.config).includes('gone'), false);
+  assert.equal(result.config.groups[0].items[0].name, 'edited in stale tab');
 });
 
 test('add recreates a missing target group once and rejects duplicate URLs', () => {

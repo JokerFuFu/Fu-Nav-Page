@@ -851,36 +851,42 @@ git commit -m "feat: 收口响应式导航与背景可读性"
 - Modify: `README.md`
 - Modify: `CLAUDE.md`
 - Modify: `manifest.json`
+- Modify: `package.json`
+- Create: `tools/product-e2e-check.cjs`
 - Create: `docs/verify/2026-08-09-product-experience-upgrade/README.md`
 
 **Interfaces:**
 - Consumes: Tasks 1–15 的全部接口。
 - Produces: 可复现验收记录、最终版本号和全绿 `eval.md`。
 
-- [ ] **Step 1: 运行完整自动化套件**
+- [x] **Step 1: 运行完整自动化套件**
 
 Run: `npm test`
 Expected: 0 failed。
 Run: `npm run verify:static`
 Expected: 所有静态规则 PASS。
 
-- [ ] **Step 2: 执行五条组合场景**
+- [x] **Step 2: 执行五条组合场景**
 
 逐条执行 spec 第 11 节的安装/导入/popup/同步、并发删除、Provider、1024×768 首屏和 secret 安全场景；在验证记录中写入环境、步骤、实际结果和证据路径。
 
-- [ ] **Step 3: 执行真实扩展能力检查**
+新增 `npm run verify:e2e`：在全新临时 Chromium profile 加载真实扩展，覆盖 newtab、popup、service worker、local/sync、action badge、下载与 WebDAV 网络边界；同时补充 390×844 设置页 Agent 凭据字段与主操作无裁切检查。运行结束自动删除临时 profile。
+
+- [x] **Step 3: 执行真实扩展能力检查**
 
 在全新 Chrome 或 Edge profile 中加载已解压扩展，验证按需书签权限、popup 当前标签、per-tab 已收藏角标、storage sync、WebDAV 权限请求、天气同意和离线启动。
 
-- [ ] **Step 4: 更新文档**
+原生权限气泡不能由无头 Chromium可靠操作；验收在真实扩展页面仅替换 `chrome.permissions` / `chrome.bookmarks` API 边界，覆盖拒绝、拒绝后核心功能、再次请求与授权状态持久化，并在验证记录明确披露该限制。断网扩展检查确认 45/45 可见核心图标本地可用、6 个核心表面无控制台错误。
+
+- [x] **Step 4: 更新文档**
 
 README 更新首次使用、书签库、工作区、隐私、权限、网络和恢复说明；CLAUDE.md 追加本轮数据迁移、secret、树操作和可访问基元的踩坑规则；manifest version 按语义化版本升级。
 
-- [ ] **Step 5: 逐条更新 eval**
+- [x] **Step 5: 逐条更新 eval**
 
 只在对应命令 exit 0 或人工步骤证据完成后，将该项 `passes: false` 改为 `passes: true`。不得修改 ID、断言、验证方式或阈值。任意 false 都阻止完成声明。
 
-- [ ] **Step 6: 最终提交**
+- [x] **Step 6: 最终提交**
 
 ```bash
 git add eval.md README.md CLAUDE.md manifest.json docs/verify/2026-08-09-product-experience-upgrade
@@ -891,11 +897,11 @@ git commit -m "chore: 完成产品体验升级验收"
 
 ## Plan Self-Review Checklist
 
-- [ ] Spec 的 P0 正确性、安全、同步和首屏分别映射到 Tasks 2–7。
-- [ ] Spec 的 P1 首次使用、规模化管理、popup 和可访问性分别映射到 Tasks 8–11。
-- [ ] Spec 的 P2 设置、离线、工作区和响应式分别映射到 Tasks 12–15。
-- [ ] 每个生产行为任务都有先失败、后实现、再通过的测试步骤。
-- [ ] 所有新接口在首次使用前已经定义。
-- [ ] 所有命令都给出预期结果。
-- [ ] `eval.md` 至少包含一条跨 newtab、popup、storage 的端到端判据。
-- [ ] 计划没有省略项、占位符或未定义的后续工作。
+- [x] Spec 的 P0 正确性、安全、同步和首屏分别映射到 Tasks 2–7。
+- [x] Spec 的 P1 首次使用、规模化管理、popup 和可访问性分别映射到 Tasks 8–11。
+- [x] Spec 的 P2 设置、离线、工作区和响应式分别映射到 Tasks 12–15。
+- [x] 每个生产行为任务都有先失败、后实现、再通过的测试步骤。
+- [x] 所有新接口在首次使用前已经定义。
+- [x] 所有命令都给出预期结果。
+- [x] `eval.md` 至少包含一条跨 newtab、popup、storage 的端到端判据。
+- [x] 计划没有省略项、占位符或未定义的后续工作。

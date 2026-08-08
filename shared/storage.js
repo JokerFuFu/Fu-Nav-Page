@@ -1,10 +1,9 @@
 import { injectSecrets, splitSecrets } from './config-secrets.js';
 
 /* ============ 存储层 ============
- * 目标：配置在所有终端同步。
- * - 扩展环境：chrome.storage.sync（随账号同步到所有 Chrome/Edge），
- *   单项上限 8KB，故把 JSON 切片为多个 chunk；同时镜像一份到 local 做离线缓存/兜底。
- * - 配置过大无法同步时：自动降级到 local（仅本机），并提示。
+ * 目标：本机编辑可靠优先，新设备仍能从账号快照初始化。
+ * - 扩展环境：chrome.storage.local 是唯一权威源；chrome.storage.sync 只保存节流、安全的切片快照。
+ * - 配置过大或 sync 暂时失败时：本机保存不受影响，并返回真实状态供 UI 提示。
  * - 非扩展环境（直接打开 html 预览）：用 localStorage。
  */
 const ITEM_BYTES = 7600;            // 每片字节数，留余量 < 8192

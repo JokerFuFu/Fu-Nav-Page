@@ -1,6 +1,6 @@
 /* ============ 融合布局 v3.1：极简AI首页 + 时钟/天气卡 + 右键编辑 + 拖拽 ============ */
-import { $, $$, el, safeHref } from '../shared/core.js';
-import { dashboardIcon, lucide } from '../shared/icon-map.js?v=3.26.0';
+import { $, $$, el, safeHref } from '../shared/core.js?v=3.26.3';
+import { dashboardIcon, lucide } from '../shared/icon-map.js?v=3.26.3';
 import { fetchGlances } from '../shared/hwmon.js';
 import { PRESETS } from '../shared/bg-presets.js';
 import { effectiveTheme, ONLINE_SOURCES, DEFAULT_ONLINE_SOURCE } from '../shared/background.js';

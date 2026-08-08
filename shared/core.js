@@ -1,11 +1,11 @@
 /* ============ Fu 导航 · 共享内核 ============ */
 import { isExtension, loadConfig, saveConfig, onRemoteChange, getBookmarksTree, drainInbox } from './storage.js';
-import { mountItemIcon, mountGroupIcon } from './icons.js?v=3.26.0';
+import { mountItemIcon, mountGroupIcon } from './icons.js?v=3.26.3';
 import { getWeather, preciseLocate, wmo } from './weather.js';
 import { fetchAgentData, agentProbe } from './agent.js';
 import { cloudEnabled, cloudGet, cloudPut, cloudTest, cloudPutBackup, cloudListBackups, cloudGetFile } from './cloud.js';
-import { lucide, hostOf, isPrivateHost, brandIcon, faviconCandidates, iconSearch } from './icon-map.js?v=3.26.0';
-import { createIconEditor } from './icon-editor.js?v=3.26.0';
+import { lucide, hostOf, isPrivateHost, brandIcon, faviconCandidates, iconSearch } from './icon-map.js?v=3.26.3';
+import { createIconEditor } from './icon-editor.js?v=3.26.3';
 import { infinityToGroups, mergeInfinity } from './import-infinity.js';
 import { exportConfig as bmExport, importConfig as bmImport, cfgSignature as bmCfgSig, bmAvailable, ROOT_TITLE } from './bmsync.js';
 import { applyBackground, refreshOnlineBackground, effectiveTheme, DEFAULT_ONLINE_SOURCE } from './background.js';
@@ -16,11 +16,11 @@ import { readFavGrid, rankFavorites, visitItem, frecencyScore, rankByClicks, ran
 import { setAskProvider as updateAskProvider, submitAsk as runSubmitAsk } from './provider-action.js';
 import { migrateConfig as migrateSchema } from './config-schema.js';
 import { injectSecrets } from './config-secrets.js';
-import { applyInboxOps } from './sync-policy.js';
+import { applyInboxOps, rebaseLocalOps } from './sync-policy.js';
 import { saveSnapshot, listSnapshots, restoreSnapshot, deleteSnapshot } from './config-history.js';
 import { parseImport, applyImport, mergeImportCandidate } from './config-import.js';
 import { countTree, locateNode, moveNode, removeNode, walkTree } from './tree.js';
-import { loadRuntimeState, saveRuntimeState, requestCapability as askCapability, completeOnboarding as buildOnboardingResult } from './runtime-state.js?v=3.24.7';
+import { loadRuntimeState, saveRuntimeState, requestCapability as askCapability, completeOnboarding as buildOnboardingResult } from './runtime-state.js?v=3.26.3';
 import { buildSearchIndex, querySearchIndex } from './search-index.js';
 import { applyBulkOperation, clusterDuplicates, updateSelection } from './library-manager.js';
 import { agentStatusPatch, buildDiagnostics, cloudStatusPatch, conflictStatusPatch, exportSafeBackup, saveStatusPatch } from './diagnostics.js';
@@ -70,6 +70,7 @@ class Core {
     this._dialogTrigger=null; this._dialogOnClose=null; this._paletteTrigger=null; this._frameTrigger=null; this._fieldSeq=0;
     this._tombstones=new Set();    // 本会话删除过的 id（条目/文件夹/分组）——收件箱兑现时跳过，杜绝"删了又被补回"
     this._seenInboxOps=new Set();
+    this._pendingLocalOps=[]; this._seenLocalOps=new Set();
     this._remoteDirty=false; }     // 编辑弹层开着时挂起的"存储有更新"信号，关弹层再采纳（防 cfg 被换导致编辑写丢）
   get settings(){ return this.cfg.settings; }
   get groups(){ return this.cfg.groups; }
@@ -196,6 +197,7 @@ class Core {
   _markDeletedGroup(g){ if(!g) return; if(g.id) this._tombstones.add(g.id); (g.items||[]).forEach(x=>this._markDeleted(x)); }
   _clearDeleted(it){ if(!it||!it.id) return; this._tombstones.delete(it.id); if(this.isFolder(it)) (it.items||[]).forEach(x=>this._clearDeleted(x)); }
   _clearDeletedGroup(g){ if(!g)return; if(g.id)this._tombstones.delete(g.id); (g.items||[]).forEach(x=>this._clearDeleted(x)); }
+  _queueLocalOp(operation){ if(!operation)return; const opId=operation.opId||`local-${uid('o')}`; this._pendingLocalOps.push(structuredClone({...operation,opId,at:operation.at||Date.now()})); }
   _offerUndo(desc,restore){ const snap={restore}; this._undoSnap=snap;
     this.toast('已删除 '+desc,'ok',{label:'撤销',run:()=>{ if(this._undoSnap!==snap)return; this._undoSnap=null; snap.restore(); this.save(true); this.rerender(); }}); }
 
@@ -206,6 +208,11 @@ class Core {
       if(this._pendingSave===run) this._pendingSave=null;   // 起跑即摘牌：防 flushSave 撞上飞行中的 run 把同一次保存跑两遍(bmPush 并发重复导出)
       // local 是唯一权威：不做整份 diff「防丢合并」(只加不删的合并正是删除复活的元凶)；popup 增删走收件箱兑现
       try{ await this._applyInbox(); }catch{}
+      const localOps=this._pendingLocalOps.splice(0);
+      const localBase=this.cfg;
+      if(localOps.length){ try{ const latest=await loadConfig(); const rebased=rebaseLocalOps(localBase,latest?.config,localOps,{seenOpIds:this._seenLocalOps,tombstones:this._tombstones});
+        if(rebased.rebased){ this.cfg=rebased.config; this._seenLocalOps=rebased.seenOpIds; this._tombstones=rebased.deletedIds; this.migrate(); }
+      }catch{ this._pendingLocalOps.unshift(...localOps); } }
       await this.bmPush();        // 书签双向同步：导航变更 → 镜像到浏览器「Fu 导航」文件夹（内部按结构签名跳过无关变更）
       const r=await saveConfig(this.cfg);
       await this.updateRuntime(saveStatusPatch(r,this.cfg));
@@ -324,8 +331,8 @@ class Core {
   async mountLayout(name){
     this.layout=name; this.settings.layout=name;
     if(!this.root){ this.root=$('#root'); }
-    try{ this.layoutMod = await import(`../layouts/${name}.js?v=3.26.1`); }
-    catch(e){ console.error('布局加载失败',name,e); if(name!=='fusion'){ this.layout='fusion'; this.settings.layout='fusion'; try{ this.layoutMod=await import('../layouts/fusion.js?v=3.26.1'); }catch{ this.layoutMod=null; } } else this.layoutMod=null; }
+    try{ this.layoutMod = await import(`../layouts/${name}.js?v=3.26.3`); }
+    catch(e){ console.error('布局加载失败',name,e); if(name!=='fusion'){ this.layout='fusion'; this.settings.layout='fusion'; try{ this.layoutMod=await import('../layouts/fusion.js?v=3.26.3'); }catch{ this.layoutMod=null; } } else this.layoutMod=null; }
     this.rerender();
     $$('.layout-switch [data-l]').forEach(b=>b.classList.toggle('on', b.dataset.l===name));
   }
@@ -413,7 +420,7 @@ class Core {
   setEditing(value){ this.editing=!!value; this.settings.locked=!this.editing; document.body.classList.toggle('editing',this.editing); this.rerender(); return this.editing; }
   /* 递归定位（任意层级，含文件夹内）后移动到目标分组顶层；同组顶层为无操作，同组文件夹内=移出文件夹 */
   moveItemToGroup(iid, toGid){ const hit=locateNode(this.groups,iid); if(!hit || (hit.group.id===toGid&&!hit.parent))return false;
-    const moved=moveNode(this.groups,iid,{groupId:toGid}); if(!moved.ok)return false; this.save(true); return true; }
+    const moved=moveNode(this.groups,iid,{groupId:toGid}); if(!moved.ok)return false; this._queueLocalOp({op:'edit',id:iid,patch:{},tgid:toGid}); this.save(true); return true; }
 
   /* ===== 子文件夹（分组 → 文件夹 → 网站，两级）===== */
   isFolder(it){ return !!(it && it.type==='folder'); }
@@ -435,11 +442,11 @@ class Core {
   _itemFolder(g, item){ const hit=item&&locateNode(this.groups,item.id); return hit&&hit.group===g&&hit.node===item?hit.parent:null; }
   /* 删除条目（跨分组、含文件夹内） */
   deleteItem(item){ const hit=this._itemLocation(item); if(!hit)return false;
-    this._markDeleted(item); hit.arr.splice(hit.idx,1); this.save(true); this.rerender();
+    this._queueLocalOp({op:'del',id:item.id}); this._markDeleted(item); hit.arr.splice(hit.idx,1); this.save(true); this.rerender();
     this._offerUndo(item.name||'条目',()=>{ hit.arr.splice(hit.idx,0,item); this._clearDeleted(item); }); return true; }
   /* 移入文件夹 / 移出文件夹 */
-  moveItemToFolder(item, folder, g){ const moved=moveNode(this.groups,item?.id,{groupId:g?.id,folderId:folder?.id}); if(!moved.ok){this.toast('不能移动到该位置','err');return false;} this.save(true); this.rerender(); return true; }
-  moveItemOutOfFolder(item, folder, g){ const moved=moveNode(this.groups,item?.id,{groupId:g?.id}); if(!moved.ok)return false; this.save(true); this.rerender(); return true; }
+  moveItemToFolder(item, folder, g){ const moved=moveNode(this.groups,item?.id,{groupId:g?.id,folderId:folder?.id}); if(!moved.ok){this.toast('不能移动到该位置','err');return false;} this._queueLocalOp({op:'edit',id:item.id,patch:{},tgid:g.id,tfid:folder.id}); this.save(true); this.rerender(); return true; }
+  moveItemOutOfFolder(item, folder, g){ const moved=moveNode(this.groups,item?.id,{groupId:g?.id}); if(!moved.ok)return false; this._queueLocalOp({op:'edit',id:item.id,patch:{},tgid:g.id}); this.save(true); this.rerender(); return true; }
   /* 新建/重命名/删除文件夹 */
   openFolderEditor(folder, gid, container){ const isNew=!folder; const nameI=this.inp(folder?.name||'', container?'子文件夹名称':'文件夹名称');
     const save=this.btn(isNew?'创建':'保存','primary',()=>{ const name=nameI.value.trim()||'新文件夹';
@@ -612,15 +619,18 @@ class Core {
     const iconEd=createIconEditor({ icon:item?.icon||'', name:item?.name||'', url:item?.url||'' });
     nameI.addEventListener('input',()=>iconEd.setContext(nameI.value, urlI.value));
     urlI.addEventListener('input',()=>iconEd.setContext(nameI.value, urlI.value));
-    const save=this.btn(isNew?'添加':'保存','primary',()=>{ let url=urlI.value.trim(); if(!url){this.toast('请填写网址','err');return;}
+    const save=this.btn(isNew?'添加':'保存','primary',async()=>{ let url=urlI.value.trim(); if(!url){this.toast('请填写网址','err');return;}
       if(/^\s*(javascript|data|vbscript):/i.test(url)){ this.toast('不支持 javascript:/data: 等协议','err'); return; }   // 拒绝可执行伪协议(存储型 XSS 防护)
       if(!/^[a-z]+:\/\//i.test(url)&&!/^(chrome|edge|about):/i.test(url)) url='https://'+url;
       const csv=value=>[...new Set(value.split(/[,，]/).map(part=>part.trim()).filter(Boolean))];
       const data={name:nameI.value.trim()||hostOf(url)||url,url,note:noteI.value.trim(),tags:csv(tagsI.value),aliases:csv(aliasesI.value),icon:iconEd.getIcon(),fav:favC.querySelector('input').checked?true:undefined,frame:frameC.querySelector('input').checked?true:undefined};
       const tg=this.groups.find(g=>g.id===sel.value);
       if(!tg){ this.toast('目标分组已不存在','err'); return; }
-      if(isNew){ data.id=uid('i'); if(addTo && addTo.gid===tg.id && this.isFolder(addTo.folder)){ (addTo.folder.items||(addTo.folder.items=[])).push(data); } else tg.items.push(data); } else { const keep=item.id; Object.assign(item,data); item.id=keep; const cur=this.groups.find(g=>this._containsItem(g,item)); if(cur&&cur!==tg){ this._removeItem(cur,item); tg.items.push(item); } }
-      this.markUserEdited(); this.save(true);this.rerender();this.closeModal(); });
+      if(isNew){ data.id=uid('i'); const folderId=addTo && addTo.gid===tg.id && this.isFolder(addTo.folder)?addTo.folder.id:undefined; if(folderId){ (addTo.folder.items||(addTo.folder.items=[])).push(data); } else tg.items.push(data);
+        this._queueLocalOp({op:'add',gid:tg.id,folderId,gname:tg.name,gicon:tg.icon,gcolor:tg.color,item:data}); }
+      else { const keep=item.id; Object.assign(item,data); item.id=keep; const cur=this.groups.find(g=>this._containsItem(g,item)); if(cur&&cur!==tg){ this._removeItem(cur,item); tg.items.push(item); }
+        const next=locateNode(this.groups,item.id); this._queueLocalOp({op:'edit',id:item.id,patch:data,tgid:next?.group?.id||tg.id,tfid:next?.parent?.id}); }
+      this.markUserEdited(); await this.save(true);this.rerender();this.closeModal(); });
     const foot=[ isNew?null:this.btn('删除','danger',()=>{this.deleteItem(item);this.closeModal();}), this.btn('取消','ghost',()=>this.closeModal()), save ];   // deleteItem 递归定位（含文件夹内），与卡片悬停删除同一条路径
     const row=el('div','fn-row'); row.append(this.field('所属分组',sel),this.field('备注',noteI));
     const metaRow=el('div','fn-row'); metaRow.append(this.field('标签',tagsI),this.field('别名',aliasesI));
@@ -793,6 +803,9 @@ class Core {
 
   /* 设置 —— 常用（默认展开）/ 同步与备份 / 高级 三层（S2/S7/S9）；云与书签同步收成「摘要+按钮→子弹层」（S1） */
   openSettings(){ const s=this.settings; const titleI=this.inp(s.title||'Fu 导航');
+    const agentPortI=this.inp(String(s.agentPort||7842),'7842'); agentPortI.type='number'; agentPortI.min='1'; agentPortI.max='65535'; agentPortI.inputMode='numeric';
+    const agentTokenI=this.inp(s.agentToken||'','只保存在本机'); agentTokenI.type='password'; agentTokenI.autocomplete='off';
+    const agentCredentials=el('div','fn-row'); agentCredentials.append(this.field('本机 Agent 端口',agentPortI),this.field('本机 Agent Token',agentTokenI));
     const providerSel=el('select'); Object.entries(PROVIDERS).forEach(([id,p])=>{const o=el('option',null,p.name);o.value=id;o.selected=id===this.activeProvider();providerSel.appendChild(o);}); providerSel.onchange=()=>this.setAskProvider(providerSel.value);
     const favGrid=this.favGrid(), favGridSeg=this.seg([['6x2','6×2'],['8x2','8×2'],['6x3','6×3'],['8x3','8×3']],`${favGrid.cols}x${favGrid.rows}`,v=>{ const [cols,rows]=v.split('x').map(Number); s.favGrid={cols,rows}; this.save(true); this.rerender(); });
     const accentGrid=el('div','fn-colorgrid');
@@ -866,6 +879,7 @@ class Core {
         el('div','fn-sub','添加卡片（或在首页解锁后右键卡片区添加）'), addRow,
       ]),
       this.sect('高级与诊断',[
+        this.field('本机 Agent 连接',agentCredentials),
         this.field('使用统计',statsWrap),
         this.field('归档分组',archiveWrap),
         this.field('场景模式 / 工作区',modeWrap),
@@ -873,7 +887,7 @@ class Core {
         this.field('诊断状态',diagWrap),
         this.field('危险操作',dangerWrap),
       ]),
-    ],[ this.btn('完成','primary',()=>{ s.title=titleI.value.trim()||'Fu 导航'; this.applyTheme(); this.save(true); this.rerender(); this.closeModal(); }) ]); }
+    ],[ this.btn('完成','primary',()=>{ s.title=titleI.value.trim()||'Fu 导航'; s.agentPort=Math.min(65535,Math.max(1,Number(agentPortI.value)||7842)); s.agentToken=agentTokenI.value; this.applyTheme(); this.save(true); this.rerender(); this.closeModal(); }) ]); }
 
   /* ====== 书签库：统一索引、筛选、多选、批量与重复处理 ====== */
   openLibrary(){

@@ -276,7 +276,7 @@ criteria:
         - 打开新标签页、搜索、编辑本地分组
         - 再从设置主动启用书签同步
       expected: core features work after denial and permission can be requested again from explicit action
-    passes: false
+    passes: true
 
   - id: P1-SEARCH-001
     priority: P1
@@ -542,7 +542,7 @@ criteria:
         - 打开新标签页并确认网站出现在该文件夹
         - 在 popup 或 background 更新同一 config 后重新检查
       expected: item remains once, path is correct, badge and newtab agree, console error count is 0
-    passes: false
+    passes: true
 
   - id: E2E-002
     priority: E2E
@@ -555,7 +555,7 @@ criteria:
         - 触发 storage remote change 和云合并
         - 重载两个上下文
       expected: deleted item absent, edited item updated, no duplicate IDs, no conflict is hidden
-    passes: false
+    passes: true
 
   - id: E2E-003
     priority: E2E
@@ -568,7 +568,7 @@ criteria:
         - 检查未打开新页且文本不变
         - 按 Enter 一次
       expected: exactly one destination opens with selected provider and original text
-    passes: false
+    passes: true
 
   - id: E2E-004
     priority: E2E
@@ -581,7 +581,7 @@ criteria:
         - 打开设置修改 Provider
         - 用 popup 保存到二级目录
       expected: no page scroll required before favorite activation, no clipped primary action, all state persists
-    passes: false
+    passes: true
 
   - id: E2E-005
     priority: E2E
@@ -593,5 +593,5 @@ criteria:
         - 触发本机保存、sync 保存、云上传、备份导出和复制诊断
         - 搜索所有可观察载荷和输出
       expected: secrets only exist in local secret storage and authorized request header; all other outputs have zero matches
-    passes: false
+    passes: true
 ```

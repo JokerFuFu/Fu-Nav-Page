@@ -141,6 +141,16 @@ export function applyInboxOps(input, operations, seenInput = new Set(), options 
   };
 }
 
+export function rebaseLocalOps(current, latest, operations, options = {}) {
+  const currentSavedAt=Number(current?.savedAt)||0;
+  const latestSavedAt=Number(latest?.savedAt)||0;
+  if(!latest || latestSavedAt<=currentSavedAt){
+    return {config:clone(current||{}),rebased:false,applied:0,skipped:0,seenOpIds:new Set(options.seenOpIds||[]),deletedIds:new Set(options.tombstones||[])};
+  }
+  const result=applyInboxOps(latest,operations,options.seenOpIds||new Set(),{tombstones:options.tombstones});
+  return {...result,rebased:true};
+}
+
 function indexNodes(config) {
   const index = new Map();
   const ownFields = (node) => {
