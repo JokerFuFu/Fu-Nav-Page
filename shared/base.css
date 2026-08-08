@@ -15,7 +15,8 @@
   /* 间距阶 4/8/12/16/24/32/48 */ --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px; --s7:48px;
   /* 圆角只此三档 */ --r-sm:8px; --r-md:12px; --r-lg:16px;
   /* 动效 */ --t:130ms ease;
-  --surface-glass: rgba(20,20,23,.55);   /* --surface 的半透明版，仅 body.bg-photo 磨砂玻璃场景用 */
+  --surface-glass: rgba(20,20,23,.78);   /* 壁纸最亮处仍给小字保留 AA 对比度 */
+  --photo-meta:rgba(255,255,255,.84);
   /* 自定义表单控件素材（DESIGN.md: toggle/checkbox/field）*/
   --scheme:dark;   /* 原生弹层(日期选择等)跟主题 */
   --caret:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a0a0a8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
@@ -29,7 +30,8 @@ body[data-theme="light"]{
   --accent:#4a55f3; --accent-strong:#4a55f3; --ring:rgba(74,85,243,.22);  /* accent 微调以让激活文字过 AA(原 #4f5bff 4.47:1) */
   --shadow:0 12px 30px rgba(40,50,90,.12); --shadow-lg:0 28px 80px rgba(40,50,90,.22); --overlay-bg:#ffffff;
   --scrim:rgba(23,25,35,.38);
-  --surface-glass: rgba(255,255,255,.55);
+  --surface-glass: rgba(255,255,255,.84);
+  --photo-meta:#414656;
   --scheme:light; --danger:#c92343;
   --caret:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23565a68' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 }
@@ -41,7 +43,8 @@ body[data-theme="light"]{
   --accent:#4a55f3; --accent-strong:#4a55f3; --ring:rgba(74,85,243,.22);  /* accent 微调以让激活文字过 AA(原 #4f5bff 4.47:1) */
   --shadow:0 12px 30px rgba(40,50,90,.12); --shadow-lg:0 28px 80px rgba(40,50,90,.22); --overlay-bg:#ffffff;
   --scrim:rgba(23,25,35,.38);
-  --surface-glass: rgba(255,255,255,.55);
+  --surface-glass: rgba(255,255,255,.84);
+  --photo-meta:#414656;
   --scheme:light; --danger:#c92343;
   --caret:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23565a68' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 } }
@@ -61,6 +64,8 @@ body.bg-photo #bg-layer{
   background-size: cover;
   background-position: center;
 }
+body.bg-photo .lay-fusion .fx-wcw-sub,body.bg-photo .lay-fusion .fx-wcw-cond,body.bg-photo .lay-fusion .fx-wcw-fdw{ color:var(--photo-meta); }
+body.bg-photo .lay-fusion .fx-home-empty{ color:rgba(255,255,255,.9); text-shadow:0 1px 7px rgba(0,0,0,.72); }
 button{font-family:inherit;cursor:pointer;color:inherit;border:none;background:none}
 input,select,textarea{font-family:inherit}  /* 表单控件默认不继承字体，显式让搜索框等都用 Inter */
 a{text-decoration:none;color:inherit}

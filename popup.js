@@ -1,7 +1,7 @@
 /* ============ 工具栏目录级收藏器 ============ */
 import { loadConfig, saveConfig, pushInbox } from './shared/storage.js';
-import { createIconEditor } from './shared/icon-editor.js?v=3.25.0';
-import { hostOf, normUrl } from './shared/icon-map.js?v=3.25.0';
+import { createIconEditor } from './shared/icon-editor.js?v=3.26.0';
+import { hostOf, normUrl } from './shared/icon-map.js?v=3.26.0';
 import { locateNode, removeNode, walkTree } from './shared/tree.js';
 import { buildDestinationOptions, rememberDestination, savePopupItem, RECENT_DESTINATIONS_KEY } from './shared/popup-model.js';
 

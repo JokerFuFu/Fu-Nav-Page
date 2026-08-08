@@ -1,26 +1,38 @@
 /* ============ 融合布局 v3.1：极简AI首页 + 时钟/天气卡 + 右键编辑 + 拖拽 ============ */
 import { $, $$, el, safeHref } from '../shared/core.js';
-import { dashboardIcon, lucide } from '../shared/icon-map.js?v=3.25.0';
+import { dashboardIcon, lucide } from '../shared/icon-map.js?v=3.26.0';
 import { fetchGlances } from '../shared/hwmon.js';
 import { PRESETS } from '../shared/bg-presets.js';
 import { effectiveTheme, ONLINE_SOURCES, DEFAULT_ONLINE_SOURCE } from '../shared/background.js';
 import { filterContent, filterKeyAction } from '../shared/provider-action.js';
 import { homeDensity, visibleWidgets } from '../shared/home-settings.js';
 const picon = p => (p.icon && p.icon.startsWith('http')) ? p.icon : dashboardIcon(p.icon);
-let active='home', clockTimer=null, drag=null, clockEls=null, ctxMenu=null, ctxTrigger=null, askOutsideHandler=null;
+let active='home', clockTimer=null, drag=null, clockEls=null, ctxMenu=null, ctxTrigger=null, askOutsideHandler=null, sidebarOpen=false;
 
 document.addEventListener('click', ()=>hideCtx());
 document.addEventListener('scroll', ()=>hideCtx(), true);
+document.addEventListener('keydown', event=>{ if(event.key==='Escape' && sidebarOpen) setSidebarOpen(false); });
+
+export function setSidebarOpen(value){
+  sidebarOpen=!!value;
+  const root=document.querySelector('.lay-fusion');
+  if(root) root.classList.toggle('sidebar-open',sidebarOpen);
+  document.body.classList.toggle('sidebar-open',sidebarOpen);
+  const trigger=root&&root.querySelector('.fx-mobile-menu');
+  if(trigger) trigger.setAttribute('aria-expanded',String(sidebarOpen));
+}
 
 export function mount(root, core){
-  root.className='lay-fusion'+(core.settings.sideCollapsed?' side-collapsed':'');
+  root.className='lay-fusion'+(core.settings.sideCollapsed?' side-collapsed':'')+(sidebarOpen?' sidebar-open':'');
   if(clockTimer){ clearInterval(clockTimer); clockTimer=null; } clockEls=null;
   hideCtx();                                                     // D8: 右键菜单随重渲染清理，防残留 body
   if(bgPanelEl){ bgPanelEl.remove(); bgPanelEl=null; }           // D8: 背景面板锚点已随旧树销毁，面板不清会滞留
   if(core._navTo!==undefined){ active=core._navTo; core._navTo=undefined; }   // 命令面板/外部跳转分组
   if(active!=='home' && !findNode(core,active)) active='home';
   const wrap=el('div','fx-wrap');
-  wrap.appendChild(buildSidebar(core));
+  const mobileMenu=el('button','fx-mobile-menu'); mobileMenu.type='button'; mobileMenu.title='打开导航'; mobileMenu.setAttribute('aria-label','打开导航'); mobileMenu.setAttribute('aria-controls','fx-side'); mobileMenu.setAttribute('aria-expanded',String(sidebarOpen)); mobileMenu.appendChild(mico('menu',18)); mobileMenu.onclick=()=>setSidebarOpen(true);
+  const scrim=el('button','fx-side-scrim'); scrim.type='button'; scrim.tabIndex=-1; scrim.setAttribute('aria-label','关闭导航'); scrim.onclick=()=>setSidebarOpen(false);
+  wrap.append(mobileMenu,buildSidebar(core),scrim);
   const main=el('section','fx-main'); main.id='fx-main';
   wrap.appendChild(main);
   root.appendChild(wrap);
@@ -29,7 +41,8 @@ export function mount(root, core){
 
 /* ---------- 侧边栏 ---------- */
 function buildSidebar(core){
-  const side=el('aside','fx-side');
+  const side=el('aside','fx-side'); side.id='fx-side';
+  const close=el('button','fx-side-close'); close.type='button'; close.title='关闭导航'; close.setAttribute('aria-label','关闭导航'); close.appendChild(mico('x',18)); close.onclick=()=>setSidebarOpen(false); side.appendChild(close);
   const brand=el('button','fx-brand'); brand.onclick=()=>go(core,'home'); brand.title=core.settings.title||'Fu 导航';
   const logo=el('img','fx-logo'); logo.src='icons/icon128.png'; logo.alt='';
   brand.append(logo, el('h1',null, core.settings.title||'Fu 导航'));
@@ -58,7 +71,7 @@ function buildSidebar(core){
   modeSwitch.title=`工作区：${modeCurrent}（点击切换）`; modeSwitch.setAttribute('aria-label',modeSwitch.title);
   modeSwitch.append(mico(am==='privacy'?'eye':'layers',16),el('span','fx-mode-hub-copy',null));
   const modeCopy=modeSwitch.querySelector('.fx-mode-hub-copy'); modeCopy.append(el('small',null,'工作区'),el('strong',null,modeCurrent)); modeSwitch.onclick=e=>openModeMenu(core,e);
-  const modeManage=el('button','fx-mode-hub-manage'); modeManage.type='button'; modeManage.title='管理工作区'; modeManage.setAttribute('aria-label','管理工作区'); modeManage.appendChild(mico('settings-2',14)); modeManage.onclick=()=>core.openModeManager();
+  const modeManage=el('button','fx-mode-hub-manage'); modeManage.type='button'; modeManage.title='管理工作区'; modeManage.setAttribute('aria-label','管理工作区'); modeManage.appendChild(mico('settings-2',14)); modeManage.onclick=()=>{setSidebarOpen(false);core.openModeManager();};
   modeHub.append(modeSwitch,modeManage); side.appendChild(modeHub);
   const foot=el('div','fx-side-foot');
   // 添加网站
@@ -98,7 +111,7 @@ function navItem(core,key,icon,name,count,on,group){
     showCtx(e.clientX,e.clientY,menu,e.currentTarget); };
   return a;
 }
-function sideBtn(core,icon,title,on){ const b=el('button','fx-sidebtn'); b.title=title; b.setAttribute('aria-label',title); b.onclick=on;
+function sideBtn(core,icon,title,on){ const b=el('button','fx-sidebtn'); b.title=title; b.setAttribute('aria-label',title); b.onclick=event=>{ setSidebarOpen(false); on(event); };
   const s=el('span','fx-sb-ico lucide-mask'); s.style.webkitMaskImage=s.style.maskImage=`url("${core.lucide(icon)}")`; s.style.background='currentColor';
   b.appendChild(s); return b; }
 /* 场景模式切换器：全部 / 多属分组模式 / 隐私 */
@@ -133,14 +146,14 @@ function navGroup(core,g){ const out=[]; const folders=(g.items||[]).filter(x=>c
     r.onclick=()=>go(core,fd.id);   // 进入文件夹子页面
     out.push(r); });
   return out; }
-function go(core,key){ active=key; renderMain(core,$('#fx-main')); markNav(); }
+function go(core,key){ active=key; setSidebarOpen(false); renderMain(core,$('#fx-main')); markNav(); }
 function markNav(){ $$('.fx-navitem').forEach(b=>b.classList.toggle('on', b.dataset.k===active)); }
 
 /* ---------- 主区 ---------- */
 /* 按 id 解析当前视图：分组 或 文件夹（含所属分组）*/
 function findFolderById(core,g,id){ const find=arr=>{ for(const it of (arr||[])){ if(core.isFolder(it)){ if(it.id===id)return it; const r=find(it.items); if(r)return r; } } return null; }; return find(g.items); }
 function findNode(core,id){ for(const g of core.groups){ if(g.id===id) return {group:g}; const fd=findFolderById(core,g,id); if(fd) return {group:g, folder:fd}; } return null; }
-function renderMain(core,main){ if(!main)return; main.textContent='';
+function renderMain(core,main){ if(!main)return; main.className='fx-main'; main.textContent='';
   if(active==='home'){ core.applyBackground(true); renderHome(core,main); return; }
   core.applyBackground(false);
   const node=findNode(core,active);
@@ -152,6 +165,7 @@ function renderMain(core,main){ if(!main)return; main.textContent='';
 function renderHome(core,main){
   const am=core.activeModeObj(), priv=am==='privacy';
   const density=homeDensity(innerWidth,innerHeight);
+  main.classList.toggle('home-compact',density==='compact');
   const home=el('div','fx-home density-'+density+(priv?' fx-home-priv':''));
   home.dataset.density=density;
   if(!priv){ const grid=core.favGrid(); const contentScale=grid.rows===3?(grid.cols===8?.76:.84):1; home.style.setProperty('--home-scale',density==='compact'?Math.min(contentScale,.82):contentScale); }
@@ -498,6 +512,7 @@ function wireLocalFilter(input,scope){ const apply=()=>{ const cards=$$('.fx-car
 function renderGroup(core,main,g){
   if(!g){ active='home'; return renderHome(core,main); }
   const stats=core.treeCount(g.items);
+  main.classList.toggle('content-sparse',stats.topLevel<=4);
   const top=el('div','fx-gtop');
   const title=el('div','fx-gtitle'); const ico=el('span','fx-gtitle-ico'); core.mountGroupIcon(ico,g); title.append(ico, el('span',null,g.name), el('span','fx-gtitle-ct',`顶层 ${stats.topLevel} 项 · 共 ${stats.sites} 网站`));
   const f=el('form','fx-gsearch'); const si=el('input'); si.placeholder='筛选本组…'; si.setAttribute('aria-label','筛选本组网站'); f.appendChild(si); f.addEventListener('submit',e=>e.preventDefault());
@@ -515,6 +530,7 @@ function renderGroup(core,main,g){
 function renderFolderPage(core,main,fd,g){
   const isTop=(g.items||[]).includes(fd);   // 顶层文件夹才可再建子文件夹（封顶两级）
   const stats=core.treeCount(fd.items||[]);
+  main.classList.toggle('content-sparse',stats.topLevel<=4);
   const top=el('div','fx-gtop');
   const title=el('div','fx-gtitle');
   const crumb=el('button','fx-crumb',g.name); crumb.title='返回 '+g.name; crumb.onclick=()=>go(core,g.id);
@@ -591,7 +607,7 @@ function folderCard(core,g,fd,depth){
   const a=el('button','fx-card fx-folder'); a.type='button'; a.title=fd.name||'文件夹'; a.dataset.iid=fd.id; a.draggable=!!core.editing;
   const stats=core.treeCount(fd.items||[]);
   const ico=el('span','fx-card-ico fx-folder-mini'); renderFolderMini(core,ico,fd);
-  const meta=el('span','fx-card-meta'); meta.append(el('span','fx-card-nm',fd.name||'文件夹'), el('span','fx-card-url', `${stats.sites} 网站 · ${stats.folders} 子文件夹`));
+  const meta=el('span','fx-card-meta'); meta.append(el('span','fx-card-nm',fd.name||'文件夹'), el('span','fx-folder-count', `${stats.sites} 网站 · ${stats.folders} 子文件夹`));
   a.append(ico,meta); if(core.editing)a.appendChild(folderActions(core,fd,g));
   a.addEventListener('click',e=>{ e.preventDefault(); if(core.editing) core.openFolderEditor(fd,g.id); else go(core,fd.id); });   // 进入文件夹页（二级菜单，非弹层）
   a.addEventListener('contextmenu',e=>folderMenu(core,e,fd,g,depth||0));

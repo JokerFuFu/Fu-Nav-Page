@@ -215,6 +215,13 @@ background `#fafafb` · surface `#ffffff` · surface-raised `#f4f4f6` · surface
 - **field** — 文本输入/select/date 等表单字段：surface-raised 底、sm 圆角、1px border、聚焦转 primary 描边 + ring；select 去原生箭头改自定义 ▾，date 图标随主题。字体一律继承 Inter。
 - **badge** — 实心状态徽章。success-strong 底 + 白字 + 图标，pill 圆角，纵 8 横 12 内距。强确认场景（popup「已收藏」提示）用，比 status-online 的「surface 底 + 状态色字」更醒目；节制使用，一处场景一个。工具栏图标的「已收藏」角标是它在浏览器原生 UI 里的等价物（同 success-strong 底、白 ✓）。
 - **floating-control** — 悬浮在视口角的圆形轻控件（首页壁纸入口 `.fx-bg-trigger`）。`position:fixed` 贴视口**真正的角落**（不随内容区偏移）、pill 全圆角、36px 命中区、hover 上移 1px。磨砂玻璃**仅 `body.bg-photo` 背景图模式**启用（`--surface-glass` 底 + `backdrop-filter:blur(14) saturate(1.3)` + 白 14% 描边），纯色模式退回不透明表层。用于「不抢首页焦点、又要随手可及」的单一浮动操作；承载多个并列动作是 menu/panel 的活，不要塞进这里。
+
+### 响应式与内容密度状态
+
+- `≤760px` 时侧栏固定为离屏抽屉，通过 `.sidebar-open` 控制；页面只保留一个 40px 导航入口，遮罩、关闭按钮与 Escape 共用同一个关闭动作，打开期间锁定页面滚动。
+- `.home-compact` 表示首页在短视口进入紧凑密度，内容宽度上限 980px；`.content-sparse` 表示分组或文件夹顶层不超过 4 项，标题与网格共同收窄到 880px，避免少量内容漂散。
+- 文件夹数量是识别层级的必要元数据，使用 `.fx-folder-count` 在大图、列表、详情三种视图始终显示，不复用仅详情态展示的网址字段。
+- 背景图态的叠层透明度深色主题最低 `0.52`、浅色主题最低 `0.42`；玻璃表层分别使用深色 `0.78`、浅色 `0.84` 的不透明度，小号元数据统一使用主题化 `--photo-meta`，不得直接继承纯色背景上的弱文本色。
 - **icon-button** — 带 lucide 图标的按钮统一走 `core.btn(label,cls,on,ic)`（`.fn-btn.has-ic` + `.fn-btn-ic.lucide-mask`，图标 `currentColor` 随按钮态变色）。凡是有语义图标的操作按钮（含壁纸弹窗的在线源/上传/恢复）都用它，不再出现「没有图标的纯文字操作框」与 emoji 前缀。
 - **stat-tile** — 统计总览大数字（使用统计模态）。数字 28px/750 + tabular-nums，下配 caps 11 标签（text-subtle）；无边框无卡片底，多格并排靠间距分隔——大数字本身就是层级，不再叠表层。
 - **leaderboard** — 排行榜单行（使用统计 Top 榜）。整行是 button（≥32px 命中区，hover 升 surface-raised）：排名列 caps + tabular-nums（前三名 accent + 650，其余 text-subtle）、网站图标 26px sm 圆角、名称 body/550、右侧 meta 用 caps + text-subtle + tabular-nums；名称行下是 3px 相对条形（密集微网格例外档）——pill 圆角、底 surface-raised、填充 accent 55% 透明度（数据可视化是 accent 允许成排出现的唯一场景，仍靠低透明度保持稀缺感）。

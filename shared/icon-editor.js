@@ -3,8 +3,8 @@
  * 纯色模式产出 `L|文字|颜色|字号%`（字号为占图标格高度的百分比，省略则用 CSS 默认）。
  * 被 core.openItemEditor 与工具栏 popup 复用，保证两处不漂移。
  */
-import { mountItemIcon } from './icons.js?v=3.24.5';
-import { dashboardIcon, iconSearch } from './icon-map.js?v=3.25.0';
+import { mountItemIcon } from './icons.js?v=3.26.0';
+import { dashboardIcon, iconSearch } from './icon-map.js?v=3.26.0';
 
 export const ICON_COLORS = ['#ef4444','#f97316','#f59e0b','#22c55e','#06b6d4','#3b82f6','#8b5cf6','#ec4899','#64748b'];
 const DEF_FONT = 45;   // 纯色字号默认（% of tile）

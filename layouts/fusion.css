@@ -1,5 +1,6 @@
 /* ============ 融合布局 v3.1：极简AI首页 + 卡片 + 右键 + 拖拽 ============ */
 .lay-fusion .fx-wrap{ display:flex; min-height:100vh; }
+.lay-fusion .fx-mobile-menu,.lay-fusion .fx-side-scrim,.lay-fusion .fx-side-close{ display:none; }
 
 /* 侧边栏 */
 .lay-fusion .fx-side{ width:236px; flex:0 0 236px; position:sticky; top:0; height:100vh; overflow-y:auto; overflow-x:hidden;
@@ -77,6 +78,8 @@ body.editing .lay-fusion .fx-navitem[data-gid]{ cursor:grab; }
 
 /* 主区 */
 .lay-fusion .fx-main{ flex:1; min-width:0; padding:0 clamp(16px,4vw,48px); max-width:1320px; margin:0 auto; width:100%; }
+.lay-fusion .fx-main.home-compact .fx-home{ max-width:980px; margin-inline:auto; }
+.lay-fusion .fx-main.content-sparse .fx-gtop,.lay-fusion .fx-main.content-sparse .fx-grid{ width:100%; max-width:880px; margin-left:auto; margin-right:auto; }
 
 /* ===== 极简首页：搜索 → 常用 → 组件 ===== */
 .lay-fusion .fx-home{ --home-scale:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-start; gap:calc(var(--s4) * var(--home-scale)); padding:calc(var(--s7) * var(--home-scale)) 0; min-height:100vh; overflow:visible; box-sizing:border-box; }
@@ -259,6 +262,7 @@ body.editing .lay-fusion .fx-card{ cursor:grab; }
 .lay-fusion .fx-card-ico img{ width:100%; height:100%; object-fit:contain; padding:var(--s1); }
 .lay-fusion .fx-card-ico.is-letter{ color:#fff; font-weight:700; font-size:17px; }
 .lay-fusion .fx-card-meta{ display:flex; flex-direction:column; gap:var(--s1); min-width:0; flex:1; }
+.lay-fusion .fx-folder-count{ display:block; font-size:11px; color:var(--text-3); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .lay-fusion .fx-card-nm{ font-size:14px; font-weight:550; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .lay-fusion .fx-card-note{ font-size:11px; color:var(--text-3); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .lay-fusion .fx-card-edit{ width:26px; height:26px; border-radius:var(--r-sm); color:var(--text-3); font-size:12px; display:none; place-items:center; }
@@ -394,15 +398,22 @@ body:not(.editing) .lay-fusion .fx-card:active{ transform:translateY(0) scale(.9
 .lay-fusion .fx-navitem.fx-droptarget .fx-ni-ico{ color:#fff; }
 
 @media (max-width:760px){
-  .lay-fusion .fx-wrap{ flex-direction:column; }
-  .lay-fusion .fx-side{ width:100%; flex:none; height:auto; position:static; flex-direction:row; flex-wrap:wrap; align-items:center; }
-  .lay-fusion .fx-nav{ flex-direction:row; flex-wrap:wrap; }
-  .lay-fusion .fx-home{ --home-scale:1 !important; min-height:100vh; overflow:visible; padding-top:var(--s5); }
+  body.sidebar-open{ overflow:hidden; }
+  .lay-fusion .fx-wrap{ display:block; }
+  .lay-fusion .fx-mobile-menu{ display:grid; place-items:center; position:fixed; top:var(--s3); left:var(--s3); z-index:54; width:40px; height:40px; border-radius:999px; color:var(--text); background:var(--surface); border:1px solid var(--border-2); box-shadow:var(--shadow); }
+  .lay-fusion .fx-side-scrim{ display:block; position:fixed; inset:0; z-index:55; background:var(--scrim); opacity:0; pointer-events:none; transition:opacity var(--t); }
+  .lay-fusion .fx-side{ width:min(86vw,300px); max-width:300px; flex:none; height:100dvh; position:fixed; inset:0 auto 0 0; z-index:56; flex-direction:column; flex-wrap:nowrap; align-items:stretch; transform:translateX(-105%); transition:transform var(--t); box-shadow:var(--shadow-lg); }
+  .lay-fusion.sidebar-open .fx-side{ transform:translateX(0); }
+  .lay-fusion.sidebar-open .fx-side-scrim{ opacity:1; pointer-events:auto; }
+  .lay-fusion.sidebar-open .fx-mobile-menu{ opacity:0; pointer-events:none; }
+  .lay-fusion .fx-side-close{ display:grid; place-items:center; position:absolute; top:var(--s3); right:var(--s3); width:36px; height:36px; border-radius:999px; color:var(--text-2); background:var(--surface-2); z-index:2; }
+  .lay-fusion .fx-nav{ flex-direction:column; flex-wrap:nowrap; }
+  .lay-fusion .fx-home{ --home-scale:1 !important; min-height:100vh; overflow:visible; padding-top:72px; }
   .lay-fusion .fx-collapse{ display:none; }                                   /* 移动端侧栏不收折 */
-  .lay-fusion .fx-navitem{ width:auto; flex:0 0 auto; }                        /* 分组变内联 chips，侧栏不再占满首屏 */
-  .lay-fusion .fx-navfolder{ display:none; }                                   /* 子文件夹树桌面专属，移动端点进分组后再进 */
+  .lay-fusion .fx-navitem{ width:100%; flex:0 0 auto; }
+  .lay-fusion .fx-navfolder{ display:flex; }
   .lay-fusion .fx-mode-hub{ width:100%; }
-  .lay-fusion .fx-side-foot{ width:100%; justify-content:space-around; }      /* 底部按钮整行排底，不再浮在导航右侧 */
+  .lay-fusion .fx-side-foot{ width:100%; justify-content:space-around; }
   .lay-fusion .fx-wcard{ flex:1 1 100%; }                                     /* 小组件卡满宽堆叠，宽度一致 */
   .lay-fusion .fx-favs{ --fav-cols:4 !important; width:100%; }                /* 390px 下自动降列，不横向溢出 */
   .lay-fusion .fx-demo-badge{ position:static; order:-1; align-self:flex-end; }
@@ -415,6 +426,10 @@ body:not(.editing) .lay-fusion .fx-card:active{ transform:translateY(0) scale(.9
   .fn-library-actions select{ grid-column:1 / -1; }
   .fn-library-main{ grid-template-columns:1fr; gap:var(--s1); }
   .fn-library-url{ display:none; }
+}
+
+@media (prefers-reduced-motion: reduce){
+  .lay-fusion .fx-side,.lay-fusion .fx-side-scrim{ transition-duration:.01ms !important; }
 }
 
 /* 首页背景切换：悬浮入口 + 快捷面板 */

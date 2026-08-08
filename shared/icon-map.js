@@ -14,6 +14,7 @@ const GH = (login) => `https://avatars.githubusercontent.com/${login}?size=128`;
  */
 const ICON_SHAPES={
   circle:'<circle cx="12" cy="12" r="9"/>',
+  menu:'<path d="M4 7h16M4 12h16M4 17h16"/>',
   plus:'<path d="M12 5v14M5 12h14"/>',
   x:'<path d="m6 6 12 12M18 6 6 18"/>',
   check:'<path d="m5 12 4 4L19 6"/>',

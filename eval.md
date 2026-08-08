@@ -497,7 +497,7 @@ criteria:
       run: npm test -- tests/responsive-static.test.mjs
       viewport: 390x844
       expected: static rules PASS and closed drawer contributes zero document flow height
-    passes: false
+    passes: true
 
   - id: P2-RESP-002
     priority: P2
@@ -507,7 +507,7 @@ criteria:
       viewports: [390x844, 768x800, 1024x768, 1268x714, 1440x900]
       surfaces: [home, group, folder, settings, palette, library, workspace, popup]
       expected: document scrollWidth <= innerWidth on every newtab surface; popup has no clipped primary action
-    passes: false
+    passes: true
 
   - id: P2-RESP-003
     priority: P2
@@ -518,7 +518,7 @@ criteria:
         - 打开只有三个顶层项的家庭网络分组
         - 在 grid 和 detail 之间切换
       expected: grid does not stretch cards across full desktop width and folder count remains visible
-    passes: false
+    passes: true
 
   - id: P2-VISUAL-001
     priority: P2
@@ -528,7 +528,7 @@ criteria:
       run: npm test -- tests/responsive-static.test.mjs
       operation: 在两套主题与 reduced motion 下检查首页、设置和抽屉
       expected: static rule PASS, AA contrast PASS, nonessential transition duration is 0 under reduced motion
-    passes: false
+    passes: true
 
   - id: E2E-001
     priority: E2E

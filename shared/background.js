@@ -18,6 +18,12 @@ export function effectiveTheme(core){
   try{ return matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'; }catch{ return 'dark'; }
 }
 
+export function resolveBackgroundScrim(theme, requested){
+  const value=Number(requested);
+  const minimum=theme==='light' ? 0.42 : 0.52;
+  return Math.min(0.82,Math.max(minimum,Number.isFinite(value)?value:0.55));
+}
+
 export async function applyBackground(core, onHome){
   const bg = core.settings.background;
   const body = document.body;
@@ -55,7 +61,7 @@ export async function applyBackground(core, onHome){
   // 解析而非文档根，导致 /shared/icons/... 404（扩展环境同理）；blob:/http(s):/data: 已是绝对，原样保留。
   const absUrl = /^(?:https?:|blob:|data:)/.test(url) ? url : new URL(url, document.baseURI).href;
   body.style.setProperty('--fx-bg-img', `url("${absUrl}")`);
-  body.style.setProperty('--fx-bg-scrim', String(bg.scrimOpacity!=null ? bg.scrimOpacity : 0.55));
+  body.style.setProperty('--fx-bg-scrim', String(resolveBackgroundScrim(effectiveTheme(core),bg.scrimOpacity)));
   body.classList.add('bg-photo');
 }
 

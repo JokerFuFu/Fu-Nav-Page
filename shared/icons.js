@@ -1,6 +1,6 @@
 /* ============ 图标装配 ============ */
 import { isExtension } from './storage.js';
-import { brandIcon, brandIconCandidates, hostOf, isPrivateHost, lucide, LOCAL_LUCIDE_NAMES, FORCE_LETTER } from './icon-map.js?v=3.25.0';
+import { brandIcon, brandIconCandidates, hostOf, isPrivateHost, lucide, LOCAL_LUCIDE_NAMES, FORCE_LETTER } from './icon-map.js?v=3.26.0';
 
 const PALETTE=['#5b8def','#22a3b5','#36b37e','#e2a032','#e0567a','#9b6ef3','#ef6b4d','#3aa0a0','#7a86f0','#c2557a'];
 function colorFor(s){ let h=0; for(let i=0;i<s.length;i++) h=(h*31+s.charCodeAt(i))>>>0; return PALETTE[h%PALETTE.length]; }

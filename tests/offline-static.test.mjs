@@ -21,10 +21,10 @@ test('runtime icon dependencies are local or pinned to an immutable version', as
 
 test('core and arbitrary group icons resolve to bundled data URLs', async () => {
   const { lucide, LOCAL_LUCIDE_NAMES } = await import('../shared/icon-map.js');
-  for (const name of ['server', 'folder', 'search', 'settings', 'cloud-rain', 'unknown-user-icon']) {
+  for (const name of ['server', 'folder', 'search', 'settings', 'menu', 'cloud-rain', 'unknown-user-icon']) {
     assert.match(lucide(name), /^data:image\/svg\+xml,/);
   }
-  for (const name of ['server', 'folder', 'search', 'settings']) assert.ok(LOCAL_LUCIDE_NAMES.includes(name));
+  for (const name of ['server', 'folder', 'search', 'settings', 'menu']) assert.ok(LOCAL_LUCIDE_NAMES.includes(name));
 });
 
 test('brand candidates prefer browser-local sources and always end in local fallback', async () => {

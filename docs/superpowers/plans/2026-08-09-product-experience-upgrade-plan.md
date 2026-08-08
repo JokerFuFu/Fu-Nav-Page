@@ -811,16 +811,19 @@ git commit -m "feat: 完成场景模式管理闭环"
 - Modify: `layouts/fusion.css`
 - Modify: `shared/base.css`
 - Modify: `shared/background.js`
+- Modify: `popup.css`
+- Modify: `popup.html`
+- Modify: `shared/icon-map.js`
 - Create: `tests/responsive-static.test.mjs`
 
 **Interfaces:**
 - Produces: `setSidebarOpen(boolean)`；CSS states `sidebar-open`、`home-compact`、`content-sparse`。
 
-- [ ] **Step 1: 写响应式静态测试**
+- [x] **Step 1: 写响应式静态测试**
 
 760px breakpoint 必须包含 fixed drawer、scrim、关闭按钮和 body scroll guard；`prefers-reduced-motion` 覆盖抽屉与所有新增动效；文件夹 metadata 不得在 grid view 隐藏。
 
-- [ ] **Step 2: RED、实现、GREEN**
+- [x] **Step 2: RED、实现、GREEN**
 
 Run: `npm test -- tests/responsive-static.test.mjs`
 Expected before implementation: FAIL。
@@ -828,11 +831,13 @@ Expected before implementation: FAIL。
 Run: `npm test -- tests/responsive-static.test.mjs`
 Expected after implementation: PASS。
 
-- [ ] **Step 3: 视觉矩阵验证**
+- [x] **Step 3: 视觉矩阵验证**
 
 在 1440×900、1268×714、1024×768、768×800、390×844 下验证 home/group/folder/settings/palette/library/workspaces/popup；每个尺寸覆盖深浅主题和背景图模式。检查横向溢出、首屏 favorites、焦点环、小字号对比度和抽屉关闭路径。
 
-- [ ] **Step 4: 提交**
+浏览器矩阵发现并修复了 popup 写死 420px 导致 390px 容器横向溢出的问题；最终 5 个视口 × 8 个表面均满足 `scrollWidth <= innerWidth`，所有面板和 popup 主操作均未裁切。背景图深浅主题使用不同 `--photo-meta` 与玻璃不透明度，按最坏明暗图片背景计算的小字对比度均不低于 4.5:1。
+
+- [x] **Step 4: 提交**
 
 ```bash
 git add DESIGN.md layouts/fusion.js layouts/fusion.css shared/base.css shared/background.js tests/responsive-static.test.mjs
