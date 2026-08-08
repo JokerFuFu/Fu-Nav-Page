@@ -25,3 +25,6 @@ codex-image-runs/
 
 # UI loop 截图/脚手架（跨轮工作区，非项目资产）
 scratchpad/
+
+# Codex / agent 隔离开发工作区
+.worktrees/
