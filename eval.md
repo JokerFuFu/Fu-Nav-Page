@@ -36,7 +36,7 @@ criteria:
       run: npm test -- tests/config-secrets.test.mjs tests/diagnostics.test.mjs
       operation: 在设置中填写唯一测试 secret，导出备份后对文件搜索该 secret
       expected: commands exit 0 and exported file has zero matches
-    passes: false
+    passes: true
 
   - id: P0-SEC-003
     priority: P0
@@ -122,7 +122,7 @@ criteria:
         - 编辑一个网站并保存
         - 重新打开设置诊断
       expected: website persists locally and diagnostics shows local-only with nonzero bytes
-    passes: false
+    passes: true
 
   - id: P0-PROVIDER-001
     priority: P0

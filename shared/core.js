@@ -15,14 +15,15 @@ import { putBgImage, deleteBgImage } from './bg-storage.js';
 import { readFavGrid, rankFavorites, visitItem, frecencyScore, rankByClicks, rankByFrecency } from './favorites.js';
 import { setAskProvider as updateAskProvider, submitAsk as runSubmitAsk } from './provider-action.js';
 import { migrateConfig as migrateSchema } from './config-schema.js';
-import { injectSecrets, sanitizeConfig } from './config-secrets.js';
+import { injectSecrets } from './config-secrets.js';
 import { applyInboxOps } from './sync-policy.js';
-import { saveSnapshot, listSnapshots, restoreSnapshot } from './config-history.js';
+import { saveSnapshot, listSnapshots, restoreSnapshot, deleteSnapshot } from './config-history.js';
 import { parseImport, applyImport, mergeImportCandidate } from './config-import.js';
 import { countTree, locateNode, moveNode, removeNode, walkTree } from './tree.js';
-import { loadRuntimeState, saveRuntimeState, requestCapability as askCapability, completeOnboarding as buildOnboardingResult } from './runtime-state.js';
+import { loadRuntimeState, saveRuntimeState, requestCapability as askCapability, completeOnboarding as buildOnboardingResult } from './runtime-state.js?v=3.24.7';
 import { buildSearchIndex, querySearchIndex } from './search-index.js';
 import { applyBulkOperation, clusterDuplicates, updateSelection } from './library-manager.js';
+import { agentStatusPatch, buildDiagnostics, cloudStatusPatch, conflictStatusPatch, exportSafeBackup, saveStatusPatch } from './diagnostics.js';
 
 export const $  = (s,r=document)=>r.querySelector(s);
 export const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
@@ -155,8 +156,9 @@ class Core {
         else if(it && it.freq===undefined && it.clicks>0) it.freq=it.clicks; }); normF(g.items); } return dirty; }
 
   async refreshAgent(){
-    if(!isExtension){ this.agentData=null; return; }
+    if(!isExtension){ this.agentData=null; await this.updateRuntime(agentStatusPatch(false)); return; }
     this.agentData = await fetchAgentData({port:this.settings.agentPort, token:this.settings.agentToken});
+    await this.updateRuntime(agentStatusPatch(!!this.agentData));
     this._emit('agent');
   }
 
@@ -205,6 +207,7 @@ class Core {
       try{ await this._applyInbox(); }catch{}
       await this.bmPush();        // 书签双向同步：导航变更 → 镜像到浏览器「Fu 导航」文件夹（内部按结构签名跳过无关变更）
       const r=await saveConfig(this.cfg);
+      await this.updateRuntime(saveStatusPatch(r,this.cfg));
       if(r.synced){ this.flashSync('已同步到所有终端'); this._quotaWarned=false; }
       else if(r.reason==='preview') this.flashSync('（预览：存于本浏览器）');
       else if(r.reason==='quota' || r.reason==='too-large'){
@@ -268,13 +271,14 @@ class Core {
 
   /* ---- 自托管云同步（WebDAV）---- */
   cloudPush(immediate){ if(!isExtension || !cloudEnabled(this.settings)) return; clearTimeout(this._cloudT);
-    const run=async()=>{ const r=await cloudPut(this.settings, this.cfg); this.flashSync(r.ok?'已备份到云':'云备份失败：'+(r.reason||'')); };
+    const run=async()=>{ const r=await cloudPut(this.settings, this.cfg); await this.updateRuntime(cloudStatusPatch(r)); this.flashSync(r.ok?'已备份到云':'云备份失败：'+(r.reason||'')); };
     return immediate ? run() : (this._cloudT=setTimeout(run, 3500)); }
   /* 手动云恢复只负责读取并打开统一预览；不做后台自动拉取，也不在预览前修改本机配置。 */
   async cloudRestore(name){ if(this.settings.cloud?.type==='gdrive'){ const cap=await this.requestCapability('identity'); if(!cap.ok){this.toast('未获得身份权限，Google Drive 操作未开始','err');return false;} }
     const r=name ? await cloudGetFile(this.settings,name) : await cloudGet(this.settings);
     if(r.ok && r.config){ const result=parseImport(r.config,this.cfg,Date.now()); this._lastRestoreDiff=result.diff;
       this.openImportPreview(result,{kind:'cloud',label:name||'云端自动备份'}); return result.ok; }
+    await this.updateRuntime(cloudStatusPatch({ok:false,reason:r.reason||'cloud-empty'}));
     this.toast('恢复失败：'+(r.reason||'云端无备份'),'err'); return false; }
   openImportPreview(result, options={}){ const kind=options.kind||'file', counts=result.diff?.counts||{};
     const title=kind==='cloud'?'云恢复预览':kind==='history'?'历史恢复预览':'导入预览';
@@ -286,7 +290,8 @@ class Core {
     const body=[source,grid];
     if(result.errors?.length){ const box=el('div','fn-import-errors'); box.appendChild(el('div','fn-sub',`发现 ${result.errors.length} 处格式问题，当前配置不会改变：`));
       result.errors.slice(0,8).forEach(error=>box.appendChild(el('code',null,`${error.path}：${error.message}`))); body.push(box); }
-    if(result.diff?.conflictIds?.length){ body.push(el('div','fn-hint',`有 ${result.diff.conflictIds.length} 个同 ID 节点内容不同。合并副本会保留本机版本，并只补入云端独有内容。`)); }
+    const conflictCount=result.diff?.conflictIds?.length||0; if(kind==='cloud')this.updateRuntime(conflictStatusPatch(conflictCount));
+    if(conflictCount){ body.push(el('div','fn-hint',`有 ${conflictCount} 个同 ID 节点内容不同。合并副本会保留本机版本，并只补入云端独有内容。`)); }
     if(!result.ok){ this.openModal(title,body,[this.btn('关闭','primary',()=>this.closeModal())]); return; }
     const run=async(candidate,reason,message)=>{ const applied=await applyImport(this,candidate,reason); if(!applied.ok){this.toast('应用失败，当前配置未改变','err');return;} this.closeModal(); this.toast(message,'ok'); };
     if(kind==='cloud'){
@@ -300,9 +305,9 @@ class Core {
   async openHistoryManager(){ const snapshots=await listSnapshots();
     if(!snapshots.length){ this.openModal('本机恢复历史',[el('div','fn-hint','还没有可恢复的快照。导入、云恢复和批量操作前会自动保存。')],[this.btn('返回','primary',()=>this.openSettings())]); return; }
     const rows=snapshots.map(snapshot=>{ const row=el('div','fn-sync-row'); const when=new Date(snapshot.at).toLocaleString();
-      row.append(el('div','fn-sync-label',`${when} · ${snapshot.reason} · ${(snapshot.bytes/1024).toFixed(1)} KB`),this.btn('预览恢复','ghost',async()=>{ const candidate=await restoreSnapshot(snapshot.id); const result=parseImport(candidate,this.cfg,Date.now()); this.openImportPreview(result,{kind:'history',label:when}); },'history')); return row; });
+      row.append(el('div','fn-sync-label',`${when} · ${snapshot.reason} · ${(snapshot.bytes/1024).toFixed(1)} KB`),this.btn('预览恢复','ghost',async()=>{ const candidate=await restoreSnapshot(snapshot.id); const result=parseImport(candidate,this.cfg,Date.now()); this.openImportPreview(result,{kind:'history',label:when}); },'history'),this.btn('删除快照','danger',async()=>{await deleteSnapshot(snapshot.id);this.openHistoryManager();},'trash-2')); return row; });
     this.openModal('本机恢复历史',rows,[this.btn('返回','primary',()=>this.openSettings())]); }
-  async cloudTest(){ if(this.settings.cloud?.type==='gdrive'){ const cap=await this.requestCapability('identity'); if(!cap.ok)return {ok:false,reason:'未获得身份权限，可稍后重试'}; } return cloudTest(this.settings); }
+  async cloudTest(){ if(this.settings.cloud?.type==='gdrive'){ const cap=await this.requestCapability('identity'); if(!cap.ok)return {ok:false,reason:'未获得身份权限，可稍后重试'}; } const result=await cloudTest(this.settings); if(!result.ok)await this.updateRuntime(cloudStatusPatch(result)); return result; }
   /* 通用单输入弹层（替代原生 prompt，R7）：确定时回调非空值 */
   promptModal(title, ph, onOk){ const i=this.inp('',ph); const f=el('div','fn-field'); f.appendChild(i);
     const ok=()=>{ const v=i.value.trim(); if(!v)return; this.closeModal(); onOk(v); };
@@ -703,13 +708,12 @@ class Core {
     const cl = s.cloud || (s.cloud={enabled:false,type:'webdav',url:'',user:'',pass:'',gdriveClientId:''}); if(!cl.type)cl.type='webdav';
     const clUrl=this.inp(cl.url||'','https://你的群晖DDNS:5006/共享文件夹/'), clUser=this.inp(cl.user||'','WebDAV 账号'), clPass=this.inp(cl.pass||'','密码'); clPass.type='password';
     const clCid=this.inp(cl.gdriveClientId||'','xxxxx.apps.googleusercontent.com');
-    const clStatus=el('div','fn-sub','');
+    const clStatus=el('div','fn-sub',''); clStatus.setAttribute('role','status'); clStatus.setAttribute('aria-live','polite');
     const DAV_HINT='存到你<b>自己的 WebDAV</b>（群晖「WebDAV Server」套件 / Nextcloud / 任意 WebDAV），数据在自己服务器、不靠第三方账号（仿 Floccus）。<br><b>群晖：</b>装 <code>WebDAV Server</code> 套件→启用 HTTPS（默认 5006）→建共享文件夹→URL 填 <code>https://你的DDNS:5006/文件夹/</code>，账号密码用 DSM 账号。首次「测试/备份」会弹授权该网址，点允许。<br><b>备份策略</b>：自动备份覆盖固定文件；手动备份每次生成一份时间戳文件并保留最近 10 份，可从列表选择历史版本。<br><b>跨设备</b>：另一台设备填同一地址后点「从云恢复」手动拉取——不做后台自动覆盖，本机改动永远优先、不会被云端旧数据冲掉。';
     const GD_HINT='存到你的 <b>Google Drive</b>（应用隐藏空间 appData，不占可见文件）。需一次性自建 OAuth：<br>① <a href="https://console.cloud.google.com/" target="_blank">Google Cloud Console</a> 建项目→启用 <b>Google Drive API</b>；② 凭据→创建 OAuth 客户端 ID→类型选 <b>Web 应用</b>；③ 「已获授权的重定向 URI」填 <code id="fn-gdredir"></code>（这是本扩展的回调地址）；④ 把客户端 ID 粘到上面。iCloud 无对扩展开放的接口，做不了，用这两种之一。<br>跨设备同步同样通过「从云恢复」手动拉取，不做后台自动覆盖。';
-    const davBox=el('div'); const clRow=el('div','fn-row'); const fU=el('div','fn-field'); fU.append(el('label',null,'账号'),clUser); const fP=el('div','fn-field'); fP.append(el('label',null,'密码'),clPass); clRow.append(fU,fP);
-    const fUrl=el('div','fn-field'); fUrl.appendChild(clUrl);   // 裸 input 需 .fn-field 皮肤（宽度/底色/焦点环）
-    davBox.append(el('div','fn-sub','WebDAV 地址（填到目录）'), fUrl, clRow);
-    const gdBox=el('div'); const fCid=el('div','fn-field'); fCid.appendChild(clCid); gdBox.append(el('div','fn-sub','Google OAuth Client ID'), fCid);
+    const davBox=el('div'); const clRow=el('div','fn-row'); clRow.append(this.field('账号',clUser),this.field('密码',clPass));
+    davBox.append(this.field('WebDAV 地址（填到目录）',clUrl),clRow);
+    const gdBox=el('div'); gdBox.append(this.field('Google OAuth Client ID',clCid));
     const clHint=el('div','fn-hint');
     const cfgBox=el('div');
     const showByType=()=>{ cfgBox.hidden=!clToggle.querySelector('input').checked;   // S10: 启用开关驱动配置区显隐
@@ -723,7 +727,7 @@ class Core {
     clUrl.onblur=()=>{ applyCl(); clStatus.textContent = (cl.type==='webdav' && /^http:\/\//i.test((cl.url||'').trim())) ? '注意：http 明文传输账号密码，公网建议改用 https' : ''; };
     const clBtns=[
       this.btn('测试连接','ghost',async()=>{ applyCl(); if(missing()){clStatus.textContent='请先填好上面的字段';return;} warnInsecure(); clStatus.textContent='测试中…'; if(cl.type==='webdav')await this.ensureCloudPermission(cl.url); const r=await this.cloudTest(); clStatus.textContent=(r.ok?'成功：':'失败：')+r.reason; },'plug-zap'),
-      this.btn('立即备份到云','ghost',async()=>{ applyCl(); if(missing()){clStatus.textContent='请先填好上面的字段';return;} if(cl.type==='webdav')await this.ensureCloudPermission(cl.url); else{ const cap=await this.requestCapability('identity'); if(!cap.ok){clStatus.textContent='未获得身份权限，可稍后重试';return;} } clStatus.textContent='备份中…'; const r=cl.type==='webdav'?await cloudPutBackup(this.settings,this.cfg):await cloudPut(this.settings,this.cfg); clStatus.textContent=r.ok?(r.name?'已生成 '+r.name:'已备份到云'):'失败：'+(r.reason||''); this.save(); },'cloud-upload'),
+      this.btn('立即备份到云','ghost',async()=>{ applyCl(); if(missing()){clStatus.textContent='请先填好上面的字段';return;} if(cl.type==='webdav')await this.ensureCloudPermission(cl.url); else{ const cap=await this.requestCapability('identity'); if(!cap.ok){clStatus.textContent='未获得身份权限，可稍后重试';return;} } clStatus.textContent='备份中…'; const r=cl.type==='webdav'?await cloudPutBackup(this.settings,this.cfg):await cloudPut(this.settings,this.cfg); await this.updateRuntime(cloudStatusPatch(r)); clStatus.textContent=r.ok?(r.name?'已生成 '+r.name:'已备份到云'):'失败：'+(r.reason||''); this.save(); },'cloud-upload'),
       this.btn('从云恢复','ghost',async()=>{ applyCl(); if(missing()){clStatus.textContent='请先填好上面的字段';return;} if(cl.type==='webdav')await this.ensureCloudPermission(cl.url);
         if(cl.type==='gdrive'){ clStatus.textContent='正在读取云端备份…'; const ok=await this.cloudRestore(); if(!ok)clStatus.textContent='恢复文件无效或读取失败'; return; }
         clStatus.textContent='正在读取备份列表…'; const listed=await cloudListBackups(this.settings);
@@ -792,7 +796,24 @@ class Core {
     const tourWrap=el('div','fn-wrap'); tourWrap.append(this.btn('重看新手引导','ghost',()=>import('./tour.js').then(m=>m.startTour(this)),'graduation-cap'));
     const statsWrap=el('div','fn-wrap'); statsWrap.append(this.btn('点击排行','ghost',()=>this.openStats(),'trophy'));
     const libraryWrap=el('div','fn-wrap'); libraryWrap.append(this.btn('打开书签库','ghost',()=>this.openLibrary(),'library-big'));
-    const syncSect=this.sect('同步与备份',[
+    const diagnostic=buildDiagnostics(this), diagGrid=el('dl','fn-diag-grid');
+    const diagTime=value=>value?new Date(value).toLocaleString():'暂无';
+    const diagRow=(key,label,value)=>{ const row=el('div','fn-diag-row'); row.dataset.diagKey=key; row.append(el('dt',null,label),el('dd',null,String(value))); diagGrid.appendChild(row); };
+    const syncNames={idle:'空闲',saving:'保存中',synced:'已同步', 'local-only':'仅本机',conflict:'有冲突',error:'错误'};
+    diagRow('schema','Schema / Revision',`${diagnostic.schema} / ${diagnostic.revision}`);
+    diagRow('bytes','安全配置大小',`${(diagnostic.configBytes/1024).toFixed(1)} KB`);
+    diagRow('sync','同步状态',`${syncNames[diagnostic.sync.state]||diagnostic.sync.state}${diagnostic.sync.message?' · '+diagnostic.sync.message:''}`);
+    diagRow('local-save','最后本机保存',diagTime(diagnostic.local.lastSavedAt));
+    diagRow('cloud-backup','最后云备份',diagTime(diagnostic.cloud.lastBackupAt));
+    diagRow('conflict','冲突状态',diagnostic.conflict.state==='detected'?'发现冲突':diagnostic.conflict.state==='resolved'?'已解决':'无冲突');
+    diagRow('permissions','已授权能力',`书签：${diagnostic.permission.bookmarks} · 身份：${diagnostic.permission.identity}`);
+    diagRow('agent','本机 Agent',diagnostic.agent.state==='connected'?'已连接':'不可用');
+    diagRow('error','最近错误',diagnostic.recentError?`${diagnostic.recentError.code} · ${diagTime(diagnostic.recentError.at)}`:'无');
+    const diagActions=el('div','fn-wrap'); diagActions.append(
+      this.btn('复制脱敏诊断','ghost',()=>{ const ok=copyTextSync(JSON.stringify(buildDiagnostics(this),null,2)); this.toast(ok?'诊断信息已复制':'诊断信息已生成，请重试复制',ok?'ok':'err'); },'copy'),
+      this.btn('查看恢复历史','ghost',()=>this.openHistoryManager(),'history'));
+    const diagWrap=el('div','fn-diagnostics'); diagWrap.append(diagGrid,diagActions,el('div','fn-hint','诊断只包含状态、时间和大小，不包含密码、Token、服务器地址或网站清单。'));
+    const syncSect=this.sect('数据与同步',[
       this.field('云同步（WebDAV / Google Drive）',cloudWrap),
       this.field('浏览器书签双向同步',bmWrap),
       this.field('备份与导入',backupWrap),
@@ -802,22 +823,27 @@ class Core {
       this.sect('常用',[
         this.field('标题',titleI),
         this.field('默认搜索 / AI',providerSel),
+        this.field('书签库',libraryWrap),
+        this.field('打开方式',this.seg([['_blank','新标签页'],['_self','当前页']],s.openIn,v=>{s.openIn=v;})),
+      ], true),
+      syncSect,
+      this.sect('外观',[
         this.field('主题',this.seg([['auto','跟随系统'],['dark','深色'],['light','浅色']],s.theme,v=>{s.theme=v;this.applyTheme();})),
         this.field('强调色',accentGrid),
         this.field('常用区布局',favGridSeg),
-        this.field('书签库',libraryWrap),
+      ]),
+      this.sect('组件',[
         this.toggle('显示时钟与问候',s.showClock,v=>{s.showClock=v;}),
         this.toggle('显示天气',s.showWeather,async v=>{ if(v&&!this.weather.hasConsent())await this.enableWeatherConsent(); s.showWeather=v; }),
         this.toggle('内网在线状态探测',s.showStatus,v=>{s.showStatus=v;}),
         el('div','fn-sub','添加卡片（或在首页解锁后右键卡片区添加）'), addRow,
-      ], true),
-      syncSect,
-      this.sect('高级',[
-        this.field('打开方式',this.seg([['_blank','新标签页'],['_self','当前页']],s.openIn,v=>{s.openIn=v;})),
+      ]),
+      this.sect('高级与诊断',[
         this.field('使用统计',statsWrap),
         this.field('归档分组',archiveWrap),
         this.field('场景模式',modeWrap),
         this.field('新手引导',tourWrap),
+        this.field('诊断状态',diagWrap),
         this.field('危险操作',dangerWrap),
       ]),
     ],[ this.btn('完成','primary',()=>{ s.title=titleI.value.trim()||'Fu 导航'; this.applyTheme(); this.save(true); this.rerender(); this.closeModal(); }) ]); }
@@ -912,7 +938,7 @@ class Core {
     this.openModal('导入浏览器书签',[el('div','fn-hint','勾选要导入的文件夹（按文件夹建分组，去重）：'),box],
       [this.btn('取消','ghost',()=>this.closeModal()),this.btn('导入','primary',()=>{let n=0;picks.forEach((c,f)=>{if(!c.checked)return;const items=flat(f).map(x=>({id:uid('i'),name:x.name,url:x.url,note:'',icon:''}));if(!items.length)return;let g=this.groups.find(x=>x.name===(f.title||''));if(!g){g={id:uid('g'),name:f.title||'书签',icon:'star',color:COLORS[this.groups.length%COLORS.length],collapsed:false,items:[]};this.groups.push(g);}const seen=new Set(g.items.map(i=>i.url));items.forEach(it=>{if(!seen.has(it.url)){g.items.push(it);n++;}});});this.save(true);this.rerender();this.closeModal();this.toast(`已导入 ${n} 个书签`,'ok');})]); }
 
-  exportConfig(){ const b=new Blob([JSON.stringify(sanitizeConfig(this.cfg),null,2)],{type:'application/json'});const a=el('a');a.href=URL.createObjectURL(b);a.download='fu-nav-backup-'+new Date().toISOString().slice(0,10)+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);this.toast('已导出','ok'); }
+  exportConfig(){ const b=new Blob([JSON.stringify(exportSafeBackup(this),null,2)],{type:'application/json'});const a=el('a');a.href=URL.createObjectURL(b);a.download='fu-nav-backup-'+new Date().toISOString().slice(0,10)+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);this.toast('已导出','ok'); }
   importConfig(){ const i=el('input');i.type='file';i.accept='.json,.infinity';i.hidden=true;document.body.appendChild(i);i.onchange=()=>{const f=i.files[0];if(!f){i.remove();return;}const r=new FileReader();r.onload=()=>{ i.remove(); let decoded;
     try{decoded=JSON.parse(r.result);}catch{} if(decoded && decoded.data && decoded.data.site) return this._mergeInfinity(decoded);   // Infinity 备份走专用解析器
     const result=parseImport(r.result,this.cfg,Date.now()); this.openImportPreview(result,{kind:'file',label:f.name}); };r.readAsText(f);};i.click(); }

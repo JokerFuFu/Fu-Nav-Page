@@ -689,11 +689,11 @@ git commit -m "fix: 补齐对话框菜单和表单可访问性"
 **Interfaces:**
 - Produces: `buildDiagnostics(core)`；`redactDiagnostics(value)`；`exportSafeBackup(core)`。
 
-- [ ] **Step 1: 写脱敏诊断测试**
+- [x] **Step 1: 写脱敏诊断测试**
 
 输入包含 WebDAV URL userinfo、agent token、密码和网站清单时，输出只保留配置字节数、版本、状态、权限布尔值和错误 code，不包含 secret 或完整网站列表。
 
-- [ ] **Step 2: RED、实现、GREEN**
+- [x] **Step 2: RED、实现、GREEN**
 
 Run: `npm test -- tests/diagnostics.test.mjs`
 Expected before implementation: FAIL。
@@ -701,15 +701,15 @@ Expected before implementation: FAIL。
 Run: `npm test -- tests/diagnostics.test.mjs`
 Expected after implementation: PASS。
 
-- [ ] **Step 3: 重组设置信息架构**
+- [x] **Step 3: 重组设置信息架构**
 
 顺序固定为“常用、数据与同步、外观、组件、高级与诊断”。常用默认展开，其余收起；设置 dialog 在 720px 高度下标题和底部主操作保持 sticky，内容区独立滚动。
 
-- [ ] **Step 4: 显示持久状态**
+- [x] **Step 4: 显示持久状态**
 
 诊断区显示 schema/revision、同步配置字节数、最后本机保存、最后云备份、冲突、权限、本机 Agent 和最近错误；提供复制脱敏诊断、查看五份快照、恢复和删除快照。
 
-- [ ] **Step 5: 验证安全载荷**
+- [x] **Step 5: 验证安全载荷**
 
 设置 WebDAV 凭据后导出备份并调用 cloud payload builder，对两个 JSON 运行 secret 扫描，必须零命中。
 

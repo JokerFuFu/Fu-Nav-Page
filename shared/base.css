@@ -93,14 +93,14 @@ img{display:block}
 .fn-backdrop{ position:fixed; inset:0; z-index:60; background:var(--scrim); display:grid; place-items:center;
   padding:var(--s4); backdrop-filter:blur(5px); animation:fnFade .14s ease; }
 @keyframes fnFade{from{opacity:0}}
-.fn-modal{ width:min(540px,100%); max-height:88vh; overflow:auto; background:var(--overlay-bg);
+.fn-modal{ width:min(540px,100%); max-height:88vh; overflow:hidden; display:flex; flex-direction:column; background:var(--overlay-bg);
   border:1px solid var(--border-2); border-radius:var(--r-lg); box-shadow:var(--shadow-lg); animation:fnPop .16s ease; }
 @keyframes fnPop{from{transform:translateY(12px) scale(.98);opacity:0}}
-.fn-mhead{ display:flex; align-items:center; justify-content:space-between; padding:var(--s4) var(--s4) var(--s3); border-bottom:1px solid var(--border); }
+.fn-mhead{ flex:none; display:flex; align-items:center; justify-content:space-between; padding:var(--s4) var(--s4) var(--s3); border-bottom:1px solid var(--border); background:var(--overlay-bg); }
 .fn-mhead h3{ font-size:17px; font-weight:700; }
 .fn-x{ width:32px;height:32px;border-radius:var(--r-sm);color:var(--text-3);font-size:14px;display:grid;place-items:center; }
 .fn-x:hover{ background:var(--surface-2); color:var(--text); }
-.fn-mbody{ padding:var(--s4) var(--s4); display:flex; flex-direction:column; gap:var(--s3); }
+.fn-mbody{ flex:1 1 auto; min-height:0; overflow:auto; overscroll-behavior:contain; padding:var(--s4) var(--s4); display:flex; flex-direction:column; gap:var(--s3); }
 /* 设置分区（可折叠）*/
 .fn-sect{ border:1px solid var(--border); border-radius:var(--r-md); }
 .fn-sect-h{ display:flex; align-items:center; justify-content:space-between; padding:var(--s3); font-size:14px; font-weight:600; cursor:pointer; list-style:none; }
@@ -141,7 +141,7 @@ img{display:block}
 .fn-frame-ext:hover{ background:var(--surface-2); color:var(--text); }
 .fn-frame-body{ flex:1; background:var(--surface); }
 .fn-frame-if{ width:100%; height:100%; border:none; display:block; }
-.fn-mfoot{ display:flex; justify-content:flex-end; gap:var(--s2); padding:var(--s3) var(--s4) var(--s4); }
+.fn-mfoot{ flex:none; display:flex; justify-content:flex-end; gap:var(--s2); padding:var(--s3) var(--s4) var(--s4); border-top:1px solid var(--border); background:var(--overlay-bg); }
 .fn-field{ display:flex; flex-direction:column; gap:var(--s2); }
 .fn-field>label{ font-size:12px; color:var(--text-2); font-weight:600; }
 .fn-field input,.fn-field select,.fn-field textarea{ background:var(--surface-2); border:1px solid var(--border);
@@ -151,6 +151,15 @@ img{display:block}
 .fn-wrap{ display:flex; flex-wrap:wrap; gap:var(--s2); }
 .fn-hint{ font-size:12px; color:var(--text-3); line-height:1.55; }
 .fn-hint code{ background:var(--surface-2); padding:var(--s1) var(--s1); border-radius:var(--r-sm); }
+.fn-sync-row{ min-height:48px; display:flex; align-items:center; gap:var(--s2); padding:var(--s2) 0; border-bottom:1px solid var(--border); }
+.fn-sync-row:last-child{ border-bottom:0; }
+.fn-sync-label{ flex:1; min-width:0; color:var(--text-2); font-size:12px; line-height:1.5; overflow-wrap:anywhere; }
+.fn-diag-grid{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1px; overflow:hidden; border:1px solid var(--border); border-radius:var(--r-md); background:var(--border); }
+.fn-diag-row{ min-width:0; padding:var(--s2) var(--s3); background:var(--surface-2); }
+.fn-diag-row dt{ color:var(--text-3); font-size:11px; }
+.fn-diag-row dd{ margin-top:2px; color:var(--text); font-size:12px; font-weight:600; overflow-wrap:anywhere; }
+.fn-diagnostics{ display:flex; flex-direction:column; gap:var(--s3); }
+@media(max-width:520px){ .fn-diag-grid{ grid-template-columns:1fr; } }
 .fn-diff-grid{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:var(--s2); }
 .fn-diff-card{ min-width:0; padding:var(--s3); border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface-2); display:flex; flex-direction:column; gap:2px; }
 .fn-diff-card strong{ font-size:22px; line-height:1.1; font-variant-numeric:tabular-nums; color:var(--text-2); }

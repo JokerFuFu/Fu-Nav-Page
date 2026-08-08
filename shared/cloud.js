@@ -14,6 +14,7 @@ let lastBackupTime=0;
 const b64 = s => { try{ return btoa(unescape(encodeURIComponent(s))); }catch{ return btoa(s); } };
 export function cloudOf(settings){ return (settings && settings.cloud) || {}; }
 export function cloudEnabled(settings){ const c=cloudOf(settings); if(!c.enabled) return false; return c.type==='gdrive' ? !!c.gdriveClientId : !!c.url; }
+export function buildCloudPayload(config){ return sanitizeConfig(config); }
 
 /* ---------------- WebDAV ---------------- */
 function davBase(c){ return String(c.url||'').replace(/\/+$/,'') + '/'; }
@@ -63,7 +64,7 @@ async function davDelete(c,name){ try{ const r=await fetch(davUrl(c,name),{metho
 
 export async function cloudPutBackup(settings,config){
   const c=cloudOf(settings); if(c.type==='gdrive') return cloudPut(settings,config);
-  const name=backupName(), put=await davPut(c,sanitizeConfig(config),name); if(!put.ok) return put;
+  const name=backupName(), put=await davPut(c,buildCloudPayload(config),name); if(!put.ok) return put;
   const listed=await cloudListBackups(settings);
   if(listed.ok){ const backups=listed.files.filter(f=>BACKUP_RE.test(f.name)); for(const old of backups.slice(10)) await davDelete(c,old.name); }
   return {ok:true,name};
@@ -124,6 +125,6 @@ async function gdTest(c){ if(!c.gdriveClientId) return {ok:false,reason:'未填 
   try{ await gdAuth(c,true); return {ok:true,reason:'已授权 Google Drive'}; }catch(e){ return {ok:false,reason:(e&&e.message)||'授权失败'}; } }
 
 /* ---------------- 统一入口（按 type 分发）---------------- */
-export async function cloudPut(settings, config){ const c=cloudOf(settings), safe=sanitizeConfig(config); return c.type==='gdrive'?gdPut(c,safe):davPut(c,safe); }
+export async function cloudPut(settings, config){ const c=cloudOf(settings), safe=buildCloudPayload(config); return c.type==='gdrive'?gdPut(c,safe):davPut(c,safe); }
 export async function cloudGet(settings){ const c=cloudOf(settings); return c.type==='gdrive'?gdGet(c):davGet(c); }
 export async function cloudTest(settings){ const c=cloudOf(settings); return c.type==='gdrive'?gdTest(c):davTest(c); }

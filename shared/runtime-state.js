@@ -7,6 +7,14 @@ export const DEFAULT_RUNTIME_STATE = Object.freeze({
   sync: { state: 'idle', message: '', at: 0 },
   permission: { bookmarks: 'unknown', identity: 'unknown' },
   onboarding: { completed: false, weatherConsent: false, choice: null },
+  diagnostics: {
+    configBytes: 0,
+    lastLocalSaveAt: 0,
+    lastCloudBackupAt: 0,
+    conflict: { state: 'none', at: 0 },
+    agent: { state: 'unavailable', at: 0 },
+    recentError: null,
+  },
 });
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
@@ -16,6 +24,12 @@ const mergeState = (base, patch = {}) => ({
   sync: { ...base.sync, ...(patch.sync || {}) },
   permission: { ...base.permission, ...(patch.permission || {}) },
   onboarding: { ...base.onboarding, ...(patch.onboarding || {}) },
+  diagnostics: {
+    ...base.diagnostics,
+    ...(patch.diagnostics || {}),
+    conflict: { ...base.diagnostics.conflict, ...(patch.diagnostics?.conflict || {}) },
+    agent: { ...base.diagnostics.agent, ...(patch.diagnostics?.agent || {}) },
+  },
 });
 
 function normalize(raw) {
