@@ -15,9 +15,10 @@ import { putBgImage, deleteBgImage } from './bg-storage.js';
 import { readFavGrid, rankFavorites, visitItem, frecencyScore, rankByClicks, rankByFrecency } from './favorites.js';
 import { providerAction } from './provider-action.js';
 import { migrateConfig as migrateSchema } from './config-schema.js';
-import { injectSecrets, sanitizeConfig, splitSecrets } from './config-secrets.js';
-import { applyInboxOps, diffRestore } from './sync-policy.js';
-import { saveSnapshot } from './config-history.js';
+import { injectSecrets, sanitizeConfig } from './config-secrets.js';
+import { applyInboxOps } from './sync-policy.js';
+import { saveSnapshot, listSnapshots, restoreSnapshot } from './config-history.js';
+import { parseImport, applyImport, mergeImportCandidate } from './config-import.js';
 
 export const $  = (s,r=document)=>r.querySelector(s);
 export const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
@@ -232,12 +233,37 @@ class Core {
   cloudPush(immediate){ if(!isExtension || !cloudEnabled(this.settings)) return; clearTimeout(this._cloudT);
     const run=async()=>{ const r=await cloudPut(this.settings, this.cfg); this.flashSync(r.ok?'已备份到云':'云备份失败：'+(r.reason||'')); };
     return immediate ? run() : (this._cloudT=setTimeout(run, 3500)); }
-  /* 手动：一键从云恢复（无条件覆盖本地）——跨设备同步的唯一"拉取"入口；不做后台自动拉取（会覆盖本机改动） */
+  /* 手动云恢复只负责读取并打开统一预览；不做后台自动拉取，也不在预览前修改本机配置。 */
   async cloudRestore(name){ const r=name ? await cloudGetFile(this.settings,name) : await cloudGet(this.settings);
-    if(r.ok && r.config && r.config.groups){ const normalized=migrateSchema(r.config,Date.now()), localSecrets=splitSecrets(this.cfg).secrets;
-      this._lastRestoreDiff=diffRestore(this.cfg,normalized.config); await saveSnapshot(this.cfg,'cloud-restore');
-      this.cfg=injectSecrets(normalized.config,localSecrets); this.migrate(); this.applyTheme(); this.rerender(); await this.save(true); this.toast('已从云端恢复','ok'); return true; }
+    if(r.ok && r.config){ const result=parseImport(r.config,this.cfg,Date.now()); this._lastRestoreDiff=result.diff;
+      this.openImportPreview(result,{kind:'cloud',label:name||'云端自动备份'}); return result.ok; }
     this.toast('恢复失败：'+(r.reason||'云端无备份'),'err'); return false; }
+  openImportPreview(result, options={}){ const kind=options.kind||'file', counts=result.diff?.counts||{};
+    const title=kind==='cloud'?'云恢复预览':kind==='history'?'历史恢复预览':'导入预览';
+    const source=el('div','fn-hint',`来源：${options.label||'本地备份'}。应用前会保存当前配置，最近保留五份，可随时回滚。`);
+    const grid=el('div','fn-diff-grid'); grid.setAttribute('aria-label','配置差异摘要');
+    [['added','新增'],['updated','更新'],['removed','删除'],['duplicates','重复'],['invalid','无效'],['settings','设置变化']].forEach(([key,label])=>{
+      const card=el('div','fn-diff-card'+(counts[key]?' has-change':'')+(key==='invalid'&&counts[key]?' is-danger':''));
+      card.append(el('strong',null,String(counts[key]||0)),el('span',null,label)); grid.appendChild(card); });
+    const body=[source,grid];
+    if(result.errors?.length){ const box=el('div','fn-import-errors'); box.appendChild(el('div','fn-sub',`发现 ${result.errors.length} 处格式问题，当前配置不会改变：`));
+      result.errors.slice(0,8).forEach(error=>box.appendChild(el('code',null,`${error.path}：${error.message}`))); body.push(box); }
+    if(result.diff?.conflictIds?.length){ body.push(el('div','fn-hint',`有 ${result.diff.conflictIds.length} 个同 ID 节点内容不同。合并副本会保留本机版本，并只补入云端独有内容。`)); }
+    if(!result.ok){ this.openModal(title,body,[this.btn('关闭','primary',()=>this.closeModal())]); return; }
+    const run=async(candidate,reason,message)=>{ const applied=await applyImport(this,candidate,reason); if(!applied.ok){this.toast('应用失败，当前配置未改变','err');return;} this.closeModal(); this.toast(message,'ok'); };
+    if(kind==='cloud'){
+      const keep=this.btn('保留本机','ghost',()=>{this.closeModal();this.toast('已保留本机配置','ok');});
+      const merge=this.btn('合并副本','ghost',()=>{ const merged=parseImport(mergeImportCandidate(this.cfg,result.candidate),this.cfg,Date.now()); run(merged,'cloud-merge','已合并云端独有内容'); },'git-merge');
+      const replace=this.btn('使用云端','danger',()=>run(result,'cloud-restore','已从云端恢复'),'cloud-download');
+      this.openModal(title,body,[keep,merge,replace]); return;
+    }
+    const label=kind==='history'?'恢复此版本':'导入此备份';
+    this.openModal(title,body,[this.btn('取消','ghost',()=>this.closeModal()),this.btn(label,'primary',()=>run(result,kind==='history'?'history-restore':'config-import',kind==='history'?'已恢复历史版本':'已导入备份'),'check')]); }
+  async openHistoryManager(){ const snapshots=await listSnapshots();
+    if(!snapshots.length){ this.openModal('本机恢复历史',[el('div','fn-hint','还没有可恢复的快照。导入、云恢复和批量操作前会自动保存。')],[this.btn('返回','primary',()=>this.openSettings())]); return; }
+    const rows=snapshots.map(snapshot=>{ const row=el('div','fn-sync-row'); const when=new Date(snapshot.at).toLocaleString();
+      row.append(el('div','fn-sync-label',`${when} · ${snapshot.reason} · ${(snapshot.bytes/1024).toFixed(1)} KB`),this.btn('预览恢复','ghost',async()=>{ const candidate=await restoreSnapshot(snapshot.id); const result=parseImport(candidate,this.cfg,Date.now()); this.openImportPreview(result,{kind:'history',label:when}); },'history')); return row; });
+    this.openModal('本机恢复历史',rows,[this.btn('返回','primary',()=>this.openSettings())]); }
   cloudTest(){ return cloudTest(this.settings); }
   /* 通用单输入弹层（替代原生 prompt，R7）：确定时回调非空值 */
   promptModal(title, ph, onOk){ const i=this.inp('',ph); const f=el('div','fn-field'); f.appendChild(i);
@@ -617,15 +643,15 @@ class Core {
       this.btn('测试连接','ghost',async()=>{ applyCl(); if(missing()){clStatus.textContent='请先填好上面的字段';return;} warnInsecure(); clStatus.textContent='测试中…'; if(cl.type==='webdav')await this.ensureCloudPermission(cl.url); const r=await this.cloudTest(); clStatus.textContent=(r.ok?'成功：':'失败：')+r.reason; },'plug-zap'),
       this.btn('立即备份到云','ghost',async()=>{ applyCl(); if(missing()){clStatus.textContent='请先填好上面的字段';return;} if(cl.type==='webdav')await this.ensureCloudPermission(cl.url); clStatus.textContent='备份中…'; const r=cl.type==='webdav'?await cloudPutBackup(this.settings,this.cfg):await cloudPut(this.settings,this.cfg); clStatus.textContent=r.ok?(r.name?'已生成 '+r.name:'已备份到云'):'失败：'+(r.reason||''); this.save(); },'cloud-upload'),
       this.btn('从云恢复','ghost',async()=>{ applyCl(); if(missing()){clStatus.textContent='请先填好上面的字段';return;} if(cl.type==='webdav')await this.ensureCloudPermission(cl.url);
-        if(cl.type==='gdrive'){ if(!confirm('用云端配置覆盖本机当前配置？'))return; clStatus.textContent='恢复中…'; const ok=await this.cloudRestore(); clStatus.textContent=ok?'已从云恢复':'恢复失败'; if(ok)this.closeModal(); return; }
+        if(cl.type==='gdrive'){ clStatus.textContent='正在读取云端备份…'; const ok=await this.cloudRestore(); if(!ok)clStatus.textContent='恢复文件无效或读取失败'; return; }
         clStatus.textContent='正在读取备份列表…'; const listed=await cloudListBackups(this.settings);
-        if(!listed.ok){ if(!confirm('无法列出历史备份，将尝试恢复固定的自动备份。继续？')){clStatus.textContent='已取消恢复';return;} const ok=await this.cloudRestore(); clStatus.textContent=ok?'无法列目录，已恢复自动备份':'恢复失败'; if(ok)this.closeModal(); return; }
+        if(!listed.ok){ clStatus.textContent='无法列出目录，正在读取固定备份…'; const ok=await this.cloudRestore(); if(!ok)clStatus.textContent='固定备份读取失败'; return; }
         if(!listed.files.length){ clStatus.textContent='云端暂无备份'; return; }
         let selected=listed.files[0].name; const list=el('div','fn-bmtree');
         const fmtSize=n=>n<1024?n+' B':n<1048576?(n/1024).toFixed(1)+' KB':(n/1048576).toFixed(1)+' MB';
         const fmtTime=f=>{ const m=f.name.match(/(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})/); if(m)return `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}:${m[6]}`; const d=new Date(f.mtime); return Number.isNaN(d.getTime())?'时间未知':d.toLocaleString(); };
         const rows=[]; listed.files.forEach((file,i)=>{ const row=el('button','fn-pal-row'+(i===0?' sel':'')); const label=file.name==='fu-nav-config.json'?'自动备份（固定文件）':file.name; row.append(el('span','fn-pal-nm',label),el('span','fn-pal-sub',fmtTime(file)+' · '+fmtSize(file.size))); row.onclick=()=>{ selected=file.name; rows.forEach(r=>r.classList.remove('sel')); row.classList.add('sel'); }; rows.push(row); list.appendChild(row); });
-        const restore=this.btn('恢复此份','danger',async()=>{ if(!confirm('用所选云端备份覆盖本机当前配置？'))return; const ok=await this.cloudRestore(selected); if(ok)this.closeModal(); },'history');
+        const restore=this.btn('预览此份','primary',async()=>{ await this.cloudRestore(selected); },'history');
         this.openModal('选择云端备份',[el('div','fn-hint','固定文件是自动备份；时间戳文件来自手动备份。请选择要恢复的一份。'),list],[this.btn('返回','ghost',()=>this.openCloudEditor(),'arrow-left'),restore]);
       },'cloud-download'),
     ];
@@ -666,6 +692,7 @@ class Core {
     const backupBtns=el('div','fn-wrap'); backupBtns.append(
       this.btn('导出备份','ghost',()=>this.exportConfig(),'download'),
       this.btn('导入备份','ghost',()=>this.importConfig(),'upload'),
+      this.btn('恢复历史','ghost',()=>this.openHistoryManager(),'history'),
       this.btn('导入浏览器书签','ghost',()=>this.importBookmarks(),'bookmark'));
     const backupHint=el('div','fn-hint'); backupHint.innerHTML='「导入备份」支持本应用备份与 <b>Infinity</b> 备份（.infinity 自动识别、按 URL 去重并入）；「检测失效链接」在命令面板（⌘K）。';
     const backupWrap=el('div'); backupWrap.append(backupBtns, backupHint);
@@ -747,14 +774,15 @@ class Core {
       [this.btn('取消','ghost',()=>this.closeModal()),this.btn('导入','primary',()=>{let n=0;picks.forEach((c,f)=>{if(!c.checked)return;const items=flat(f).map(x=>({id:uid('i'),name:x.name,url:x.url,note:'',icon:''}));if(!items.length)return;let g=this.groups.find(x=>x.name===(f.title||''));if(!g){g={id:uid('g'),name:f.title||'书签',icon:'star',color:COLORS[this.groups.length%COLORS.length],collapsed:false,items:[]};this.groups.push(g);}const seen=new Set(g.items.map(i=>i.url));items.forEach(it=>{if(!seen.has(it.url)){g.items.push(it);n++;}});});this.save(true);this.rerender();this.closeModal();this.toast(`已导入 ${n} 个书签`,'ok');})]); }
 
   exportConfig(){ const b=new Blob([JSON.stringify(sanitizeConfig(this.cfg),null,2)],{type:'application/json'});const a=el('a');a.href=URL.createObjectURL(b);a.download='fu-nav-backup-'+new Date().toISOString().slice(0,10)+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);this.toast('已导出','ok'); }
-  importConfig(){ const i=el('input');i.type='file';i.accept='.json,.infinity';i.onchange=()=>{const f=i.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);
-    if(d && d.data && d.data.site){ return this._mergeInfinity(d); }   // Infinity 备份 → 合并导入
-    if(!Array.isArray(d.groups))throw 0;this.cfg=d;this.migrate();this.applyTheme();this.rerender();this.save(true);this.closeModal();this.toast('已导入','ok');}catch{this.toast('文件格式错误','err');}};r.readAsText(f);};i.click(); }
+  importConfig(){ const i=el('input');i.type='file';i.accept='.json,.infinity';i.hidden=true;document.body.appendChild(i);i.onchange=()=>{const f=i.files[0];if(!f){i.remove();return;}const r=new FileReader();r.onload=()=>{ i.remove(); let decoded;
+    try{decoded=JSON.parse(r.result);}catch{} if(decoded && decoded.data && decoded.data.site) return this._mergeInfinity(decoded);   // Infinity 备份走专用解析器
+    const result=parseImport(r.result,this.cfg,Date.now()); this.openImportPreview(result,{kind:'file',label:f.name}); };r.readAsText(f);};i.click(); }
+  importBackup(){ return this.importConfig(); }
   /* 逆向导入 Infinity New Tab 备份（.infinity），文件夹→分组、去重后并入 */
-  importInfinity(){ const i=el('input');i.type='file';i.accept='.infinity,.json';i.onchange=()=>{const f=i.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{let d;try{d=JSON.parse(r.result);}catch{this.toast('文件解析失败','err');return;} this._mergeInfinity(d);};r.readAsText(f);};i.click(); }
-  _mergeInfinity(d){ const parsed=infinityToGroups(d);
+  importInfinity(){ const i=el('input');i.type='file';i.accept='.infinity,.json';i.hidden=true;document.body.appendChild(i);i.onchange=()=>{const f=i.files[0];if(!f){i.remove();return;}const r=new FileReader();r.onload=()=>{i.remove();let d;try{d=JSON.parse(r.result);}catch{this.toast('文件解析失败','err');return;} this._mergeInfinity(d);};r.readAsText(f);};i.click(); }
+  async _mergeInfinity(d){ const parsed=infinityToGroups(d);
     if(!parsed.groups.length){ this.toast('未识别到 Infinity 收藏（请选 .infinity 备份文件）','err'); return; }
-    const added=mergeInfinity(this.cfg, parsed); this.save(true); this.rerender(); this.closeModal();
+    await saveSnapshot(this.cfg,'infinity-import'); const added=mergeInfinity(this.cfg, parsed); await this.save(true); this.rerender(); this.closeModal();
     this.toast(`已导入 ${added} 个收藏（${parsed.groups.length} 组，已去重 ${parsed.stats.dropped}）`,'ok'); }
 
   /* 提示 */

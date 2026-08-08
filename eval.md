@@ -82,7 +82,7 @@ criteria:
       run: npm test -- tests/config-merge.test.mjs
       operation: 构造相同 updatedAt 的两份不同节点并触发云拉取
       expected: test PASS and UI offers merge/local/cloud choices
-    passes: false
+    passes: true
 
   - id: P0-HISTORY-001
     priority: P0
@@ -100,7 +100,7 @@ criteria:
       type: command
       run: npm test -- tests/config-import.test.mjs
       expected: invalid input cases PASS
-    passes: false
+    passes: true
 
   - id: P0-IMPORT-002
     priority: P0
@@ -110,7 +110,7 @@ criteria:
       run: npm test -- tests/config-import.test.mjs tests/config-history.test.mjs
       operation: 导入包含五类差异的测试文件并观察预览 dialog
       expected: exact counts shown and cancel leaves config unchanged
-    passes: false
+    passes: true
 
   - id: P0-STORE-001
     priority: P0

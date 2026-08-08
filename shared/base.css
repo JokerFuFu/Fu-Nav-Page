@@ -151,6 +151,16 @@ img{display:block}
 .fn-wrap{ display:flex; flex-wrap:wrap; gap:var(--s2); }
 .fn-hint{ font-size:12px; color:var(--text-3); line-height:1.55; }
 .fn-hint code{ background:var(--surface-2); padding:var(--s1) var(--s1); border-radius:var(--r-sm); }
+.fn-diff-grid{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:var(--s2); }
+.fn-diff-card{ min-width:0; padding:var(--s3); border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface-2); display:flex; flex-direction:column; gap:2px; }
+.fn-diff-card strong{ font-size:22px; line-height:1.1; font-variant-numeric:tabular-nums; color:var(--text-2); }
+.fn-diff-card span{ font-size:11px; color:var(--text-3); }
+.fn-diff-card.has-change strong{ color:var(--accent); }
+.fn-diff-card.is-danger{ border-color:rgba(251,113,133,.45); background:rgba(251,113,133,.08); }
+.fn-diff-card.is-danger strong{ color:var(--danger); }
+.fn-import-errors{ display:flex; flex-direction:column; gap:var(--s1); padding:var(--s3); border:1px solid rgba(251,113,133,.35); border-radius:var(--r-md); background:rgba(251,113,133,.06); }
+.fn-import-errors code{ white-space:normal; overflow-wrap:anywhere; font-size:11px; color:var(--danger); }
+@media(max-width:420px){ .fn-diff-grid{ grid-template-columns:repeat(2,minmax(0,1fr)); } }
 
 /* 使用统计（DESIGN.md: stat-tile / leaderboard）*/
 .fn-stats-tiles{ display:grid; grid-template-columns:repeat(3,1fr); gap:var(--s3); }

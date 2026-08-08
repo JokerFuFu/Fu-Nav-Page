@@ -1,0 +1,41 @@
+{
+  "version": 3,
+  "revision": 99,
+  "savedAt": 500,
+  "settings": {
+    "title": "Imported Danger",
+    "askProvider": "google",
+    "cloud": {
+      "enabled": false,
+      "type": "webdav",
+      "url": "",
+      "gdriveClientId": ""
+    }
+  },
+  "groups": [
+    {
+      "id": "g01",
+      "name": "常用推荐",
+      "icon": "star",
+      "color": "#4f5bd5",
+      "items": [
+        {
+          "id": "i001",
+          "name": "GitHub Cloud Copy",
+          "url": "https://github.com/",
+          "updatedAt": 200
+        },
+        {
+          "id": "i-new-preview",
+          "name": "Preview Added",
+          "url": "https://preview-added.example.com/"
+        },
+        {
+          "id": "i-duplicate-preview",
+          "name": "GitHub Duplicate",
+          "url": "HTTPS://github.com:443/?utm_source=preview"
+        }
+      ]
+    }
+  ]
+}

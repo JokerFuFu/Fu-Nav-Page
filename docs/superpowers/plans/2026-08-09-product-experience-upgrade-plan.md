@@ -265,7 +265,7 @@ Expected: FAIL，模块不存在。
 
 保留现有 `chrome.storage.local` 唯一权威和 sync 首次引导行为。为 `fn_inbox` 操作补 `opId/at`，在本机维护有界的已消费 opId 集；按时间排序应用，删除优先于更早的新增/编辑，重放同一 opId 不产生二次变化。不得增加任何后台整份远端 merge。
 
-- [ ] **Step 5: 接入 save、remote change 和 cloud**
+- [x] **Step 5: 接入 save、remote change 和 cloud**
 
 `Core._applyInbox` 改用 `applyInboxOps`；`onRemoteChange` 只处理本机 local/inbox，不响应跨设备 sync 推送。`cloudPut` 只接受 `sanitizeConfig(this.cfg)`；云恢复先创建快照和差异摘要，再由显式“合并副本/保留本机/使用云端”操作应用，绝不自动拉取。
 
@@ -276,7 +276,7 @@ Expected: 全部 PASS。
 Run: `npm test`
 Expected: 0 failed。
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 git add shared/sync-policy.js shared/config-history.js shared/storage.js shared/core.js shared/cloud.js tests/sync-policy.test.mjs tests/config-history.test.mjs
@@ -295,7 +295,7 @@ git commit -m "fix: 加固本机权威同步与恢复历史"
 **Interfaces:**
 - Produces: `parseImport(text, current, now)` → `{ ok, candidate, diff, errors }`；`applyImport(core, result)`。
 
-- [ ] **Step 1: 写无效导入不改变当前配置测试**
+- [x] **Step 1: 写无效导入不改变当前配置测试**
 
 ```js
 test('rejects malformed trees and reports exact paths', () => {
@@ -307,11 +307,11 @@ test('rejects malformed trees and reports exact paths', () => {
 });
 ```
 
-- [ ] **Step 2: 写差异摘要测试**
+- [x] **Step 2: 写差异摘要测试**
 
 候选配置新增一项、更新一项、删除一项、包含一个规范化重复时，`diff` 精确返回 `{ added:1, updated:1, removed:1, duplicates:1, invalid:0 }` 和对应 ID 列表。
 
-- [ ] **Step 3: RED、实现、GREEN**
+- [x] **Step 3: RED、实现、GREEN**
 
 Run: `npm test -- tests/config-import.test.mjs`
 Expected before implementation: FAIL。
@@ -319,11 +319,11 @@ Expected before implementation: FAIL。
 Run: `npm test -- tests/config-import.test.mjs`
 Expected after implementation: PASS。
 
-- [ ] **Step 4: 把本地导入和云恢复接入同一流水线**
+- [x] **Step 4: 把本地导入和云恢复接入同一流水线**
 
 `Core.importBackup`、`Core.cloudRestore` 和历史恢复都必须经过 `parseImport` 或等价 schema 校验；取消预览时不写 storage、不 rerender。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add shared/config-import.js shared/core.js layouts/fusion.js shared/base.css tests/config-import.test.mjs

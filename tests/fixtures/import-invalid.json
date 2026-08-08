@@ -1,0 +1,15 @@
+{
+  "version": 3,
+  "settings": {},
+  "groups": [
+    {
+      "id": "g-invalid",
+      "items": [
+        {
+          "id": "missing-url",
+          "name": "Invalid entry"
+        }
+      ]
+    }
+  ]
+}

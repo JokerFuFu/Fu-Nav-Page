@@ -1,0 +1,36 @@
+{
+  "version": 3,
+  "revision": 99,
+  "savedAt": 500,
+  "settings": {
+    "title": "Cloud Danger",
+    "askProvider": "google",
+    "cloud": {
+      "enabled": false,
+      "type": "webdav",
+      "url": "",
+      "gdriveClientId": ""
+    }
+  },
+  "groups": [
+    {
+      "id": "g01",
+      "name": "常用推荐",
+      "icon": "star",
+      "color": "#4f5bd5",
+      "items": [
+        {
+          "id": "i001",
+          "name": "GitHub Cloud Conflict",
+          "url": "https://github.com/",
+          "updatedAt": 200
+        },
+        {
+          "id": "i-cloud-only",
+          "name": "Cloud Only",
+          "url": "https://cloud-only.example.com/"
+        }
+      ]
+    }
+  ]
+}
