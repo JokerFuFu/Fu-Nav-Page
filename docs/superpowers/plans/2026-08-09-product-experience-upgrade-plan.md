@@ -585,7 +585,7 @@ Expected after implementation: PASS。
 
 网站编辑器增加 `tags:string[]` 和 `aliases:string[]`，输入使用逗号分隔并规范化去重；搜索索引包含 name/url/note/tags/aliases/group/folder path。
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 git add vendor shared/search-index.js shared/library-manager.js shared/core.js layouts/fusion.js layouts/fusion.css README.md tests/search-index.test.mjs tests/library-manager.test.mjs
@@ -605,15 +605,15 @@ git commit -m "feat: 增加书签库拼音搜索与批量管理"
 **Interfaces:**
 - Produces: `buildDestinationOptions(groups, recents)`；`savePopupItem(config, form)`；storage key `fu_nav_recent_destinations_v1`。
 
-- [ ] **Step 1: 写目录树和最近位置测试**
+- [x] **Step 1: 写目录树和最近位置测试**
 
 两级文件夹按完整路径输出；最近位置去重、最多三个、已删除目录自动剔除；保存到二级文件夹后 `locateNode` 能找到新网站。
 
-- [ ] **Step 2: 写重复提示测试**
+- [x] **Step 2: 写重复提示测试**
 
 精确重复阻止默认保存并提供“打开已有/仍然保存”；possible 重复允许确认；distinct 直接保存。
 
-- [ ] **Step 3: RED、实现、GREEN**
+- [x] **Step 3: RED、实现、GREEN**
 
 Run: `npm test -- tests/popup-model.test.mjs`
 Expected before implementation: FAIL。
@@ -621,7 +621,7 @@ Expected before implementation: FAIL。
 Run: `npm test -- tests/popup-model.test.mjs`
 Expected after implementation: PASS。
 
-- [ ] **Step 4: 构建可访问目录树和高级编辑**
+- [x] **Step 4: 构建可访问目录树和高级编辑**
 
 目录触发器显示完整路径，支持方向键展开/收起；默认显示快速保存，高级区提供备注、常用、面板打开和图标。所有 `label` 使用 `for`，图标按钮提供名称。
 

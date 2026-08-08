@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { makeConfig, makeGroup, makeSite } from './helpers/fixtures.mjs';
+import { makeConfig, makeFolder, makeGroup, makeSite } from './helpers/fixtures.mjs';
 import { applyInboxOps, diffRestore } from '../shared/sync-policy.js';
 
 test('delete wins stale edit while unrelated edit survives and replay is idempotent', () => {
@@ -37,6 +37,16 @@ test('add recreates a missing target group once and rejects duplicate URLs', () 
   assert.equal(result.config.groups.length, 1);
   assert.equal(result.config.groups[0].items.length, 1);
   assert.equal(result.config.groups[0].items[0].id, 'new');
+});
+
+test('popup inbox add and edit preserve the exact nested destination', () => {
+  const config = makeConfig({ groups: [makeGroup('g1', [makeFolder('f1', [makeFolder('f2', [])])])] });
+  const added = applyInboxOps(config, [{ opId:'nested-add', op:'add', gid:'g1', folderId:'f2', item:makeSite('nested') }], new Set());
+  assert.equal(added.config.groups[0].items[0].items[0].items[0].id, 'nested');
+
+  const moved = applyInboxOps(added.config, [{ opId:'nested-edit', op:'edit', id:'nested', tgid:'g1', tfid:'f1', patch:{name:'renamed'} }], added.seenOpIds);
+  assert.equal(moved.config.groups[0].items[0].items[1].id, 'nested');
+  assert.equal(moved.config.groups[0].items[0].items[1].name, 'renamed');
 });
 
 test('restore diff reports added, updated, removed and conflicting IDs without mutation', () => {

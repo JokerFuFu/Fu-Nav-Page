@@ -1,6 +1,6 @@
 /* 工具栏收藏弹窗（仿 Infinity 收藏编辑框） */
 html,body{ margin:0; }
-body{ width:368px; background:var(--bg); color:var(--text); }
+body{ width:420px; background:var(--bg); color:var(--text); }
 .pop{ padding:var(--s4); display:flex; flex-direction:column; gap:var(--s3); }
 .pop-h{ display:flex; align-items:center; gap:var(--s2); }
 .pop-logo{ width:26px; height:26px; border-radius:var(--r-sm); overflow:hidden; flex:0 0 26px; }
@@ -13,6 +13,7 @@ body{ width:368px; background:var(--bg); color:var(--text); }
 .pop-foot .fn-btn{ flex:1; padding:var(--s3); font-size:14px; }
 .pop-status{ font-size:12px; color:var(--text-3); min-height:16px; text-align:center; }
 .pop-status.ok{ color:var(--ok); } .pop-status.err{ color:var(--danger); }
+.pop-status.warn{ color:var(--warning); text-align:left; }
 .pop-loading{ padding:40px 0; text-align:center; color:var(--text-3); font-size:13px; }
 
 /* 已收藏徽章：实心成功色 pill + 白勾，醒目提示当前页已在导航中，避免重复收藏 */
@@ -22,3 +23,15 @@ body{ width:368px; background:var(--bg); color:var(--text); }
 .pop-badge-ic{ width:14px; height:14px; flex:0 0 14px; background:currentColor;
   -webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E");
   mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E"); }
+
+.pop-recents{ display:flex; align-items:center; gap:var(--s1); overflow:hidden; }
+.pop-recents-label{ flex:0 0 auto; color:var(--text-3); font-size:11px; }
+.pop-recent.fn-btn{ min-width:0; padding:var(--s1) var(--s2); border-radius:999px; background:var(--surface-2); color:var(--text-2); font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.pop-advanced{ border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface); }
+.pop-advanced summary{ min-height:36px; display:flex; align-items:center; padding:var(--s2) var(--s3); color:var(--text-2); font-size:12px; font-weight:600; cursor:pointer; }
+.pop-advanced[open]{ padding:0 var(--s3) var(--s3); }
+.pop-advanced[open] summary{ margin:0 calc(var(--s3) * -1) var(--s2); padding-inline:var(--s3); border-bottom:1px solid var(--border); }
+.pop-toggle{ display:flex; align-items:center; min-height:36px; gap:var(--s2); color:var(--text); font-size:13px; cursor:pointer; }
+.pop-toggle input{ margin-left:auto; }
+.pop-duplicate-actions{ display:flex; gap:var(--s2); margin-top:var(--s2); }
+.pop-duplicate-actions .fn-btn{ min-height:32px; }

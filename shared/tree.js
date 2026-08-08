@@ -104,3 +104,21 @@ export function countTree(items) {
   walk(items);
   return { topLevel: (items || []).length, sites, folders, total: sites + folders };
 }
+
+export function listDestinations(groups) {
+  const destinations = [];
+  for (const group of groups || []) {
+    const groupLabel = group.name || '未命名分组';
+    destinations.push({ key: `g:${group.id}`, label: groupLabel, groupId: group.id, folderId: null, depth: 0 });
+    const walk = (items, names = [], depth = 1) => {
+      for (const item of items || []) {
+        if (!isFolder(item)) continue;
+        const path = [...names, item.name || '文件夹'];
+        destinations.push({ key: `f:${item.id}`, label: [groupLabel, ...path].join(' / '), groupId: group.id, folderId: item.id, depth });
+        walk(item.items || [], path, depth + 1);
+      }
+    };
+    walk(group.items || []);
+  }
+  return destinations;
+}

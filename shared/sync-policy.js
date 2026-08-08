@@ -87,11 +87,13 @@ export function applyInboxOps(input, operations, seenInput = new Set(), options 
         delete patch.id;
         Object.assign(hit.item, patch);
       }
-      if (op.tgid && op.tgid !== hit.group.id && !tombstones.has(op.tgid)) {
-        const target = config.groups.find((group) => group.id === op.tgid);
-        if (target) {
+      if ((op.tgid || op.tfid) && !tombstones.has(op.tgid) && !tombstones.has(op.tfid)) {
+        const target = config.groups.find((group) => group.id === (op.tgid || hit.group.id));
+        const folder = op.tfid ? locateItem(config.groups, op.tfid) : null;
+        const holder = folder && folder.group === target && folder.item.type === 'folder' ? (folder.item.items || (folder.item.items = [])) : target?.items;
+        if (holder && holder !== hit.holder) {
           hit.holder.splice(hit.holder.indexOf(hit.item), 1);
-          target.items.push(hit.item);
+          holder.push(hit.item);
         }
       }
       applied += 1;
@@ -123,7 +125,9 @@ export function applyInboxOps(input, operations, seenInput = new Set(), options 
       skipped += 1;
       return;
     }
-    target.items.push(clone(op.item));
+    const folder = op.folderId ? locateItem(config.groups, op.folderId) : null;
+    const holder = folder && folder.group === target && folder.item.type === 'folder' ? (folder.item.items || (folder.item.items = [])) : target.items;
+    holder.push(clone(op.item));
     applied += 1;
   });
 

@@ -332,7 +332,7 @@ criteria:
       type: command
       run: npm test -- tests/popup-model.test.mjs
       expected: nested destination save cases PASS
-    passes: false
+    passes: true
 
   - id: P1-POPUP-002
     priority: P1
@@ -341,7 +341,7 @@ criteria:
       type: command
       run: npm test -- tests/popup-model.test.mjs
       expected: recent destination retention and pruning PASS
-    passes: false
+    passes: true
 
   - id: P1-POPUP-003
     priority: P1
@@ -350,7 +350,7 @@ criteria:
       type: command
       run: npm test -- tests/popup-model.test.mjs
       expected: exact, possible and forced-save cases PASS
-    passes: false
+    passes: true
 
   - id: P1-A11Y-001
     priority: P1
