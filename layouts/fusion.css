@@ -78,7 +78,7 @@ body.editing .lay-fusion .fx-navitem[data-gid]{ cursor:grab; }
 .lay-fusion .fx-ask-prov-cv img{ width:20px; height:20px; object-fit:contain; }
 .lay-fusion .fx-ask-prov-ar{ color:var(--text-3); transition:var(--t); }
 .lay-fusion .fx-ask-prov.open .fx-ask-prov-ar{ transform:rotate(180deg); }
-.lay-fusion .fx-ask-box input{ flex:1; border:none; background:none; outline:none; color:var(--text); font-size:17px; }
+.lay-fusion .fx-ask-box input{ flex:1; min-height:32px; border:none; background:none; outline:none; color:var(--text); font-size:17px; }
 .lay-fusion .fx-ask-box input::placeholder{ color:var(--text-3); }
 .lay-fusion .fx-ask-send{ width:34px; height:34px; border-radius:var(--r-sm); background:var(--accent-strong); color:#fff; font-size:17px; display:grid; place-items:center; flex:0 0 34px; }
 .lay-fusion .fx-ask-send:hover{ filter:brightness(1.08); }
@@ -157,6 +157,8 @@ body.bg-photo .lay-fusion .fx-wcard{
 body.bg-photo .lay-fusion .fx-hero-time{ color:#fff; text-shadow:0 2px 16px rgba(0,0,0,.5); }
 body.bg-photo .lay-fusion .fx-hero-date{ color:rgba(255,255,255,.9); text-shadow:0 1px 8px rgba(0,0,0,.5); }
 body.bg-photo .lay-fusion .fx-hero-greet{ color:rgba(255,255,255,.72); text-shadow:0 1px 8px rgba(0,0,0,.5); }
+/* 图片可能接近纯白；时钟固定使用深色玻璃底，最坏背景下也保证小字号达到 AA。 */
+body.bg-photo .lay-fusion .fx-hero-clock{ background:rgba(8,10,18,.74); border-color:rgba(255,255,255,.18); }
 .lay-fusion .fx-wc-weather{ display:flex; flex-direction:column; gap:var(--s1); }
 .lay-fusion .fx-wcw-top{ display:flex; align-items:center; gap:var(--s3); }
 .lay-fusion .fx-wcw-ico{ width:34px; height:34px; color:var(--accent); flex:0 0 34px; }
@@ -190,7 +192,7 @@ body.bg-photo .lay-fusion .fx-hero-greet{ color:rgba(255,255,255,.72); text-shad
 .lay-fusion .fx-cd-add input:focus{ border-color:var(--accent); }
 .lay-fusion .fx-cd-add input:not([type=date]){ flex:1.4; }
 .lay-fusion .fx-cd-add input[type=date]{ flex:1; }
-.lay-fusion .fx-cd-addbtn{ flex:0 0 auto; color:var(--text-3); padding:0 var(--s1); font-size:15px; }
+.lay-fusion .fx-cd-addbtn{ flex:0 0 32px; width:32px; min-height:32px; color:var(--text-3); padding:0 var(--s1); font-size:15px; }
 .lay-fusion .fx-cd-addbtn:hover{ color:var(--accent); }
 
 /* 常用网格：列数由设置中的 6/8 × 2/3 规格驱动；锁定段与自动段同网格，pin 角标标识固定项。 */
@@ -295,7 +297,8 @@ body.editing .lay-fusion .fx-card{ cursor:grab; }
 .fn-library-actions{ display:grid; grid-template-columns:minmax(150px,1fr) auto minmax(180px,1fr) auto auto; gap:var(--s2); align-items:center; }
 .fn-library-count{ color:var(--text-2); font-size:12px; font-variant-numeric:tabular-nums; }
 .fn-library-results{ max-height:52vh; overflow:auto; display:flex; flex-direction:column; border:1px solid var(--border); border-radius:var(--r-md); }
-.fn-library-row{ display:grid; grid-template-columns:20px 32px minmax(0,1fr); gap:var(--s3); align-items:center; min-height:58px; padding:var(--s2) var(--s3); border-bottom:1px solid var(--border); }
+.fn-library-row{ display:grid; grid-template-columns:32px 32px minmax(0,1fr); gap:var(--s3); align-items:center; min-height:58px; padding:var(--s2) var(--s3); border-bottom:1px solid var(--border); }
+.fn-library-check{ width:32px; height:32px; display:grid; place-items:center; cursor:pointer; }
 .fn-library-row:last-child{ border-bottom:0; }
 .fn-library-row:hover{ background:var(--surface-2); }
 .fn-library-icon{ width:28px; height:28px; display:grid; place-items:center; overflow:hidden; border-radius:var(--r-sm); }
@@ -318,7 +321,7 @@ body.editing .lay-fusion .fx-card{ cursor:grab; }
 .lay-fusion .fx-fmini-c.is-letter{ color:#fff; font-weight:700; font-size:8px; }
 .lay-fusion .fx-card.fx-folder-drop{ border-color:var(--accent); box-shadow:0 0 0 2px var(--ring); background:var(--surface-2); }
 /* 文件夹页面包屑 */
-.lay-fusion .fx-crumb{ font-size:20px; font-weight:650; color:var(--text-3); transition:var(--t); }
+.lay-fusion .fx-crumb{ min-height:32px; padding:0 var(--s1); font-size:20px; font-weight:650; color:var(--text-3); transition:var(--t); }
 .lay-fusion .fx-crumb:hover{ color:var(--accent); }
 .lay-fusion .fx-crumb-sep{ font-size:15px; color:var(--text-3); margin:0 var(--s1); }
 .lay-fusion .fx-navfolder.on{ color:var(--text); background:var(--surface-2); }

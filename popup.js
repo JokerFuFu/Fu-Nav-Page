@@ -1,13 +1,14 @@
 /* ============ 工具栏目录级收藏器 ============ */
 import { loadConfig, saveConfig, pushInbox } from './shared/storage.js';
-import { createIconEditor } from './shared/icon-editor.js';
+import { createIconEditor } from './shared/icon-editor.js?v=3.24.5';
 import { hostOf, normUrl } from './shared/icon-map.js';
 import { locateNode, removeNode, walkTree } from './shared/tree.js';
 import { buildDestinationOptions, rememberDestination, savePopupItem, RECENT_DESTINATIONS_KEY } from './shared/popup-model.js';
 
 const E = (tag, className, text) => { const node=document.createElement(tag); if(className)node.className=className; if(text!=null)node.textContent=text; return node; };
 let fieldSeq=0;
-const field = (labelText, control) => { const wrap=E('div','fn-field'), label=E('label',null,labelText); if(control?.matches?.('input,select,textarea')){ control.id=control.id||`pop-field-${++fieldSeq}`; label.htmlFor=control.id; } wrap.append(label,control); return wrap; };
+const field = (labelText, control) => { const wrap=E('div','fn-field'); if(control?.matches?.('input,select,textarea')){ const label=E('label',null,labelText); control.id=control.id||`pop-field-${++fieldSeq}`; label.htmlFor=control.id; wrap.appendChild(label); }
+  else { const label=E('div','fn-field-label',labelText); label.id=`pop-field-label-${++fieldSeq}`; control?.setAttribute?.('role','group'); control?.setAttribute?.('aria-labelledby',label.id); wrap.appendChild(label); } wrap.appendChild(control); return wrap; };
 const inp = (value='',placeholder='') => { const input=E('input'); input.value=value; input.placeholder=placeholder; return input; };
 const btn = (text,className,onClick) => { const button=E('button','fn-btn '+(className||''),text); button.type='button'; if(onClick)button.onclick=onClick; return button; };
 const footRow = (buttons) => { const row=E('div','pop-foot'); buttons.forEach(button=>row.appendChild(button)); return row; };
@@ -50,7 +51,7 @@ function render(cfg,ctx,recentKeys){
   if(destinations.recents.length){const recent=E('div','pop-recents');recent.appendChild(E('span','pop-recents-label','最近位置'));destinations.recents.forEach(option=>recent.appendChild(btn(option.label,'pop-recent',()=>{select.value=option.key;})));pop.appendChild(recent);}
   const quickRow=E('div','pop-row');quickRow.append(field('网址',urlI),field('保存位置',select));pop.appendChild(quickRow);
 
-  const advanced=E('details','pop-advanced'),summary=E('summary',null,'高级编辑');advanced.appendChild(summary);
+  const advanced=E('details','pop-advanced'),summary=E('summary',null,'高级编辑');summary.setAttribute('aria-expanded','false');advanced.addEventListener('toggle',()=>summary.setAttribute('aria-expanded',String(advanced.open)));advanced.appendChild(summary);
   const noteI=inp(ctx.existing?.note||'','备注（可选）'),favI=E('input'),frameI=E('input');favI.type=frameI.type='checkbox';favI.checked=ctx.existing?.fav===true;frameI.checked=ctx.existing?.frame===true;
   const toggle=(labelText,control)=>{const label=E('label','pop-toggle');control.id=control.id||`pop-field-${++fieldSeq}`;label.htmlFor=control.id;label.append(E('span',null,labelText),control);return label;};
   const iconEd=createIconEditor({icon:ctx.existing?.icon||'',name:ctx.title,url:ctx.url});nameI.addEventListener('input',()=>iconEd.setContext(nameI.value,urlI.value));urlI.addEventListener('input',()=>iconEd.setContext(nameI.value,urlI.value));

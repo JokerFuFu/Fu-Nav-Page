@@ -359,7 +359,7 @@ criteria:
       type: command
       run: npm test -- tests/a11y-static.test.mjs
       expected: labels and icon button rules PASS
-    passes: false
+    passes: true
 
   - id: P1-A11Y-002
     priority: P1
@@ -371,7 +371,7 @@ criteria:
         - 连续按 Tab 与 Shift+Tab
         - 按 Escape
       expected: focus never leaves open dialog and returns to its trigger after close
-    passes: false
+    passes: true
 
   - id: P1-A11Y-003
     priority: P1
@@ -382,7 +382,7 @@ criteria:
         - 用键盘打开卡片操作菜单
         - 逐一执行所有规定按键
       expected: roving focus and activation follow ARIA menu keyboard behavior
-    passes: false
+    passes: true
 
   - id: P1-A11Y-004
     priority: P1
@@ -391,7 +391,7 @@ criteria:
       type: command
       run: npm test -- tests/a11y-static.test.mjs
       expected: live region and announce call coverage PASS
-    passes: false
+    passes: true
 
   - id: P1-A11Y-005
     priority: P1
@@ -400,7 +400,7 @@ criteria:
       type: browser-audit
       surfaces: [home, group, folder, settings, library, workspace, popup]
       expected: zero contrast failures for normal text and zero interactive targets below 32x32 excluding inline text links
-    passes: false
+    passes: true
 
   - id: P2-DIAG-001
     priority: P2

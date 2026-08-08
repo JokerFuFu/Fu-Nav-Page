@@ -625,7 +625,7 @@ Expected after implementation: PASS。
 
 目录触发器显示完整路径，支持方向键展开/收起；默认显示快速保存，高级区提供备注、常用、面板打开和图标。所有 `label` 使用 `for`，图标按钮提供名称。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add popup.html popup.js popup.css shared/tree.js shared/url.js tests/popup-model.test.mjs
@@ -646,30 +646,30 @@ git commit -m "feat: 支持弹窗保存到嵌套文件夹"
 **Interfaces:**
 - Produces: `openDialog({ title, content, initialFocus, onClose })`；`closeDialog()`；`announce(message, tone)`；`openMenu(anchor, items)`。
 
-- [ ] **Step 1: 写静态失败测试**
+- [x] **Step 1: 写静态失败测试**
 
 检查所有 dialog 有 `aria-modal` 和 `aria-labelledby`，可见 label 有 `for` 或包含控件，图标按钮有文本/`title`/`aria-label`，展开按钮有 `aria-expanded`。
 
-- [ ] **Step 2: 运行并记录现有失败数量**
+- [x] **Step 2: 运行并记录现有失败数量**
 
 Run: `npm test -- tests/a11y-static.test.mjs`
 Expected: FAIL，并列出 settings 与 popup 的无名称控件。
 
-- [ ] **Step 3: 实现可访问基元**
+- [x] **Step 3: 实现可访问基元**
 
 `openDialog` 保存先前焦点、把标题 ID 写入 `aria-labelledby`、Tab/Shift+Tab 循环、Escape 关闭、关闭后恢复焦点。`openMenu` 使用 roving tabindex，支持 ArrowUp/Down、Home/End、Enter/Space、Escape。
 
-- [ ] **Step 4: 全面替换调用点**
+- [x] **Step 4: 全面替换调用点**
 
 覆盖设置、网站/分组/文件夹编辑器、导入预览、书签库、工作区管理、背景面板、命令面板和 popup。同步、复制、保存、错误消息统一调用 `announce`。
 
-- [ ] **Step 5: GREEN 与键盘手测**
+- [x] **Step 5: GREEN 与键盘手测**
 
 Run: `npm test -- tests/a11y-static.test.mjs`
 Expected: PASS。
 操作：仅用键盘打开设置、遍历控件、打开并操作右键菜单、关闭后焦点回到触发按钮。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add shared/core.js shared/base.css layouts/fusion.js popup.html popup.js tools/verify-static.mjs tests/a11y-static.test.mjs

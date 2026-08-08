@@ -6,6 +6,12 @@ const PALETTE=['#5b8def','#22a3b5','#36b37e','#e2a032','#e0567a','#9b6ef3','#ef6
 function colorFor(s){ let h=0; for(let i=0;i<s.length;i++) h=(h*31+s.charCodeAt(i))>>>0; return PALETTE[h%PALETTE.length]; }
 function initialOf(name,url){ const s=(name||'').trim(); if(s) return s[0].toUpperCase(); const h=hostOf(url); return (h[0]||'?').toUpperCase(); }
 
+export function readableTextColor(value){ const raw=String(value||'').trim(),full=/^#[0-9a-f]{3}$/i.test(raw)?'#'+raw.slice(1).split('').map(x=>x+x).join(''):raw;
+  if(!/^#[0-9a-f]{6}$/i.test(full))return '#ffffff'; const rgb=full.slice(1).match(/../g).map(x=>Number.parseInt(x,16));
+  const lum=rgb.map(channel=>{const n=channel/255;return n<=.04045?n/12.92:((n+.055)/1.055)**2.4;}).reduce((sum,n,index)=>sum+n*[.2126,.7152,.0722][index],0);
+  const dark='#000000',whiteContrast=1.05/(lum+.05),darkContrast=(lum+.05)/.05; return darkContrast>=whiteContrast?dark:'#ffffff'; }
+function applyLetterColors(box,background){ box.style.background=background; box.style.color=readableTextColor(background); }
+
 function extFavicon(url,size=64){ return isExtension ? `/_favicon/?pageUrl=${encodeURIComponent(url)}&size=${Math.min(size,64)}` : null; }
 
 /* 字母图标字号：按图标格自身高度的百分比渲染，跨尺寸自适应（DOM 未就绪时 rAF 重试） */
@@ -13,9 +19,9 @@ function sizeLetter(box, pct){ let n=0; const apply=()=>{ const h=box.clientHeig
 
 /* 给 .ico 容器装配网站/服务图标 + 兜底链 */
 export function mountItemIcon(box, item, size=64){
-  box.textContent=''; box.classList.remove('is-letter'); box.style.background=''; box.style.fontSize='';
+  box.textContent=''; box.classList.remove('is-letter'); box.style.background=''; box.style.color=''; box.style.fontSize='';
   // 自定义「纯色字母图标」：L|文字|颜色|字号%（编辑器纯色模式，字号可省略）
-  if(item.icon && item.icon.slice(0,2)==='L|'){ const p=item.icon.split('|'); box.classList.add('is-letter'); box.textContent=(p[1]||'?'); box.style.background=p[2]||colorFor(item.url||item.name||'?'); if(p[3]) sizeLetter(box,+p[3]||45); return; }
+  if(item.icon && item.icon.slice(0,2)==='L|'){ const p=item.icon.split('|'),background=p[2]||colorFor(item.url||item.name||'?'); box.classList.add('is-letter'); box.textContent=(p[1]||'?'); applyLetterColors(box,background); if(p[3]) sizeLetter(box,+p[3]||45); return; }
   const host=hostOf(item.url), priv=isPrivateHost(host);
   const cands=[];
   if(item.icon) cands.push(item.icon);
@@ -24,7 +30,7 @@ export function mountItemIcon(box, item, size=64){
   const letter=()=>{ box.classList.add('is-letter');
     const hasCtx=!!(((item.name||'').trim())||((item.url||'').trim()));
     if(!hasCtx){ box.classList.add('is-empty'); box.textContent='?'; return; }   // 空占位走中性样式(css .is-empty)，不吃彩色哈希
-    box.textContent=initialOf(item.name,item.url); box.style.background=colorFor(item.url||item.name); };
+    box.textContent=initialOf(item.name,item.url); applyLetterColors(box,colorFor(item.url||item.name)); };
   // 强制字母（图标库无对应且 url 易误中）：仅当没有自定义图标时
   if(brand===FORCE_LETTER && !item.icon){ letter(); return; }
   if(!priv) cands.push(...faviconCandidates(item.url));

@@ -3,7 +3,7 @@
  * 纯色模式产出 `L|文字|颜色|字号%`（字号为占图标格高度的百分比，省略则用 CSS 默认）。
  * 被 core.openItemEditor 与工具栏 popup 复用，保证两处不漂移。
  */
-import { mountItemIcon } from './icons.js';
+import { mountItemIcon } from './icons.js?v=3.24.5';
 import { iconSearch } from './icon-map.js';
 
 export const ICON_COLORS = ['#ef4444','#f97316','#f59e0b','#22c55e','#06b6d4','#3b82f6','#8b5cf6','#ec4899','#64748b'];
@@ -13,6 +13,7 @@ const DI = s => `https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons@main/sv
 const ICON_LIB = ['synology','plex','jellyfin','emby','portainer','docker','grafana','prometheus','home-assistant','adguard-home','pi-hole','nginx','nginx-proxy-manager','traefik','gitea','github','gitlab','jenkins','sonarr','radarr','prowlarr','bazarr','jellyseerr','overseerr','qbittorrent','transmission','sabnzbd','tautulli','uptime-kuma','vaultwarden','nextcloud','immich','paperless-ngx','frigate','proxmox','truenas','unraid','openwrt','pfsense','opnsense','wireguard','tailscale','cloudflare','authentik','keycloak','jackett','calibre-web','audiobookshelf','navidrome','filebrowser','code-server','n8n','node-red','influxdb','mariadb','postgresql','redis','mongodb','minio','rclone','duplicati','watchtower','dozzle','glances','netdata','homepage','homarr','heimdall','dashy','jdownloader','aria2','rustdesk','guacamole','wikijs','bookstack','mealie','firefly-iii','stirling-pdf','it-tools','excalidraw','kavita','komga','mastodon','element','jitsi','rocket-chat','mattermost','steam','kodi','youtube','bilibili','spotify','google','notion','obsidian','figma'];
 
 const E = (t,c,x)=>{ const e=document.createElement(t); if(c)e.className=c; if(x!=null)e.textContent=x; return e; };
+let iconFieldSeq=0;
 
 /* 创建编辑器。返回 { node, getIcon(), setContext(name,url) }。
  * opts: { icon, name, url, colors, onChange } */
@@ -41,7 +42,7 @@ export function createIconEditor(opts={}){
   const fontV = E('span','fn-irangev', String(lFont));
   const lcg = E('div','fn-colorgrid');
   const applyLetter = ()=>{ const t=(ltI.value||(name||'?')[0]||'?').slice(0,2); icon='L|'+t+'|'+lColor+'|'+lFont; drawPrev(); emit(); };
-  colors.forEach(c=>{ const b=E('button','fn-colorpick'+(c===lColor?' sel':'')); b.type='button'; b.style.background=c;
+  colors.forEach(c=>{ const b=E('button','fn-colorpick'+(c===lColor?' sel':'')); b.type='button'; b.style.background=c; b.title=`选择颜色 ${c}`; b.setAttribute('aria-label',`选择颜色 ${c}`);
     b.onclick=()=>{ lColor=c; [...lcg.children].forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); applyLetter(); }; lcg.appendChild(b); });
   ltI.addEventListener('input', applyLetter);
   fontI.addEventListener('input', ()=>{ lFont=+fontI.value; fontV.textContent=fontI.value; applyLetter(); });
@@ -53,8 +54,8 @@ export function createIconEditor(opts={}){
   const urlInput = E('input'); urlInput.className='fn-iinp'; urlInput.placeholder='或粘贴图标 URL'; urlInput.value = (mode==='online') ? icon : '';
   const renderSug = ()=>{ sug.textContent='';
     iconSearch(name, url).filter(u=>u && u!=='__letter__').slice(0,10).forEach(u=>{
-      const b=E('button','fn-isug'+(icon===u?' sel':'')); b.type='button';
-      const img=new Image(); img.onerror=()=>b.remove(); img.src=u; b.appendChild(img);
+      const b=E('button','fn-isug'+(icon===u?' sel':'')); b.type='button'; b.title='选择自动匹配图标'; b.setAttribute('aria-label','选择自动匹配图标');
+      const img=new Image(); img.alt=''; img.onerror=()=>b.remove(); img.src=u; b.appendChild(img);
       b.onclick=()=>{ icon=u; urlInput.value=u; [...sug.children].forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); drawPrev(); emit(); };
       sug.appendChild(b); }); };
   urlInput.addEventListener('input', ()=>{ icon=urlInput.value.trim(); drawPrev(); emit(); });
@@ -64,12 +65,12 @@ export function createIconEditor(opts={}){
   const renderLib = ()=>{ libGrid.textContent=''; const q=libSearch.value.trim().toLowerCase();
     const list=(q ? ICON_LIB.filter(s=>s.includes(q)) : ICON_LIB).slice(0,42);
     list.forEach(slug=>{ const b=E('button','fn-isug'+(icon===DI(slug)?' sel':'')); b.type='button'; b.title=slug;
-      const img=new Image(); img.onerror=()=>b.remove(); img.src=DI(slug); b.appendChild(img);
+      b.setAttribute('aria-label',`选择 ${slug} 图标`); const img=new Image(); img.alt=''; img.onerror=()=>b.remove(); img.src=DI(slug); b.appendChild(img);
       b.onclick=()=>{ icon=DI(slug); urlInput.value=icon; [...libGrid.children].forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); drawPrev(); emit(); };
       libGrid.appendChild(b); }); };
   libSearch.addEventListener('input', renderLib);
   const pOnline = E('div','fn-ipanel');
-  pOnline.append(E('div','fn-sub','点选自动匹配的图标，或粘贴 URL'), sug, urlInput, E('div','fn-sub','或从精选图标库挑选'), libSearch, libGrid);
+  pOnline.append(E('div','fn-sub','点选自动匹配的图标，或粘贴 URL'), sug, field('图标网址',urlInput), E('div','fn-sub','或从精选图标库挑选'), field('搜索图标库',libSearch), libGrid);
 
   // ── 本地：上传图片 ──
   const pLocal = E('div','fn-ipanel');
@@ -114,5 +115,7 @@ export function createIconEditor(opts={}){
 }
 
 /* 内部小工具：字段包裹 + 字号滑杆行 */
-function field(label,input){ const w=E('div','fn-field'); w.appendChild(E('label',null,label)); w.appendChild(input); return w; }
+function field(labelText,input){ const w=E('div','fn-field'), control=input?.matches?.('input,select,textarea')?input:input?.querySelector?.('input,select,textarea');
+  if(control){control.id=control.id||`fn-icon-field-${++iconFieldSeq}`;const label=E('label',null,labelText);label.htmlFor=control.id;w.appendChild(label);}
+  else {const label=E('div','fn-field-label',labelText);label.id=`fn-icon-label-${++iconFieldSeq}`;input?.setAttribute?.('role','group');input?.setAttribute?.('aria-labelledby',label.id);w.appendChild(label);} w.appendChild(input); return w; }
 function sliderRow(range,val){ const w=E('div','fn-sliderrow'); w.append(range,val); return w; }

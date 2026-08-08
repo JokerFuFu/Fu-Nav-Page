@@ -1,11 +1,11 @@
 /* ============ Fu 导航 · 共享内核 ============ */
 import { isExtension, loadConfig, saveConfig, onRemoteChange, getBookmarksTree, drainInbox } from './storage.js';
-import { mountItemIcon, mountGroupIcon } from './icons.js';
+import { mountItemIcon, mountGroupIcon } from './icons.js?v=3.24.5';
 import { getWeather, preciseLocate, wmo } from './weather.js';
 import { fetchAgentData, agentProbe } from './agent.js';
 import { cloudEnabled, cloudGet, cloudPut, cloudTest, cloudPutBackup, cloudListBackups, cloudGetFile } from './cloud.js';
 import { lucide, hostOf, isPrivateHost, brandIcon, faviconCandidates, iconSearch } from './icon-map.js';
-import { createIconEditor } from './icon-editor.js';
+import { createIconEditor } from './icon-editor.js?v=3.24.5';
 import { infinityToGroups, mergeInfinity } from './import-infinity.js';
 import { exportConfig as bmExport, importConfig as bmImport, cfgSignature as bmCfgSig, bmAvailable, ROOT_TITLE } from './bmsync.js';
 import { applyBackground, refreshOnlineBackground, effectiveTheme, DEFAULT_ONLINE_SOURCE } from './background.js';
@@ -65,6 +65,7 @@ const COLORS=['#2563eb','#0891b2','#16a34a','#7c3aed','#64748b','#ef4444','#0ea5
 
 class Core {
   constructor(){ this.cfg=null; this.runtime=null; this.layout=null; this.layoutMod=null; this.root=null; this.editing=false; this.agentData=null; this._saveT=null; this._pendingSave=null; this._quotaWarned=false; this._listeners=[];
+    this._dialogTrigger=null; this._dialogOnClose=null; this._paletteTrigger=null; this._frameTrigger=null; this._fieldSeq=0;
     this._tombstones=new Set();    // 本会话删除过的 id（条目/文件夹/分组）——收件箱兑现时跳过，杜绝"删了又被补回"
     this._seenInboxOps=new Set();
     this._remoteDirty=false; }     // 编辑弹层开着时挂起的"存储有更新"信号，关弹层再采纳（防 cfg 被换导致编辑写丢）
@@ -317,8 +318,8 @@ class Core {
   async mountLayout(name){
     this.layout=name; this.settings.layout=name;
     if(!this.root){ this.root=$('#root'); }
-    try{ this.layoutMod = await import(`../layouts/${name}.js`); }
-    catch(e){ console.error('布局加载失败',name,e); if(name!=='fusion'){ this.layout='fusion'; this.settings.layout='fusion'; try{ this.layoutMod=await import('../layouts/fusion.js'); }catch{ this.layoutMod=null; } } else this.layoutMod=null; }
+    try{ this.layoutMod = await import(`../layouts/${name}.js?v=3.24.3`); }
+    catch(e){ console.error('布局加载失败',name,e); if(name!=='fusion'){ this.layout='fusion'; this.settings.layout='fusion'; try{ this.layoutMod=await import('../layouts/fusion.js?v=3.24.3'); }catch{ this.layoutMod=null; } } else this.layoutMod=null; }
     this.rerender();
     $$('.layout-switch [data-l]').forEach(b=>b.classList.toggle('on', b.dataset.l===name));
   }
@@ -439,6 +440,7 @@ class Core {
 
   /* ====== 命令面板（⌘/Ctrl+K 或 /）：搜网站/分组/操作，键盘可达 ====== */
   openPalette(){ const back=$('#fnPalBack'), inp=$('#fnPalInp'), list=$('#fnPalList'); if(!back||!back.hidden)return;
+    this._paletteTrigger=document.activeElement;
     back.hidden=false;
     let rows=[], sel=0;
     const markSel=()=>{ rows.forEach((r,i)=>r.classList.toggle('sel', i===sel)); const s=rows[sel]; if(s)s.scrollIntoView({block:'nearest'}); };
@@ -479,15 +481,18 @@ class Core {
       else if(e.key==='Enter'){ e.preventDefault(); const r=rows[sel]; if(r)r._run(); }
       else if(e.key==='Escape'){ e.preventDefault(); this.closePalette(); } };
   }
-  closePalette(){ const b=$('#fnPalBack'); if(b)b.hidden=true; }
+  closePalette(){ const b=$('#fnPalBack'); if(b)b.hidden=true;
+    const trigger=this._paletteTrigger; this._paletteTrigger=null; if(trigger?.isConnected)trigger.focus(); }
 
   /* ====== 面板内打开（iframe，仿 Sun-Panel，homelab 后台不跳页）====== */
   openFrame(item){ const back=$('#fnFrameBack'), ttl=$('#fnFrameTtl'), ext=$('#fnFrameExt'), body=$('#fnFrameBody');
     if(!back){ window.open(item.url, '_blank'); return; }
+    this._frameTrigger=document.activeElement;
     ttl.textContent=item.name||item.url; ext.href=safeHref(item.url); body.textContent='';
     const fr=el('iframe','fn-frame-if'); fr.src=safeHref(item.url); fr.setAttribute('referrerpolicy','no-referrer'); fr.setAttribute('allow','fullscreen');
     body.appendChild(fr); back.hidden=false; this.recordVisit(item); }
-  closeFrame(){ const b=$('#fnFrameBack'); if(b){ b.hidden=true; const body=$('#fnFrameBody'); if(body)body.textContent=''; } }
+  closeFrame(){ const b=$('#fnFrameBack'); if(b){ b.hidden=true; const body=$('#fnFrameBody'); if(body)body.textContent=''; }
+    const trigger=this._frameTrigger; this._frameTrigger=null; if(trigger?.isConnected)trigger.focus(); }
 
   /* ---- 在线状态探测（仅内网，只亮绿点）----
      攒一批经本机 agent TCP 直连探测（准，不受混合内容/自签证书/CORS 限制）；
@@ -523,34 +528,47 @@ class Core {
 
   /* ====== 模态 ====== */
   buildModalHost(){ if($('#fn-modal-host'))return; const h=el('div'); h.id='fn-modal-host'; h.innerHTML=`
-    <div class="fn-backdrop" id="fnBackdrop" hidden><div class="fn-modal" role="dialog" aria-modal="true">
-      <div class="fn-mhead"><h3 id="fnMTitle"></h3><button class="fn-x" id="fnMClose" title="关闭"><span class="lucide-mask" style="-webkit-mask-image:url('${lucide('x')}');mask-image:url('${lucide('x')}');width:14px;height:14px"></span></button></div>
+    <div class="fn-backdrop" id="fnBackdrop" hidden><div class="fn-modal" role="dialog" aria-modal="true" aria-labelledby="fnMTitle">
+      <div class="fn-mhead"><h3 id="fnMTitle"></h3><button class="fn-x" id="fnMClose" title="关闭" aria-label="关闭"><span class="lucide-mask" style="-webkit-mask-image:url('${lucide('x')}');mask-image:url('${lucide('x')}');width:14px;height:14px"></span></button></div>
       <div class="fn-mbody" id="fnMBody"></div><div class="fn-mfoot" id="fnMFoot"></div></div></div>
-    <div class="fn-pal-back" id="fnPalBack" hidden><div class="fn-pal" role="dialog" aria-modal="true">
-      <input class="fn-pal-inp" id="fnPalInp" placeholder="搜索网站 / 分组 / 操作…" autocomplete="off" spellcheck="false" />
+    <div class="fn-pal-back" id="fnPalBack" hidden><div class="fn-pal" role="dialog" aria-modal="true" aria-label="搜索与命令">
+      <input class="fn-pal-inp" id="fnPalInp" aria-label="搜索网站、分组或操作" placeholder="搜索网站 / 分组 / 操作…" autocomplete="off" spellcheck="false" />
       <div class="fn-pal-list" id="fnPalList"></div>
       <div class="fn-pal-foot"><span>↑↓ 选择</span><span><span class="lucide-mask" style="-webkit-mask-image:url('${lucide('corner-down-left')}');mask-image:url('${lucide('corner-down-left')}');width:11px;height:11px"></span> 打开</span><span>esc 关闭</span></div></div></div>
-    <div class="fn-frame-back" id="fnFrameBack" hidden><div class="fn-frame">
+    <div class="fn-frame-back" id="fnFrameBack" hidden><div class="fn-frame" role="dialog" aria-modal="true" aria-labelledby="fnFrameTtl">
       <div class="fn-frame-head"><span class="fn-frame-ttl" id="fnFrameTtl"></span>
         <a class="fn-frame-ext" id="fnFrameExt" target="_blank" rel="noopener"><span class="lucide-mask" style="-webkit-mask-image:url('${lucide('external-link')}');mask-image:url('${lucide('external-link')}');width:12px;height:12px"></span>新标签打开</a>
-        <button class="fn-x" id="fnFrameClose" title="关闭"><span class="lucide-mask" style="-webkit-mask-image:url('${lucide('x')}');mask-image:url('${lucide('x')}');width:14px;height:14px"></span></button></div>
+        <button class="fn-x" id="fnFrameClose" title="关闭" aria-label="关闭"><span class="lucide-mask" style="-webkit-mask-image:url('${lucide('x')}');mask-image:url('${lucide('x')}');width:14px;height:14px"></span></button></div>
       <div class="fn-frame-body" id="fnFrameBody"></div></div></div>
-    <div class="fn-toasts" id="fnToasts"></div><div class="fn-pill" id="fnPill" hidden></div>`;
+    <div class="fn-toasts" id="fnToasts"></div><div class="fn-pill" id="fnPill" hidden></div>
+    <div class="fn-sr-only" id="fnAnnouncer" role="status" aria-live="polite" aria-atomic="true"></div>`;
     document.body.appendChild(h);
     $('#fnMClose').onclick=()=>this.closeModal(); $('#fnBackdrop').addEventListener('click',e=>{if(e.target===$('#fnBackdrop'))this.closeModal();});
     $('#fnPalBack').addEventListener('click',e=>{ if(e.target===$('#fnPalBack'))this.closePalette(); });
     $('#fnFrameClose').onclick=()=>this.closeFrame(); $('#fnFrameBack').addEventListener('click',e=>{ if(e.target===$('#fnFrameBack'))this.closeFrame(); });
     document.addEventListener('keydown',e=>{
       const tag=(e.target&&e.target.tagName)||''; const typing=/INPUT|TEXTAREA|SELECT/.test(tag)||(e.target&&e.target.isContentEditable);
+      if(e.key==='Tab'){ if(!$('#fnPalBack').hidden){this.trapFocus($('#fnPalBack .fn-pal'),e);return;} if(!$('#fnFrameBack').hidden){this.trapFocus($('#fnFrameBack .fn-frame'),e);return;} if(!$('#fnBackdrop').hidden){this.trapDialogFocus(e);return;} }
       if((e.metaKey||e.ctrlKey)&&!e.altKey&&(e.key==='k'||e.key==='K')){ e.preventDefault(); $('#fnPalBack').hidden?this.openPalette():this.closePalette(); return; }
       if(e.key==='/'&&!typing&&$('#fnPalBack').hidden&&$('#fnBackdrop').hidden&&$('#fnFrameBack').hidden){ e.preventDefault(); this.openPalette(); return; }
       if(e.key==='Escape'){ if(!$('#fnPalBack').hidden){this.closePalette();return;} if(!$('#fnFrameBack').hidden){this.closeFrame();return;} if(!$('#fnBackdrop').hidden)this.closeModal(); }
     }); }
-  openModal(title,body,foot,options={}){ $('#fnMTitle').textContent=title; const b=$('#fnMBody'),f=$('#fnMFoot'),modal=$('#fnBackdrop .fn-modal'); b.textContent=''; f.textContent=''; modal?.classList.toggle('fn-modal-wide',!!options.wide);
-    (Array.isArray(body)?body:[body]).forEach(n=>n&&b.appendChild(n)); (foot||[]).forEach(n=>n&&f.appendChild(n)); $('#fnBackdrop').hidden=false; }
-  closeModal(){ $('#fnBackdrop').hidden=true;
+  focusable(container){ return $$('button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),summary,[tabindex]:not([tabindex="-1"])',container).filter(node=>{ const closed=node.closest('details:not([open])'); return !node.hidden&&node.getClientRects().length>0&&(!closed||node===closed.querySelector(':scope > summary')); }); }
+  trapFocus(container,e){ const nodes=this.focusable(container); if(!nodes.length){e.preventDefault();container.tabIndex=-1;container.focus();return;} const active=document.activeElement,current=nodes.indexOf(active);
+    const next=e.shiftKey?(current<=0?nodes.length-1:current-1):(current<0||current===nodes.length-1?0:current+1); e.preventDefault(); nodes[next].focus(); }
+  trapDialogFocus(e){ this.trapFocus($('#fnBackdrop .fn-modal'),e); }
+  openDialog({title,content,actions=[],initialFocus,onClose,wide=false}){ const back=$('#fnBackdrop'),b=$('#fnMBody'),f=$('#fnMFoot'),modal=$('#fnBackdrop .fn-modal');
+    if(back.hidden)this._dialogTrigger=document.activeElement; this._dialogOnClose=typeof onClose==='function'?onClose:null;
+    $('#fnMTitle').textContent=title; b.textContent=''; f.textContent=''; modal?.classList.toggle('fn-modal-wide',!!wide);
+    (Array.isArray(content)?content:[content]).forEach(node=>node&&b.appendChild(node)); actions.forEach(node=>node&&f.appendChild(node)); back.hidden=false;
+    setTimeout(()=>{ let target=typeof initialFocus==='string'?$(initialFocus,modal):initialFocus; if(!target||!modal.contains(target))target=this.focusable(modal)[0]||modal; target.focus(); },0); }
+  closeDialog(){ this.closeModal(); }
+  openModal(title,body,foot,options={}){ this.openDialog({title,content:body,actions:foot||[],initialFocus:options.initialFocus,onClose:options.onClose,wide:!!options.wide}); }
+  closeModal(){ const back=$('#fnBackdrop'); if(!back||back.hidden)return; back.hidden=true; const onClose=this._dialogOnClose; this._dialogOnClose=null;
+    if(onClose)onClose(); if(this._dialogTrigger?.isConnected)this._dialogTrigger.focus(); this._dialogTrigger=null;
     if(this._remoteDirty){ this._remoteDirty=false; this._maybeAdoptLatest(); } }   // 弹层期间挂起的存储更新，关弹层后补采纳
-  field(label,input){ const w=el('div','fn-field'); if(label)w.appendChild(el('label',null,label)); w.appendChild(input); return w; }
+  field(labelText,input){ const w=el('div','fn-field'); if(labelText){ if(input?.matches?.('input,select,textarea')){ input.id=input.id||`fn-field-${++this._fieldSeq}`; const label=el('label',null,labelText); label.htmlFor=input.id; w.appendChild(label); }
+      else { const label=el('div','fn-field-label',labelText); label.id=`fn-field-label-${++this._fieldSeq}`; input?.setAttribute?.('role','group'); input?.setAttribute?.('aria-labelledby',label.id); w.appendChild(label); } } w.appendChild(input); return w; }
   inp(v='',ph=''){ const i=el('input'); i.value=v; i.placeholder=ph; return i; }
   btn(t,cls,on,ic){ const b=el('button','fn-btn '+(cls||''));
     if(ic){ b.classList.add('has-ic'); const s=el('span','fn-btn-ic lucide-mask'); s.style.webkitMaskImage=s.style.maskImage=`url("${lucide(ic)}")`; s.style.background='currentColor'; b.append(s, el('span',null,t)); }
@@ -562,7 +580,8 @@ class Core {
   /* 同步类弹层的「按钮行 + 状态行」组合（云 / 书签共用）*/
   syncActionRow(buttons,status){ const w=el('div'); const row=el('div','fn-wrap'); (buttons||[]).forEach(b=>b&&row.appendChild(b)); w.append(row,status); return w; }
   /* 可折叠分区（设置面板分区用）*/
-  sect(title, nodes, open){ const d=el('details','fn-sect'); if(open)d.open=true; const s=el('summary','fn-sect-h'); const ar=el('span','fn-sect-ar lucide-mask'); ar.style.webkitMaskImage=ar.style.maskImage=`url("${lucide('chevron-down')}")`; s.append(el('span',null,title), ar); d.appendChild(s); (nodes||[]).forEach(n=>n&&d.appendChild(n)); return d; }
+  sect(title, nodes, open){ const d=el('details','fn-sect'); if(open)d.open=true; const s=el('summary','fn-sect-h'); s.setAttribute('aria-expanded',String(d.open)); s.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();d.open=!d.open;}}; d.addEventListener('toggle',()=>s.setAttribute('aria-expanded',String(d.open)));
+    const ar=el('span','fn-sect-ar lucide-mask'); ar.style.webkitMaskImage=ar.style.maskImage=`url("${lucide('chevron-down')}")`; s.append(el('span',null,title), ar); d.appendChild(s); (nodes||[]).forEach(n=>n&&d.appendChild(n)); return d; }
 
   /* 网站 增/改 —— 链接等信息可编辑 */
   openItemEditor(item, gid){ const isNew=!item; const addTo=this._addToFolder; this._addToFolder=null;   // 从文件夹弹层「＋添加到此」进来时，新条目落入该文件夹
@@ -808,7 +827,7 @@ class Core {
     const index=buildSearchIndex(this.cfg), selected=new Set(), clusters=clusterDuplicates(index.entries);
     const duplicateLevel=new Map(); clusters.forEach(cluster=>cluster.items.forEach(item=>duplicateLevel.set(item.id,cluster.level)));
     const root=el('div','fn-library'), filters=el('div','fn-library-filters'), actions=el('div','fn-library-actions'), results=el('div','fn-library-results');
-    const search=this.inp('','搜索名称、拼音、URL、备注、标签或别名'); search.type='search';
+    const search=this.inp('','搜索名称、拼音、URL、备注、标签或别名'); search.type='search'; search.setAttribute('aria-label','搜索书签库');
     const makeSelect=(options,label)=>{ const select=el('select'); select.setAttribute('aria-label',label); options.forEach(([value,text])=>{const option=el('option',null,text);option.value=value;select.appendChild(option);}); return select; };
     const groupFilter=makeSelect([['','全部分组'],...this.groups.map(group=>[group.id,group.name])],'分组筛选');
     const folders=walkTree(this.groups).filter(entry=>this.isFolder(entry.node));
@@ -830,12 +849,13 @@ class Core {
       if(!visible.length){results.appendChild(el('div','fn-hint','没有符合当前筛选的书签'));return;}
       visible.forEach(entry=>{ const row=el('div','fn-library-row'), check=el('input'); check.type='checkbox'; check.checked=selected.has(entry.id); check.setAttribute('aria-label','选择 '+entry.name);
         check.onchange=()=>{ const next=updateSelection(selected,[entry.id],'toggle'); selected.clear(); next.forEach(id=>selected.add(id)); render(); };
+        const checkTarget=el('label','fn-library-check'); checkTarget.appendChild(check);
         const icon=el('span','fn-library-icon'); this.mountIcon(icon,entry.item,28);
         const body=el('button','fn-library-main'); body.type='button'; body.onclick=()=>this.openItemEditor(entry.item,entry.groupId);
         const line=el('span','fn-library-name'); line.append(el('strong',null,entry.name),el('small',null,[entry.groupName,...entry.folderPath].join(' / ')));
         body.append(line,el('span','fn-library-url',entry.url));
         const level=duplicateLevel.get(entry.id); if(level)body.appendChild(el('span','fn-library-badge '+level,level==='exact'?'精确重复':'可能重复'));
-        row.append(check,icon,body); results.appendChild(row); }); };
+        row.append(checkTarget,icon,body); results.appendChild(row); }); };
     [search,groupFilter,folderFilter,tagFilter,statusFilter].forEach(control=>control.addEventListener(control===search?'input':'change',render));
     selectCurrent.onclick=()=>{ const next=updateSelection(selected,visible.map(entry=>entry.id),'select-all'); selected.clear();next.forEach(id=>selected.add(id));render(); };
     moveButton.onclick=async()=>{ const ids=[...selected]; if(!ids.length){this.toast('请先选择要移动的书签','err');return;} const [kind,groupId,folderId]=destination.value.split(':');
@@ -905,11 +925,12 @@ class Core {
     this.toast(`已导入 ${added} 个收藏（${parsed.groups.length} 组，已去重 ${parsed.stats.dropped}）`,'ok'); }
 
   /* 提示 */
-  toast(msg,kind,action){ const host=$('#fnToasts'); if(!host) return;   // boot 早期(容器未建)静默跳过，不抛错
+  announce(message){ const live=$('#fnAnnouncer'); if(!live)return; live.textContent=''; requestAnimationFrame(()=>{live.textContent=String(message||'');}); }
+  toast(msg,kind,action){ const host=$('#fnToasts'); if(!host) return; this.announce(msg);   // boot 早期(容器未建)静默跳过，不抛错
     const t=el('div','fn-toast '+(kind||'')); t.append(el('span','fn-toast-msg',msg));
     if(action){ const b=el('button','fn-toast-act',action.label); b.type='button'; b.onclick=()=>{ action.run(); t.remove(); }; t.appendChild(b); }
     host.appendChild(t); const delay=(action||kind==='err')?5000:2600; setTimeout(()=>{t.style.opacity='0';t.style.transform='translateX(20px)';setTimeout(()=>t.remove(),250);},delay); }
-  flashSync(msg){ const p=$('#fnPill'); if(!p)return; p.hidden=false; p.textContent=msg; clearTimeout(this._pt); this._pt=setTimeout(()=>p.hidden=true,1800); }
+  flashSync(msg){ const p=$('#fnPill'); if(!p)return; this.announce(msg); p.hidden=false; p.textContent=msg; clearTimeout(this._pt); this._pt=setTimeout(()=>p.hidden=true,1800); }
 }
 
 export const core = new Core();

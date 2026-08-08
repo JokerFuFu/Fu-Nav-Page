@@ -30,7 +30,7 @@ body[data-theme="light"]{
   --shadow:0 12px 30px rgba(40,50,90,.12); --shadow-lg:0 28px 80px rgba(40,50,90,.22); --overlay-bg:#ffffff;
   --scrim:rgba(23,25,35,.38);
   --surface-glass: rgba(255,255,255,.55);
-  --scheme:light;
+  --scheme:light; --danger:#c92343;
   --caret:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23565a68' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 }
 @media (prefers-color-scheme: light){ body[data-theme="auto"]{
@@ -42,7 +42,7 @@ body[data-theme="light"]{
   --shadow:0 12px 30px rgba(40,50,90,.12); --shadow-lg:0 28px 80px rgba(40,50,90,.22); --overlay-bg:#ffffff;
   --scrim:rgba(23,25,35,.38);
   --surface-glass: rgba(255,255,255,.55);
-  --scheme:light;
+  --scheme:light; --danger:#c92343;
   --caret:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23565a68' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 } }
 
@@ -181,6 +181,7 @@ img{display:block}
 .fn-lb-fill{ display:block; height:100%; border-radius:999px; background:var(--accent); opacity:.55; }
 /* ===== 自定义表单控件（DESIGN.md: toggle/checkbox/field）—— 全应用不留原生外观 ===== */
 body{ color-scheme:var(--scheme); }   /* 原生日期弹层等跟主题 */
+.fn-sr-only{ position:fixed!important; width:1px!important; height:1px!important; padding:0!important; margin:-1px!important; overflow:hidden!important; clip:rect(0,0,0,0)!important; white-space:nowrap!important; border:0!important; }
 /* 方形勾选框：内容清单勾选（待办完成、书签导入挑选）。✓ 用背景 SVG，input 上伪元素不可用 */
 input[type="checkbox"]{ -webkit-appearance:none; appearance:none; width:16px; height:16px; flex:none; margin:0;
   background-color:var(--surface-2); border:1px solid var(--border-2); border-radius:4px; cursor:pointer;

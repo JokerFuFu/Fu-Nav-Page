@@ -8,10 +8,10 @@ import { filterContent, filterKeyAction } from '../shared/provider-action.js';
 import { homeDensity, visibleWidgets } from '../shared/home-settings.js';
 const DI = s => `https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons@main/svg/${s}.svg`;
 const picon = p => (p.icon && p.icon.startsWith('http')) ? p.icon : DI(p.icon);
-let active='home', clockTimer=null, drag=null, clockEls=null, ctxMenu=null, askOutsideHandler=null;
+let active='home', clockTimer=null, drag=null, clockEls=null, ctxMenu=null, ctxTrigger=null, askOutsideHandler=null;
 
-document.addEventListener('click', hideCtx);
-document.addEventListener('scroll', hideCtx, true);
+document.addEventListener('click', ()=>hideCtx());
+document.addEventListener('scroll', ()=>hideCtx(), true);
 
 export function mount(root, core){
   root.className='lay-fusion'+(core.settings.sideCollapsed?' side-collapsed':'');
@@ -36,7 +36,8 @@ function buildSidebar(core){
   brand.append(logo, el('h1',null, core.settings.title||'Fu 导航'));
   // 快速收折按钮：贴在品牌右侧，点一下侧栏在「窄图标条 ⇄ 完整」间切换（CSS 过渡，无需重渲染）
   const collapseBtn=el('button','fx-collapse'); collapseBtn.title='收起/展开侧栏';
-  const setCollapseIco=()=>{ collapseBtn.textContent=''; collapseBtn.appendChild(mico(core.settings.sideCollapsed?'chevrons-right':'chevrons-left',13)); }; setCollapseIco();
+  collapseBtn.setAttribute('aria-label','收起或展开侧栏');
+  const setCollapseIco=()=>{ collapseBtn.textContent=''; collapseBtn.setAttribute('aria-expanded',String(!core.settings.sideCollapsed)); collapseBtn.appendChild(mico(core.settings.sideCollapsed?'chevrons-right':'chevrons-left',13)); }; setCollapseIco();
   collapseBtn.onclick=e=>{ e.stopPropagation(); core.settings.sideCollapsed=!core.settings.sideCollapsed; core.save();
     const r=document.querySelector('.lay-fusion'); if(r)r.classList.toggle('side-collapsed',core.settings.sideCollapsed);
     setCollapseIco(); };
@@ -85,16 +86,16 @@ function navItem(core,key,icon,name,count,on,group){
   if(group) core.mountGroupIcon(ico,group); else { ico.classList.add('lucide-mask'); ico.style.webkitMaskImage=ico.style.maskImage=`url("${core.lucide(icon)}")`; ico.style.background='currentColor'; }
   a.append(ico, el('span','fx-ni-nm',name)); if(count!=null)a.appendChild(el('span','fx-ni-ct',String(count)));
   a.onclick=on; if(group) a.oncontextmenu=e=>{ e.preventDefault();
-    if(!core.editing){ showCtx(e.clientX,e.clientY,[{ic:'lock-open',label:'解锁后可编辑分组',on:()=>core.setEditing(true)}]); return; }
+    if(!core.editing){ showCtx(e.clientX,e.clientY,[{ic:'lock-open',label:'解锁后可编辑分组',on:()=>core.setEditing(true)}],e.currentTarget); return; }
     const menu=[{ic:'pencil', label:'编辑分组', on:()=>core.openGroupEditor(group)}];
     if(core.modes().length){ menu.push('-'); core.modes().forEach(mode=>{ const has=mode.groupIds.includes(group.id);
       menu.push({ic:'layers',sel:has,label:mode.name,on:()=>{ core.toggleModeGroup(mode,group.id); core.toast(has?('已移出「'+mode.name+'」'):('已加入「'+mode.name+'」'),'ok'); }}); }); }
     menu.push({ic:'settings-2', label:'管理模式…', on:()=>core.openModeManager()});
     menu.push('-', {ic: group.archived?'archive-restore':'archive', label: group.archived?'取消归档':'归档分组', on:()=>{ group.archived=group.archived?undefined:true; core.save(true); core.rerender(); core.toast(group.archived?'已归档，可在设置中管理':'已取消归档','ok'); }});
-    showCtx(e.clientX,e.clientY,menu); };
+    showCtx(e.clientX,e.clientY,menu,e.currentTarget); };
   return a;
 }
-function sideBtn(core,icon,title,on){ const b=el('button','fx-sidebtn'); b.title=title; b.onclick=on;
+function sideBtn(core,icon,title,on){ const b=el('button','fx-sidebtn'); b.title=title; b.setAttribute('aria-label',title); b.onclick=on;
   const s=el('span','fx-sb-ico lucide-mask'); s.style.webkitMaskImage=s.style.maskImage=`url("${core.lucide(icon)}")`; s.style.background='currentColor';
   b.appendChild(s); return b; }
 /* 场景模式切换器：全部 / 多属分组模式 / 隐私 */
@@ -106,18 +107,21 @@ function openModeMenu(core,e){
   core.modes().forEach(mode=>items.push({ic:'layers',sel:am&&am.id===mode.id,label:mode.name,on:()=>core.setActiveMode(mode.id)}));
   items.push('-', {ic:'eye-off',sel:am==='privacy',label:'隐私模式（只留搜索/天气）',on:()=>core.setActiveMode('privacy')});
   items.push('-', {ic:'settings-2',label:'管理模式…',on:()=>core.openModeManager()});
-  const x=(e&&e.clientX)||120, y=(e&&e.clientY)||innerHeight-40; showCtx(x,y,items);
+  if(e?.currentTarget){openMenu(e.currentTarget,items);return;} const x=120, y=innerHeight-40; showCtx(x,y,items);
 }
 /* 侧栏点分组 → 进该分组页 */
 function openGroup(core,gid){ go(core,gid); }
 /* 侧栏两级子目录树：分组 → 文件夹 → 子文件夹，可展开/收折 */
 function isTreeOpen(core,id){ return !!(core.settings.treeOpen && core.settings.treeOpen[id]); }
 function toggleTree(core,id){ const t=core.settings.treeOpen||(core.settings.treeOpen={}); t[id]=!t[id]; core.save(); core.rerender(); }
-function caret(core,id,onToggle,open){ const c=el('span','fx-ni-caret lucide-mask'+((open!=null?open:isTreeOpen(core,id))?' open':'')); c.style.webkitMaskImage=c.style.maskImage=`url("${lucide('chevron-right')}")`; c.onclick=e=>{ e.stopPropagation(); e.preventDefault(); onToggle(); }; return c; }
+function caret(core,id,onToggle,open){ const expanded=open!=null?open:isTreeOpen(core,id); const c=el('span','fx-ni-caret lucide-mask'+(expanded?' open':'')); c.style.webkitMaskImage=c.style.maskImage=`url("${lucide('chevron-right')}")`; c.setAttribute('aria-hidden','true');
+  c.onclick=e=>{ e.stopPropagation(); e.preventDefault(); onToggle(); }; return c; }
 function navGroup(core,g){ const out=[]; const folders=(g.items||[]).filter(x=>core.isFolder(x));
   const activeInGroup=folders.some(f=>f.id===active);
   const row=navItem(core,g.id,g.icon,g.name,core.flatItems(g).length,()=>openGroup(core,g.id),g);
-  if(folders.length) row.insertBefore(caret(core,g.id,()=>toggleTree(core,g.id), isTreeOpen(core,g.id)||activeInGroup), row.firstChild);
+  if(folders.length){ const expanded=isTreeOpen(core,g.id)||activeInGroup; row.setAttribute('aria-expanded',String(expanded)); row.setAttribute('aria-label',`${g.name}，${expanded?'已展开':'已收起'}，按左右方向键展开或收起`);
+    row.addEventListener('keydown',e=>{ if(e.key==='ArrowRight'&&!expanded){e.preventDefault();toggleTree(core,g.id);} else if(e.key==='ArrowLeft'&&expanded){e.preventDefault();toggleTree(core,g.id);} });
+    row.insertBefore(caret(core,g.id,()=>toggleTree(core,g.id),expanded),row.firstChild); }
   out.push(row);
   // 二级菜单：分组 → 其（顶层）文件夹子项，点击进入该子项页面（更深子文件夹在页内进入，不塞侧栏）
   if(folders.length && (isTreeOpen(core,g.id)||activeInGroup)) folders.forEach(fd=>{
@@ -196,7 +200,7 @@ function toggleBgPanel(core, anchor){
     grid.appendChild(cell);
   });
   panel.appendChild(grid);
-  const status=el('div','fn-sub','');
+  const status=el('div','fn-sub',''); status.setAttribute('role','status'); status.setAttribute('aria-live','polite');
   // 在线源按用途分组；点选后走统一的图片响应校验 + Blob 落盘管线。
   panel.appendChild(el('div','fx-bg-seclabel','在线壁纸源'));
   const current=(bg.onlineSrc&&bg.onlineSrc.id)||DEFAULT_ONLINE_SOURCE;
@@ -225,6 +229,7 @@ function toggleBgPanel(core, anchor){
   });
   panel.appendChild(el('div','fx-bg-seclabel','自定义图片地址'));
   const customRow=el('div','fx-bg-custom fn-field'), customI=core.inp(current==='custom'?(bg.onlineSrc.url||''):'','https://example.com/wallpaper.jpg'); customI.type='url';
+  customI.setAttribute('aria-label','自定义壁纸图片地址');
   const customBtn=core.btn('使用','ghost',async()=>{ const url=customI.value.trim(); try{ const u=new URL(url); if(!/^https?:$/.test(u.protocol))throw 0; }catch{ core.toast('请输入有效的 http(s) 图片地址','err'); return; }
     await core.ensureCloudPermission(url); status.textContent='正在校验图片…'; const r=await core.refreshOnlineBackground({id:'custom',url});
     if(r.superseded) return;
@@ -232,7 +237,7 @@ function toggleBgPanel(core, anchor){
   customRow.append(customI,customBtn); panel.appendChild(customRow);
   panel.appendChild(el('div','fx-bg-seclabel','更新频率'));
   const presetValues=new Set([0,15,60,720,1440,10080]), refresh=Number(bg.refreshEvery)||0, refreshKey=presetValues.has(refresh)?String(refresh):'custom';
-  const customMinutes=core.inp(refreshKey==='custom'?String(refresh):'','分钟数'); customMinutes.type='number'; customMinutes.min='1'; customMinutes.step='1';
+  const customMinutes=core.inp(refreshKey==='custom'?String(refresh):'','分钟数'); customMinutes.type='number'; customMinutes.min='1'; customMinutes.step='1'; customMinutes.setAttribute('aria-label','壁纸自动更新分钟数');
   const customRefresh=el('div','fx-bg-custom fn-field');
   const applyMinutes=core.btn('应用分钟数','ghost',()=>{ const n=Math.floor(Number(customMinutes.value)); if(!(n>0)){status.textContent='请输入大于 0 的分钟数';return;} bg.refreshEvery=n; core.save(true); status.textContent='已设为每 '+n+' 分钟检查一次'; },'timer-reset');
   customRefresh.append(customMinutes,applyMinutes); customRefresh.hidden=refreshKey!=='custom';
@@ -259,12 +264,13 @@ function buildAsk(core){
   const wrap=el('div','fx-ask');
   const box=el('form','fx-ask-box');
   const prov=el('button','fx-ask-prov'); prov.type='button'; prov.title='切换搜索引擎 / AI';
+  prov.setAttribute('aria-label','切换搜索引擎 / AI'); prov.setAttribute('aria-haspopup','menu'); prov.setAttribute('aria-expanded','false');
   prov.appendChild(el('span','fx-ask-prov-cv'));   // 单独图标层，留出下拉小箭头
   { const ar=mico('chevron-down',10); ar.classList.add('fx-ask-prov-ar'); prov.appendChild(ar); }
-  const inp=el('input'); inp.type='text'; inp.autocomplete='off';
+  const inp=el('input'); inp.type='text'; inp.autocomplete='off'; inp.setAttribute('aria-label','搜索或询问');
   const send=el('button','fx-ask-send'); send.type='submit'; send.title='发送'; send.appendChild(mico('corner-down-left',17));
   box.append(prov,inp,send);
-  const menu=el('div','fx-provmenu'); menu.hidden=true;
+  const menu=el('div','fx-provmenu'); menu.hidden=true; menu.setAttribute('role','menu');
   const results=el('div','fx-ask-results'); results.hidden=true;
   const status=el('div','fx-ask-status'); status.hidden=true; status.setAttribute('role','status'); status.setAttribute('aria-live','polite');
   const cv=prov.querySelector('.fx-ask-prov-cv');
@@ -274,17 +280,18 @@ function buildAsk(core){
   const setProv=()=>{ const p=core.PROVIDERS[core.activeProvider()]; cv.textContent=''; const img=new Image(); img.onerror=()=>{cv.textContent=p.name[0];}; img.src=picon(p); cv.appendChild(img);
     inp.placeholder=p.kind==='ai'?`问 ${p.name}…`:`用 ${p.name} 搜索，左侧切换 AI`; if(status.hidden){prov.title='切换搜索引擎 / AI';prov.setAttribute('aria-label','切换搜索引擎 / AI');} };
   // 下拉：按 搜索引擎 / AI 助手 两组列出全部 provider
-  const closeMenu=()=>{ menu.hidden=true; prov.classList.remove('open'); };
+  const closeMenu=(restore=false)=>{ menu.hidden=true; prov.classList.remove('open'); prov.setAttribute('aria-expanded','false'); if(restore)prov.focus(); };
   const buildMenu=()=>{ menu.textContent=''; const ids=Object.keys(core.PROVIDERS);
     [['search','搜索引擎'],['ai','AI 助手']].forEach(([kind,label])=>{ const sect=ids.filter(id=>core.PROVIDERS[id].kind===kind); if(!sect.length)return;
       menu.appendChild(el('div','fx-provmenu-h',label));
       sect.forEach(id=>{ const p=core.PROVIDERS[id]; const cur=id===core.activeProvider(); const it=el('button','fx-provitem'+(cur?' on':'')); it.type='button';
+        it.setAttribute('role','menuitem');
         const ic=el('span','fx-provitem-ico'); const img=new Image(); img.onerror=()=>{ic.textContent=p.name[0];ic.classList.add('txt');}; img.src=picon(p); ic.appendChild(img);
         it.append(ic, el('span','fx-provitem-nm',p.name)); if(cur){ const ck=el('span','fx-provitem-ck'); ck.appendChild(mico('check',12)); it.appendChild(ck); }
         it.onclick=()=>{ core.setAskProvider(id); setProv(); closeMenu(); inp.focus(); };
         menu.appendChild(it); });
-    }); };
-  prov.onclick=e=>{ e.stopPropagation(); if(menu.hidden){ buildMenu(); menu.hidden=false; prov.classList.add('open'); } else closeMenu(); };
+    }); wireMenuKeyboard(menu,()=>closeMenu(true)); };
+  prov.onclick=e=>{ e.stopPropagation(); if(menu.hidden){ buildMenu(); menu.hidden=false; prov.classList.add('open'); prov.setAttribute('aria-expanded','true'); setTimeout(()=>menu.querySelector('[role="menuitem"]')?.focus(),0); } else closeMenu(true); };
   setProv();
   inp.addEventListener('input',()=>{ clearFeedback(); const q=inp.value.trim().toLowerCase(); results.textContent=''; if(!q){results.hidden=true;return;}
     const ms=[]; core.allItems().forEach(({item,group})=>{ if((item.name+' '+item.url+' '+(item.note||'')).toLowerCase().includes(q)) ms.push({it:item,g:group}); });
@@ -338,7 +345,7 @@ function buildWidgetCards(core, priv){
   // 加卡片不再占首页位置：解锁🔓 时右键卡片区空白处添加；或到 设置→小组件 管理
   if(!priv) row.addEventListener('contextmenu',e=>{ if(e.target.closest('.fx-wcard'))return;   // 点在卡片上交给卡片自身菜单
     e.preventDefault(); if(core.editing) addWidgetMenu(core,e);
-    else showCtx(e.clientX,e.clientY,[{ic:'lock-open', label:'解锁后可在此添加/管理卡片', on:()=>core.setEditing(true)}]); });
+    else showCtx(e.clientX,e.clientY,[{ic:'lock-open', label:'解锁后可在此添加/管理卡片', on:()=>core.setEditing(true)}],e.currentTarget); });
   if(core.editing) wireWidgetDnD(core,row);
   return row;
 }
@@ -375,7 +382,7 @@ function widgetToday(core,w){
       const del=el('button','fx-todo-del'); del.appendChild(mico('x',10)); del.type='button'; del.title='删除'; del.onclick=e=>{e.preventDefault();e.stopPropagation(); w.items.splice(i,1); core.save(true); renderTodo();};
       row.append(cb,sp,del); todoList.appendChild(row); }); };
   renderTodo();
-  const todoForm=el('form','fx-todo-add'); const todoInp=el('input'); todoInp.placeholder='加一条待办，回车…'; todoForm.appendChild(todoInp);
+  const todoForm=el('form','fx-todo-add'); const todoInp=el('input'); todoInp.placeholder='加一条待办，回车…'; todoInp.setAttribute('aria-label','添加待办'); todoForm.appendChild(todoInp);
   todoForm.addEventListener('submit',e=>{e.preventDefault(); const v=todoInp.value.trim(); if(!v)return; w.items.push({text:v,done:false}); todoInp.value=''; core.save(); renderTodo();});
   todoSec.append(todoList, todoForm);
 
@@ -393,8 +400,8 @@ function widgetToday(core,w){
       row.append(num,lb,del); cdList.appendChild(row);
     }); };
   renderCd();
-  const cdForm=el('form','fx-cd-add'); const cdLabelI=el('input'); cdLabelI.placeholder='名称，如生日/Deadline'; const cdDateI=el('input'); cdDateI.type='date';
-  const cdAddBtn=el('button','fx-cd-addbtn'); cdAddBtn.appendChild(mico('plus',13)); cdAddBtn.type='submit';
+  const cdForm=el('form','fx-cd-add'); const cdLabelI=el('input'); cdLabelI.placeholder='名称，如生日/Deadline'; cdLabelI.setAttribute('aria-label','倒数日名称'); const cdDateI=el('input'); cdDateI.type='date'; cdDateI.setAttribute('aria-label','倒数日日期');
+  const cdAddBtn=el('button','fx-cd-addbtn'); cdAddBtn.appendChild(mico('plus',13)); cdAddBtn.type='submit'; cdAddBtn.title='添加倒数日'; cdAddBtn.setAttribute('aria-label','添加倒数日');
   cdForm.append(cdLabelI, cdDateI, cdAddBtn);
   cdForm.addEventListener('submit',e=>{e.preventDefault(); if(!cdDateI.value)return; w.countdowns.push({id:core.uid('cd'),label:cdLabelI.value.trim()||'倒数日',date:cdDateI.value}); cdLabelI.value=''; cdDateI.value=''; core.save(); renderCd();});
   cdSec.append(el('div','fx-today-h','倒数日'), cdList, cdForm);
@@ -411,15 +418,15 @@ function widgetToday(core,w){
   return c;
 }
 function widgetMenu(core,e,w){ e.preventDefault(); e.stopPropagation();
-  if(!core.editing){ showCtx(e.clientX,e.clientY,[{ic:'lock-open', label:'解锁后可移除/编辑卡片', on:()=>core.setEditing(true)}]); return; }
+  if(!core.editing){ showCtx(e.clientX,e.clientY,[{ic:'lock-open', label:'解锁后可移除/编辑卡片', on:()=>core.setEditing(true)}],e.currentTarget); return; }
   const items=[];
   if(w.type==='hwmon') items.push({ic:'pencil', label:'设置监控端点', on:()=>core.openHwmonEditor(w)});
   items.push({ic:'trash-2', label:'移除卡片', danger:true, on:()=>{ core.removeWidget(w.id); }});
-  showCtx(e.clientX,e.clientY,items); }
+  showCtx(e.clientX,e.clientY,items,e.currentTarget); }
 function addWidgetMenu(core,e){ const types=[['today','今日'],['hwmon','硬件监控'],['weather','天气']];
   const items=types.map(([t,label])=>({ic:'plus', label:label, on:()=>core.addWidget(t)}));
   if((core.settings.hiddenAgentCards||[]).length) items.push('-', {ic:'eye', label:'恢复隐藏的本机服务卡片', on:()=>{ core.settings.hiddenAgentCards=[]; core.save(true); core.rerender(); core.toast('已恢复本机服务卡片','ok'); }});
-  showCtx(e.clientX,e.clientY, items); }
+  showCtx(e.clientX,e.clientY, items,e.currentTarget); }
 function wireWidgetDnD(core,row){
   if(!core.editing)return;
   row.addEventListener('dragover',e=>{ if(!drag||drag.type!=='widget')return; e.preventDefault(); const after=afterEl(row,'.fx-wcard[data-wid]',e.clientX,e.clientY); const d=row.querySelector('.fx-wcard.fx-dragging'); if(!d)return; if(after==null) row.appendChild(d); else row.insertBefore(d,after); });
@@ -491,7 +498,7 @@ function renderGroup(core,main,g){
   const stats=core.treeCount(g.items);
   const top=el('div','fx-gtop');
   const title=el('div','fx-gtitle'); const ico=el('span','fx-gtitle-ico'); core.mountGroupIcon(ico,g); title.append(ico, el('span',null,g.name), el('span','fx-gtitle-ct',`顶层 ${stats.topLevel} 项 · 共 ${stats.sites} 网站`));
-  const f=el('form','fx-gsearch'); const si=el('input'); si.placeholder='筛选本组…'; f.appendChild(si); f.addEventListener('submit',e=>e.preventDefault());
+  const f=el('form','fx-gsearch'); const si=el('input'); si.placeholder='筛选本组…'; si.setAttribute('aria-label','筛选本组网站'); f.appendChild(si); f.addEventListener('submit',e=>e.preventDefault());
   wireLocalFilter(si,main);
   const vt=el('div','fx-viewtoggle');
   [['grid','layout-grid','大图'],['list','rows-3','列表'],['detail','list','详情']].forEach(([v,ic,t])=>{ const b=el('button','fx-vbtn'+(core.settings.cardView===v?' on':'')); b.title=t; b.appendChild(mico(ic)); b.onclick=()=>{core.settings.cardView=v;core.save();core.rerender();}; vt.appendChild(b); });
@@ -511,7 +518,7 @@ function renderFolderPage(core,main,fd,g){
   const crumb=el('button','fx-crumb',g.name); crumb.title='返回 '+g.name; crumb.onclick=()=>go(core,g.id);
   const fico=el('span','fx-gtitle-ico lucide-mask'); fico.style.webkitMaskImage=fico.style.maskImage=`url("${core.lucide('folder')}")`; fico.style.background='currentColor';
   title.append(crumb, el('span','fx-crumb-sep','›'), fico, el('span',null,fd.name||'文件夹'), el('span','fx-gtitle-ct',`顶层 ${stats.topLevel} 项 · 共 ${stats.sites} 网站`));
-  const f=el('form','fx-gsearch'); const si=el('input'); si.placeholder='筛选…'; f.appendChild(si); f.addEventListener('submit',e=>e.preventDefault());
+  const f=el('form','fx-gsearch'); const si=el('input'); si.placeholder='筛选…'; si.setAttribute('aria-label','筛选当前文件夹'); f.appendChild(si); f.addEventListener('submit',e=>e.preventDefault());
   wireLocalFilter(si,main);
   const vt=el('div','fx-viewtoggle'); [['grid','layout-grid','大图'],['list','rows-3','列表'],['detail','list','详情']].forEach(([v,ic,t])=>{ const b=el('button','fx-vbtn'+(core.settings.cardView===v?' on':'')); b.title=t; b.appendChild(mico(ic)); b.onclick=()=>{core.settings.cardView=v;core.save();core.rerender();}; vt.appendChild(b); });
   const acts=el('div','fx-gacts'); acts.append(vt); if(core.editing){ acts.append(gbtn('plus','添加网站',()=>{ core._addToFolder={folder:fd,gid:g.id}; core.openItemEditor(null,g.id); }));
@@ -603,7 +610,7 @@ function folderMenu(core,e,fd,g,depth){ e.preventDefault(); depth=depth||0;
     if(depth<1) items.push({ic:'folder-plus', label:'新建子文件夹', on:()=>core.openFolderEditor(null,g.id,fd.items||(fd.items=[]))});
     items.push({ic:'trash-2', label:'删除文件夹', danger:true, on:()=>core.openFolderEditor(fd,g.id)}); }
   else items.push('-', {ic:'lock-open', label:'解锁后可编辑', on:()=>core.setEditing(true)});
-  showCtx(e.clientX,e.clientY,items);
+  showCtx(e.clientX,e.clientY,items,e.currentTarget);
 }
 
 /* ---------- 右键菜单 ---------- */
@@ -629,19 +636,29 @@ function cardMenu(core,e,it,g){
   } else {
     items.push('-', {ic:'lock-open', label:'解锁后可编辑/删除', on:()=>core.setEditing(true)});
   }
-  showCtx(e.clientX, e.clientY, items);
+  showCtx(e.clientX, e.clientY, items,e.currentTarget);
 }
-function showCtx(x,y,items){
-  hideCtx(); ctxMenu=el('div','fx-ctx');
+function wireMenuKeyboard(menu,onClose){ const entries=()=>$$('[role="menuitem"]',menu).filter(item=>!item.disabled); const focusAt=index=>{ const items=entries(); if(!items.length)return; const next=(index+items.length)%items.length; items.forEach((item,i)=>item.tabIndex=i===next?0:-1); items[next].focus(); };
+  const items=entries(); items.forEach((item,index)=>item.tabIndex=index===0?0:-1);
+  menu.onkeydown=e=>{ const rows=entries(),current=Math.max(0,rows.indexOf(document.activeElement)); let next=null;
+    if(e.key==='ArrowDown')next=current+1; else if(e.key==='ArrowUp')next=current-1; else if(e.key==='Home')next=0; else if(e.key==='End')next=rows.length-1;
+    else if(e.key==='Enter'||e.key===' '){e.preventDefault();rows[current]?.click();return;} else if(e.key==='Escape'){e.preventDefault();onClose();return;} else return;
+    e.preventDefault();focusAt(next); };
+}
+export function openMenu(anchor,items){ const rect=anchor.getBoundingClientRect(); showCtx(rect.left,rect.bottom+4,items,anchor); }
+function showCtx(x,y,items,trigger){
+  hideCtx(); ctxTrigger=trigger||document.activeElement; ctxMenu=el('div','fx-ctx'); ctxMenu.setAttribute('role','menu'); ctxMenu.setAttribute('aria-label','操作菜单');
   items.forEach(it=>{ if(it==='-'){ctxMenu.appendChild(el('div','fx-ctx-sep'));return;}
     const b=el('button','fx-ctx-item'+(it.danger?' danger':'')+(it.sel?' sel':''));
+    b.type='button'; b.setAttribute('role','menuitem');
     if(it.ic){ const s=el('span','fx-ctx-ico lucide-mask'); s.style.webkitMaskImage=s.style.maskImage=`url("${lucide(it.ic)}")`; s.style.background='currentColor'; b.appendChild(s); }
     b.appendChild(el('span','fx-ctx-lb',it.label));
-    b.onclick=ev=>{ev.stopPropagation();hideCtx();it.on();}; ctxMenu.appendChild(b); });
+    b.onclick=ev=>{ev.stopPropagation();hideCtx(true);it.on();}; ctxMenu.appendChild(b); });
   ctxMenu.style.left=x+'px'; ctxMenu.style.top=y+'px'; document.body.appendChild(ctxMenu);
   const r=ctxMenu.getBoundingClientRect(); if(r.right>innerWidth)ctxMenu.style.left=(x-r.width)+'px'; if(r.bottom>innerHeight)ctxMenu.style.top=(y-r.height)+'px';
+  wireMenuKeyboard(ctxMenu,()=>hideCtx(true)); setTimeout(()=>ctxMenu?.querySelector('[role="menuitem"]')?.focus(),0);
 }
-function hideCtx(){ if(ctxMenu){ctxMenu.remove();ctxMenu=null;} }
+function hideCtx(restore=false){ if(ctxMenu){ctxMenu.remove();ctxMenu=null;} const trigger=ctxTrigger; ctxTrigger=null; if(restore&&trigger?.isConnected)trigger.focus(); }
 
 /* ---------- 拖拽（默认即可拖，无需编辑模式）---------- */
 function wireGridDnD(core,grid,g,arr){ arr=arr||g.items;
