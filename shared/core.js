@@ -15,7 +15,9 @@ import { putBgImage, deleteBgImage } from './bg-storage.js';
 import { readFavGrid, rankFavorites, visitItem, frecencyScore, rankByClicks, rankByFrecency } from './favorites.js';
 import { providerAction } from './provider-action.js';
 import { migrateConfig as migrateSchema } from './config-schema.js';
-import { injectSecrets, sanitizeConfig } from './config-secrets.js';
+import { injectSecrets, sanitizeConfig, splitSecrets } from './config-secrets.js';
+import { applyInboxOps, diffRestore } from './sync-policy.js';
+import { saveSnapshot } from './config-history.js';
 
 export const $  = (s,r=document)=>r.querySelector(s);
 export const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
@@ -59,6 +61,7 @@ const COLORS=['#2563eb','#0891b2','#16a34a','#7c3aed','#64748b','#ef4444','#0ea5
 class Core {
   constructor(){ this.cfg=null; this.layout=null; this.layoutMod=null; this.root=null; this.editing=false; this.agentData=null; this._saveT=null; this._pendingSave=null; this._quotaWarned=false; this._listeners=[];
     this._tombstones=new Set();    // 本会话删除过的 id（条目/文件夹/分组）——收件箱兑现时跳过，杜绝"删了又被补回"
+    this._seenInboxOps=new Set();
     this._remoteDirty=false; }     // 编辑弹层开着时挂起的"存储有更新"信号，关弹层再采纳（防 cfg 被换导致编辑写丢）
   get settings(){ return this.cfg.settings; }
   get groups(){ return this.cfg.groups; }
@@ -168,27 +171,10 @@ class Core {
     const s=this.settings; if(Array.isArray(s.widgets)) s.widgets=s.widgets.filter(w=>!T.has(w.id)); }
 
   /* popup 收件箱兑现：add=增（目标组丢失可重建；同组同址去重；墓碑跳过），del=删（递归定位）。返回是否改了 cfg */
-  async _applyInbox(){ const ops=await drainInbox(); if(!ops||!ops.length) return false; let changed=false;
-    for(const op of ops){
-      if(op.op==='del' && op.id){ this._tombstones.add(op.id);
-        for(const g of this.groups){ const hit=this.flatItems(g).find(x=>x.item.id===op.id); if(hit){ this._removeItem(g,hit.item); changed=true; break; } } continue; }
-      if(op.op==='edit' && op.id){ if(this._tombstones.has(op.id)) continue;   // 本会话已删 → 编辑作废（删除优先）
-        let found=null, fg=null;
-        for(const g of this.groups){ const hit=this.flatItems(g).find(x=>x.item.id===op.id); if(hit){ found=hit.item; fg=g; break; } }
-        if(!found) continue;
-        if(op.patch){ const p={...op.patch}; delete p.id; Object.assign(found,p); }
-        if(op.tgid && fg && op.tgid!==fg.id && !this._tombstones.has(op.tgid)){ const tg=this.groups.find(g=>g.id===op.tgid); if(tg){ this._removeItem(fg,found); tg.items.push(found); } }
-        changed=true; continue; }
-      if(op.op!=='add' || !op.item) continue;
-      const it=op.item;
-      if(this._tombstones.has(it.id) || (op.gid && this._tombstones.has(op.gid))) continue;   // 本会话删过 → 不复活
-      if(this.groups.some(g=>this.flatItems(g).some(x=>x.item.id===it.id))) continue;         // 已存在（popup 整份写入未被覆盖）→ 无事
-      let tg=this.groups.find(g=>g.id===op.gid);
-      if(!tg){ tg={ id:op.gid||uid('g'), name:op.gname||'收藏', icon:op.gicon||'star', color:op.gcolor||'#22c55e', collapsed:false, items:[] }; this.groups.unshift(tg); }
-      const nu=(it.url||'').trim().toLowerCase();
-      if(nu && this.flatItems(tg).some(x=>((x.item.url||'').trim().toLowerCase())===nu)){ this._tombstones.add(it.id); continue; }   // 同组同址已有 → 去重
-      tg.items.push(it); changed=true;
-    }
+  async _applyInbox(){ const ops=await drainInbox(); if(!ops||!ops.length) return false;
+    const result=applyInboxOps(this.cfg,ops,this._seenInboxOps,{tombstones:this._tombstones});
+    this.cfg=result.config; this._seenInboxOps=result.seenOpIds; this._tombstones=result.deletedIds;
+    const changed=result.applied>0;
     // 兑现即刷新(评审P1)：popup 增删后开着的新标签页要立刻可见——不刷的话 popup 报"已同步"而首页毫无变化
     if(changed && this.layoutMod && this.root){ try{ this.rerender(); }catch{} }
     return changed; }
@@ -248,7 +234,9 @@ class Core {
     return immediate ? run() : (this._cloudT=setTimeout(run, 3500)); }
   /* 手动：一键从云恢复（无条件覆盖本地）——跨设备同步的唯一"拉取"入口；不做后台自动拉取（会覆盖本机改动） */
   async cloudRestore(name){ const r=name ? await cloudGetFile(this.settings,name) : await cloudGet(this.settings);
-    if(r.ok && r.config && r.config.groups){ this.cfg=r.config; this.migrate(); this.applyTheme(); this.rerender(); await this.save(true); this.toast('已从云端恢复','ok'); return true; }
+    if(r.ok && r.config && r.config.groups){ const normalized=migrateSchema(r.config,Date.now()), localSecrets=splitSecrets(this.cfg).secrets;
+      this._lastRestoreDiff=diffRestore(this.cfg,normalized.config); await saveSnapshot(this.cfg,'cloud-restore');
+      this.cfg=injectSecrets(normalized.config,localSecrets); this.migrate(); this.applyTheme(); this.rerender(); await this.save(true); this.toast('已从云端恢复','ok'); return true; }
     this.toast('恢复失败：'+(r.reason||'云端无备份'),'err'); return false; }
   cloudTest(){ return cloudTest(this.settings); }
   /* 通用单输入弹层（替代原生 prompt，R7）：确定时回调非空值 */

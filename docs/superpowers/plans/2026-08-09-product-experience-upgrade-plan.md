@@ -234,7 +234,7 @@ git commit -m "fix: 隔离配置凭据并升级数据结构"
 **Interfaces:**
 - Produces: `applyInboxOps(config, ops, seenOpIds)` → `{ config, applied, skipped, seenOpIds }`；`diffRestore(current, candidate)`；`saveSnapshot(config, reason)`；`listSnapshots()`；`restoreSnapshot(id)`。
 
-- [ ] **Step 1: 写增量操作删除优先测试**
+- [x] **Step 1: 写增量操作删除优先测试**
 
 ```js
 test('delete wins stale edit while unrelated edit survives and replay is idempotent', () => {
@@ -252,16 +252,16 @@ test('delete wins stale edit while unrelated edit survives and replay is idempot
 });
 ```
 
-- [ ] **Step 2: 写恢复差异与快照轮换测试**
+- [x] **Step 2: 写恢复差异与快照轮换测试**
 
 `diffRestore` 必须列出新增、更新、删除和同 ID 冲突，但不得自动应用；第六份快照写入后只保留最新五份，恢复返回迁移并校验后的 config。
 
-- [ ] **Step 3: 运行并确认 RED**
+- [x] **Step 3: 运行并确认 RED**
 
 Run: `npm test -- tests/sync-policy.test.mjs tests/config-history.test.mjs`
 Expected: FAIL，模块不存在。
 
-- [ ] **Step 4: 实现本机权威同步策略**
+- [x] **Step 4: 实现本机权威同步策略**
 
 保留现有 `chrome.storage.local` 唯一权威和 sync 首次引导行为。为 `fn_inbox` 操作补 `opId/at`，在本机维护有界的已消费 opId 集；按时间排序应用，删除优先于更早的新增/编辑，重放同一 opId 不产生二次变化。不得增加任何后台整份远端 merge。
 
@@ -269,7 +269,7 @@ Expected: FAIL，模块不存在。
 
 `Core._applyInbox` 改用 `applyInboxOps`；`onRemoteChange` 只处理本机 local/inbox，不响应跨设备 sync 推送。`cloudPut` 只接受 `sanitizeConfig(this.cfg)`；云恢复先创建快照和差异摘要，再由显式“合并副本/保留本机/使用云端”操作应用，绝不自动拉取。
 
-- [ ] **Step 6: 验证**
+- [x] **Step 6: 验证**
 
 Run: `npm test -- tests/sync-policy.test.mjs tests/config-history.test.mjs`
 Expected: 全部 PASS。

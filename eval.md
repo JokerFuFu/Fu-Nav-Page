@@ -63,7 +63,7 @@ criteria:
       type: command
       run: npm test -- tests/config-merge.test.mjs
       expected: tombstone wins stale node case PASS
-    passes: false
+    passes: true
 
   - id: P0-SYNC-002
     priority: P0
@@ -72,7 +72,7 @@ criteria:
       type: command
       run: npm test -- tests/config-merge.test.mjs
       expected: unrelated concurrent edit case PASS
-    passes: false
+    passes: true
 
   - id: P0-SYNC-003
     priority: P0
@@ -91,7 +91,7 @@ criteria:
       type: command
       run: npm test -- tests/config-history.test.mjs
       expected: retention and restore cases PASS
-    passes: false
+    passes: true
 
   - id: P0-IMPORT-001
     priority: P0

@@ -131,7 +131,7 @@ const INBOX = 'fn_inbox';
 export async function pushInbox(ops){
   if(!isExtension || !ops || !ops.length) return;
   try{ const cur=(await lGet(INBOX))[INBOX]||[];
-    const stamped=ops.map(o=>({ ...o, _k: Math.random().toString(36).slice(2)+Date.now().toString(36) }));   // 唯一键：drain 按键清理
+    const stamped=ops.map((o,index)=>{ const opId=o.opId||o._k||Math.random().toString(36).slice(2)+Date.now().toString(36)+index.toString(36); return { ...o, opId, at:o.at||Date.now(), _k:opId }; });   // opId：幂等兑现；_k 保留 drain 兼容
     await lSet({ [INBOX]: cur.concat(stamped) }); }catch{}
 }
 export async function drainInbox(){
