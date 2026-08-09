@@ -628,4 +628,26 @@ criteria:
         - 重载并再次检查条目数量
       expected: current item retained; bookmark URLs imported once; no permission request; primary centered; console error count is 0
     passes: true
+
+  - id: HOTFIX-BOOKMARK-STRUCTURE-001
+    priority: P0
+    assertion: 已被平铺的 Fu 导航收藏按浏览器原文件夹树重建，网站总数不减少，已有网站元数据与稳定 ID 不变，源目录外网站进入未归类
+    verification:
+      type: combined
+      run: node --test tests/bookmark-recovery.test.mjs
+      expected: nested folder paths and sibling order match source; current metadata is retained; unclassified items are preserved; repeated rebuild is idempotent
+    passes: false
+
+  - id: HOTFIX-BOOKMARK-STRUCTURE-E2E-001
+    priority: E2E
+    assertion: 已完成上一版扁平恢复的真实扩展用户会自动进入新结构迁移，不请求权限、不反向覆盖浏览器书签
+    verification:
+      type: end-to-end
+      steps:
+        - 用全新 profile 预置 bookmarkRecoveryV326 true 的扁平 Fu 导航分组
+        - 注入已授权且包含两层子目录的同名浏览器书签树
+        - 启动扩展并检查网站路径、ID、备注、总数和新版本标记
+        - 再次启动并检查结构与 ID 不变
+      expected: original directory path restored; site count unchanged; permission requests 0; bmSync remains disabled; console error count 0
+    passes: false
 ```
