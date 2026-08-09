@@ -38,6 +38,22 @@ test('sparse content is width-limited and folder metadata stays visible in grid 
   assert.match(css, /\.fx-folder-count\s*\{[^}]*display:block/);
 });
 
+test('homepage primary task and incomplete favorite rows stay optically centered', () => {
+  assert.match(layout, /fx-home-primary/);
+  assert.match(layout, /widgets\.childElementCount/);
+  assert.match(layout, /fx-favs cols-/);
+  assert.match(css, /\.fx-home\.no-widgets \.fx-home-primary\s*\{[^}]*min-height:calc\(100dvh - 2 \* var\(--home-pad\)\)/);
+  assert.match(css, /\.fx-home-primary\s*\{[^}]*justify-content:center/);
+  assert.match(css, /\.fx-favs\s*\{[^}]*display:flex[^}]*justify-content:center/);
+  assert.match(css, /\.fx-favs\.cols-8 \.fx-fav\s*\{[^}]*flex:/);
+  assert.match(css, /\.fx-favs\.cols-6 \.fx-fav\s*\{[^}]*flex:/);
+
+  const mobile = css.match(/@media \(max-width:760px\)\{([\s\S]*?)\n\}/)?.[1] || '';
+  assert.match(mobile, /\.fx-home-primary\s*\{[^}]*min-height:0/);
+  assert.match(mobile, /\.fx-favs \.fx-fav\s*\{[^}]*flex:/);
+  assert.match(design, /\.fx-home-primary/);
+});
+
 test('background scrim and metadata tokens preserve readable small text', async () => {
   const module = await import(`../shared/background.js?responsive=${Date.now()}`);
   assert.equal(typeof module.resolveBackgroundScrim, 'function');

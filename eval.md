@@ -603,7 +603,7 @@ criteria:
       run: node --test tests/bookmark-recovery.test.mjs
       operation: 在真实扩展注入多份同名书签文件夹并启动两次
       expected: largest folder selected; missing URLs added once; existing id/note preserved; second run adds 0
-    passes: false
+    passes: true
 
   - id: HOTFIX-LAYOUT-001
     priority: P1
@@ -613,7 +613,7 @@ criteria:
       run: node --test tests/responsive-static.test.mjs
       viewports: [1024x768, 1440x900, 2048x955, 390x844]
       expected: desktop no-widget primary center delta <= 2px; partial favorite row centered; mobile remains top-safe; no horizontal overflow
-    passes: false
+    passes: true
 
   - id: HOTFIX-E2E-001
     priority: E2E
@@ -627,5 +627,5 @@ criteria:
         - 隐藏所有组件并在桌面宽屏检查首页几何
         - 重载并再次检查条目数量
       expected: current item retained; bookmark URLs imported once; no permission request; primary centered; console error count is 0
-    passes: false
+    passes: true
 ```

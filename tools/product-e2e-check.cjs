@@ -101,17 +101,30 @@ async function setTheme(page, wanted) {
       else if (request.method() === 'GET') await route.fulfill({ status: 404, body: '' });
       else await route.fulfill({ status: 201, body: 'ok' });
     });
-    await context.addInitScript(({ importUrl }) => {
+    await context.addInitScript(({ importUrl, recoveryBase }) => {
       if (typeof chrome === 'undefined' || !chrome.permissions || !location.protocol.startsWith('chrome-extension')) return;
-      window.__fuPermissionGrant = false;
-      window.__fuPermissionGranted = false;
+      const recoveryMode = new URLSearchParams(location.search).get('e2e') === 'recovery-granted';
+      window.__fuPermissionGrant = recoveryMode;
+      window.__fuPermissionGranted = recoveryMode;
       window.__fuPermissionRequests = 0;
       const reply = (callback, value) => queueMicrotask(() => callback(!!value));
       try { Object.defineProperty(chrome.permissions, 'contains', { configurable: true, value: (_query, callback) => reply(callback, window.__fuPermissionGranted) }); } catch {}
       try { Object.defineProperty(chrome.permissions, 'request', { configurable: true, value: (_query, callback) => { window.__fuPermissionRequests += 1; if (window.__fuPermissionGrant) window.__fuPermissionGranted = true; reply(callback, window.__fuPermissionGranted); } }); } catch {}
 
-      let id = 20;
-      const tree = { id: '0', title: '', children: [{ id: '1', title: '书签栏', children: [{ id: '10', parentId: '1', title: 'E2E 浏览器书签', children: [{ id: '11', parentId: '10', title: '授权导入网站', url: importUrl }] }] }] };
+      let id = 40;
+      const barChildren = [{ id: '10', parentId: '1', title: 'E2E 浏览器书签', children: [{ id: '11', parentId: '10', title: '授权导入网站', url: importUrl }] }];
+      if (recoveryMode) barChildren.push(
+        { id: '20', parentId: '1', title: 'Fu 导航', children: [{ id: '21', parentId: '20', title: '较小旧集合', url: `${recoveryBase}/recovery/small` }] },
+        { id: '30', parentId: '1', title: 'Fu 导航', children: [
+          { id: '31', parentId: '30', title: '来源名称不应覆盖', url: `${recoveryBase}/recovery/keep/` },
+          { id: '32', parentId: '30', title: '恢复网站一', url: `${recoveryBase}/recovery/one` },
+          { id: '33', parentId: '30', title: '旧子目录', children: [
+            { id: '34', parentId: '33', title: '恢复网站二', url: `${recoveryBase}/recovery/two?utm_source=legacy` },
+            { id: '35', parentId: '33', title: '恢复网站一重复', url: `${recoveryBase}/recovery/one/` },
+          ] },
+        ] },
+      );
+      const tree = { id: '0', title: '', children: [{ id: '1', title: '书签栏', children: barChildren }] };
       const locate = (node, target) => { if (node.id === target) return node; for (const child of node.children || []) { const hit = locate(child, target); if (hit) return hit; } return null; };
       const detach = target => { let removed = null; const walk = node => { const index = (node.children || []).findIndex(child => child.id === target); if (index >= 0) { [removed] = node.children.splice(index, 1); return true; } return (node.children || []).some(walk); }; walk(tree); return removed; };
       const clone = value => JSON.parse(JSON.stringify(value));
@@ -125,7 +138,7 @@ async function setTheme(page, wanted) {
         removeTree: (target, callback) => { detach(target); queueMicrotask(() => callback?.()); },
       };
       try { Object.defineProperty(chrome, 'bookmarks', { configurable: true, value: bookmarks }); } catch {}
-    }, { importUrl: `${base}/imported` });
+    }, { importUrl: `${base}/imported`, recoveryBase: base });
 
     let worker = context.serviceWorkers()[0];
     if (!worker) worker = await context.waitForEvent('serviceworker', { timeout: 15000 });
@@ -366,6 +379,101 @@ async function setTheme(page, wanted) {
     assert(mobileAgent && mobileAgent.x >= 0 && mobileAgent.x + mobileAgent.width <= 390, 'Agent token field is clipped at 390px');
     assert(mobileComplete && mobileComplete.x >= 0 && mobileComplete.x + mobileComplete.width <= 390, 'settings primary action is clipped at 390px');
     evidence.mobile = { width: 390, scrollWidth: mobileLayout.scrollWidth, agentFieldVisible: true, primaryActionVisible: true };
+
+    // HOTFIX E2E：在已具备旧书签权限时自动恢复最大「Fu 导航」目录；无组件首页与六张残行卡均光学居中。
+    await contextA.evaluate(({ baseUrl }) => new Promise(resolveSet => chrome.storage.local.get(['fn_config', 'fn_runtime_state_v1'], value => {
+      const cfg = value.fn_config;
+      const favorites = Array.from({ length: 6 }, (_, index) => ({ id: `center-fav-${index + 1}`, name: `居中收藏 ${index + 1}`, url: `${baseUrl}/center-${index + 1}`, fav: true, note: '', icon: '' }));
+      cfg.settings = {
+        ...cfg.settings,
+        onboarded: true,
+        layout: 'fusion',
+        theme: 'dark',
+        activeMode: null,
+        sideCollapsed: false,
+        demoMode: false,
+        showWeather: false,
+        showStatus: false,
+        widgets: [],
+        hiddenAgentCards: ['reminder', 'calendar', 'digest'],
+        favGrid: { cols: 8, rows: 2 },
+        background: { enabled: false, mode: 'none' },
+        bmSync: { enabled: false },
+        cloud: { enabled: false, type: 'webdav', url: '', user: '', pass: '', gdriveClientId: '' },
+        bookmarkRecoveryV326: false,
+      };
+      cfg.favOrder = favorites.map(item => item.id);
+      cfg.groups = [
+        { id: 'g-center', name: '常用推荐', icon: 'star', color: '#4a55f3', items: favorites },
+        { id: 'g-recovery', name: 'Fu 导航', icon: 'star', color: '#64748b', items: [{ id: 'recovery-keep', name: '我的原名称', url: `${baseUrl}/recovery/keep`, note: '原备注', tags: ['重要'], icon: '' }] },
+      ];
+      cfg.savedAt = Date.now() + 2000;
+      const runtime = { ...(value.fn_runtime_state_v1 || {}), initialized: true, onboarding: { completed: true, weatherConsent: false, choice: 'existing' } };
+      chrome.storage.local.set({ fn_config: cfg, fn_runtime_state_v1: runtime }, resolveSet);
+    })), { baseUrl: base });
+    await contextA.setViewportSize({ width: 2048, height: 955 });
+    await contextA.goto(`chrome-extension://${extensionId}/newtab.html?e2e=recovery-granted`, { waitUntil: 'domcontentloaded' });
+    await contextA.waitForSelector('.lay-fusion');
+    await contextA.waitForFunction(() => new Promise(resolveGet => chrome.storage.local.get(['fn_config'], value => {
+      const group = value.fn_config?.groups?.find(item => item.name === 'Fu 导航');
+      resolveGet(value.fn_config?.settings?.bookmarkRecoveryV326 === true && group?.items?.some(item => item.name === '恢复网站二'));
+    })));
+    const recoveryState = await storage(contextA, ['fn_config']);
+    const recoveredGroup = recoveryState.fn_config.groups.find(group => group.name === 'Fu 导航');
+    const kept = recoveredGroup.items.find(item => item.id === 'recovery-keep');
+    assert(recoveredGroup.items.length === 3, `recovery result mismatch: ${recoveredGroup.items.length}`);
+    assert(kept?.name === '我的原名称' && kept.note === '原备注' && kept.tags?.[0] === '重要', 'recovery overwrote current bookmark metadata');
+    assert(recoveryState.fn_config.settings.bmSync.enabled === false, 'recovery silently enabled bookmark sync');
+    const measureCentering = () => contextA.evaluate(() => {
+      const rect = selector => document.querySelector(selector).getBoundingClientRect();
+      const side = rect('.fx-side');
+      const ask = rect('.fx-ask');
+      const primary = rect('.fx-home-primary');
+      const cards = [...document.querySelectorAll('.fx-fav')].map(node => node.getBoundingClientRect());
+      const taskNodes = [rect('.fx-ask'), rect('.fx-favs')];
+      const taskTop = Math.min(...taskNodes.map(item => item.top));
+      const taskBottom = Math.max(...taskNodes.map(item => item.bottom));
+      const cardsLeft = Math.min(...cards.map(item => item.left));
+      const cardsRight = Math.max(...cards.map(item => item.right));
+      const availableCenter = (side.right + innerWidth) / 2;
+      return {
+        favoriteCount: cards.length,
+        askHorizontalError: Math.abs((ask.left + ask.right) / 2 - availableCenter),
+        primaryVerticalError: Math.abs((primary.top + primary.bottom) / 2 - innerHeight / 2),
+        taskVerticalError: Math.abs((taskTop + taskBottom) / 2 - innerHeight / 2),
+        partialRowError: Math.abs((cardsLeft + cardsRight) / 2 - (ask.left + ask.right) / 2),
+        permissionRequests: window.__fuPermissionRequests,
+        viewport: `${innerWidth}x${innerHeight}`,
+        scrollWidth: document.documentElement.scrollWidth,
+      };
+    });
+    const desktopCentering = [];
+    for (const viewport of [{ width: 1024, height: 768 }, { width: 1440, height: 900 }, { width: 2048, height: 955 }]) {
+      await contextA.setViewportSize(viewport);
+      const metrics = await measureCentering();
+      assert(metrics.favoriteCount === 6, `expected six favorites at ${metrics.viewport}, got ${metrics.favoriteCount}`);
+      assert(metrics.askHorizontalError <= 2, `home task is not horizontally centered at ${metrics.viewport}: ${metrics.askHorizontalError}`);
+      assert(metrics.primaryVerticalError <= 2 && metrics.taskVerticalError <= 2, `home task is not vertically centered: ${JSON.stringify(metrics)}`);
+      assert(metrics.partialRowError <= 2, `incomplete favorite row is not centered at ${metrics.viewport}: ${metrics.partialRowError}`);
+      assert(metrics.scrollWidth <= viewport.width, `home overflows horizontally at ${metrics.viewport}: ${metrics.scrollWidth}`);
+      assert(metrics.permissionRequests === 0, 'automatic recovery requested permission interactively');
+      desktopCentering.push(metrics);
+    }
+    await contextA.setViewportSize({ width: 390, height: 844 });
+    const mobileCentering = await contextA.evaluate(() => {
+      const primary = document.querySelector('.fx-home-primary').getBoundingClientRect();
+      return { viewport: `${innerWidth}x${innerHeight}`, primaryTop: primary.top, scrollWidth: document.documentElement.scrollWidth };
+    });
+    assert(mobileCentering.primaryTop >= 72, `mobile primary task escaped top-safe area: ${mobileCentering.primaryTop}`);
+    assert(mobileCentering.scrollWidth <= 390, `mobile home overflow: ${mobileCentering.scrollWidth}`);
+    await contextA.setViewportSize({ width: 2048, height: 955 });
+    await contextA.reload({ waitUntil: 'domcontentloaded' });
+    await contextA.waitForSelector('.lay-fusion');
+    const repeatedState = await storage(contextA, ['fn_config']);
+    const repeatedGroup = repeatedState.fn_config.groups.find(group => group.name === 'Fu 导航');
+    assert(repeatedGroup.items.length === 3 && new Set(repeatedGroup.items.map(item => item.id)).size === 3, 'recovery is not idempotent after reload');
+    evidence.bookmarkRecovery = { sourceFolder: 'largest Fu 导航', restored: 2, preservedMetadata: true, idempotent: true, permissionRequests: 0 };
+    evidence.centering = { desktop: desktopCentering, mobile: mobileCentering };
 
     assert(errors.length === 0, `console errors: ${errors.join(' | ')}`);
     console.log(JSON.stringify({ ok: true, extensionId, evidence, davRequests: davRequests.map(request => ({ method: request.method, url: request.url, bodyBytes: request.body.length })), consoleErrors: errors.length }, null, 2));

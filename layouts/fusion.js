@@ -1,5 +1,5 @@
 /* ============ 融合布局 v3.1：极简AI首页 + 时钟/天气卡 + 右键编辑 + 拖拽 ============ */
-import { $, $$, el, safeHref } from '../shared/core.js?v=3.26.3';
+import { $, $$, el, safeHref } from '../shared/core.js?v=3.26.4';
 import { dashboardIcon, lucide } from '../shared/icon-map.js?v=3.26.3';
 import { fetchGlances } from '../shared/hwmon.js';
 import { PRESETS } from '../shared/bg-presets.js';
@@ -171,17 +171,21 @@ function renderHome(core,main){
   if(!priv){ const grid=core.favGrid(); const contentScale=grid.rows===3?(grid.cols===8?.76:.84):1; home.style.setProperty('--home-scale',density==='compact'?Math.min(contentScale,.82):contentScale); }
   if(!priv) home.appendChild(buildBgTrigger(core));   // 背景切换悬浮入口（隐私模式不显示，减少干扰）
   if(!priv && core.settings.demoMode) home.appendChild(buildDemoBadge(core));
-  home.appendChild(buildAsk(core));               // 搜索是首页第一任务
+  const primary=el('div','fx-home-primary');
+  primary.appendChild(buildAsk(core));               // 搜索是首页第一任务
   if(!priv && !(am&&am.showFavs===false)){ const favs=core.favorites(), grid=core.favGrid();
     if(favs.length){
-      const row=el('div','fx-favs'); row.style.setProperty('--fav-cols',grid.cols);
+      const row=el('div',`fx-favs cols-${grid.cols}`); row.style.setProperty('--fav-cols',grid.cols);
       favs.forEach(({item,group,pinned})=>row.appendChild(favCard(core,item,group,pinned)));
       if(core.editing) wireFavDnD(core,row);
-      home.appendChild(row);
+      primary.appendChild(row);
     } else {
-      home.appendChild(el('div','fx-home-empty','还没有常用网站 — 解锁后点「添加网站」，或到 设置 → 导入浏览器书签'));   // R5 空态引导
+      primary.appendChild(el('div','fx-home-empty','还没有常用网站 — 解锁后点「添加网站」，或到 设置 → 导入浏览器书签'));   // R5 空态引导
     } }
-  home.appendChild(buildWidgetCards(core,priv));   // 组件始终位于搜索与常用之后
+  const widgets=buildWidgetCards(core,priv);
+  home.classList.toggle('no-widgets',!widgets.childElementCount);
+  home.appendChild(primary);
+  if(widgets.childElementCount) home.appendChild(widgets);   // 组件始终位于搜索与常用之后
   main.appendChild(home);
 }
 

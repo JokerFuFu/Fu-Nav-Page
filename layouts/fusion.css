@@ -82,9 +82,11 @@ body.editing .lay-fusion .fx-navitem[data-gid]{ cursor:grab; }
 .lay-fusion .fx-main.content-sparse .fx-gtop,.lay-fusion .fx-main.content-sparse .fx-grid{ width:100%; max-width:880px; margin-left:auto; margin-right:auto; }
 
 /* ===== 极简首页：搜索 → 常用 → 组件 ===== */
-.lay-fusion .fx-home{ --home-scale:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-start; gap:calc(var(--s4) * var(--home-scale)); padding:calc(var(--s7) * var(--home-scale)) 0; min-height:100vh; overflow:visible; box-sizing:border-box; }
+.lay-fusion .fx-home{ --home-scale:1; --home-pad:calc(var(--s7) * var(--home-scale)); display:flex; flex-direction:column; align-items:center; justify-content:flex-start; gap:calc(var(--s4) * var(--home-scale)); padding:var(--home-pad) 0; min-height:100vh; overflow:visible; box-sizing:border-box; }
 .lay-fusion .fx-home-priv{ gap:var(--s6); }
-.lay-fusion .fx-home.density-compact{ padding-top:calc(var(--s5) * var(--home-scale)); padding-bottom:calc(var(--s5) * var(--home-scale)); }
+.lay-fusion .fx-home.density-compact{ --home-pad:calc(var(--s5) * var(--home-scale)); }
+.lay-fusion .fx-home-primary{ width:100%; min-height:clamp(340px,54dvh,520px); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:calc(var(--s4) * var(--home-scale)); }
+.lay-fusion .fx-home.no-widgets .fx-home-primary{ min-height:calc(100dvh - 2 * var(--home-pad)); }
 
 /* AI/搜索框 */
 .lay-fusion .fx-ask{ width:100%; max-width:calc(900px * var(--home-scale)); position:relative; }
@@ -214,9 +216,11 @@ body.bg-photo .lay-fusion .fx-hero-clock{ background:rgba(8,10,18,.74); border-c
 .lay-fusion .fx-cd-addbtn{ flex:0 0 32px; width:32px; min-height:32px; color:var(--text-3); padding:0 var(--s1); font-size:15px; }
 .lay-fusion .fx-cd-addbtn:hover{ color:var(--accent); }
 
-/* 常用网格：列数由设置中的 6/8 × 2/3 规格驱动；锁定段与自动段同网格，pin 角标标识固定项。 */
-.lay-fusion .fx-favs{ display:grid; grid-template-columns:repeat(var(--fav-cols,8),minmax(0,1fr)); gap:calc(var(--s3) * var(--home-scale)); width:100%; max-width:calc(900px * var(--home-scale)); margin:0 auto; }
-.lay-fusion .fx-fav{ position:relative; width:100%; min-width:0; display:flex; flex-direction:column; align-items:center; gap:calc(var(--s3) * var(--home-scale)); padding:calc(var(--s3) * var(--home-scale)); border-radius:var(--r-md); background:var(--surface); border:1px solid var(--border); transition:var(--t); cursor:pointer; }
+/* 常用流：保留 6/8 列的卡宽，最后不足一行时整行居中，不让视觉重心粘在左侧。 */
+.lay-fusion .fx-favs{ --fav-gap:calc(var(--s3) * var(--home-scale)); display:flex; flex-wrap:wrap; justify-content:center; gap:var(--fav-gap); width:100%; max-width:calc(900px * var(--home-scale)); margin:0 auto; }
+.lay-fusion .fx-favs.cols-8 .fx-fav{ flex:0 1 calc((100% - 7 * var(--fav-gap)) / 8); }
+.lay-fusion .fx-favs.cols-6 .fx-fav{ flex:0 1 calc((100% - 5 * var(--fav-gap)) / 6); }
+.lay-fusion .fx-fav{ position:relative; width:auto; min-width:0; display:flex; flex-direction:column; align-items:center; gap:calc(var(--s3) * var(--home-scale)); padding:calc(var(--s3) * var(--home-scale)); border-radius:var(--r-md); background:var(--surface); border:1px solid var(--border); transition:var(--t); cursor:pointer; }
 body.editing .lay-fusion .fx-fav[data-pinned="true"]{ cursor:grab; }
 .lay-fusion .fx-fav.fx-dragging{ opacity:.4; }
 /* 卡片 ✎编辑/✕删除 浮层（仅解锁🔓时存在，hover 显示） */
@@ -408,7 +412,8 @@ body:not(.editing) .lay-fusion .fx-card:active{ transform:translateY(0) scale(.9
   .lay-fusion.sidebar-open .fx-mobile-menu{ opacity:0; pointer-events:none; }
   .lay-fusion .fx-side-close{ display:grid; place-items:center; position:absolute; top:var(--s3); right:var(--s3); width:36px; height:36px; border-radius:999px; color:var(--text-2); background:var(--surface-2); z-index:2; }
   .lay-fusion .fx-nav{ flex-direction:column; flex-wrap:nowrap; }
-  .lay-fusion .fx-home{ --home-scale:1 !important; min-height:100vh; overflow:visible; padding-top:72px; }
+  .lay-fusion .fx-home{ --home-scale:1 !important; --home-pad:72px; min-height:100vh; overflow:visible; padding-top:72px; }
+  .lay-fusion .fx-home-primary{ min-height:0; justify-content:flex-start; }
   .lay-fusion .fx-collapse{ display:none; }                                   /* 移动端侧栏不收折 */
   .lay-fusion .fx-navitem{ width:100%; flex:0 0 auto; }
   .lay-fusion .fx-navfolder{ display:flex; }
@@ -416,6 +421,7 @@ body:not(.editing) .lay-fusion .fx-card:active{ transform:translateY(0) scale(.9
   .lay-fusion .fx-side-foot{ width:100%; justify-content:space-around; }
   .lay-fusion .fx-wcard{ flex:1 1 100%; }                                     /* 小组件卡满宽堆叠，宽度一致 */
   .lay-fusion .fx-favs{ --fav-cols:4 !important; width:100%; }                /* 390px 下自动降列，不横向溢出 */
+  .lay-fusion .fx-favs .fx-fav{ flex:0 1 calc((100% - 3 * var(--fav-gap)) / 4); }
   .lay-fusion .fx-demo-badge{ position:static; order:-1; align-self:flex-end; }
   .fn-widget-row{ grid-template-columns:1fr auto; }
   .fn-widget-actions{ grid-column:1 / -1; }
