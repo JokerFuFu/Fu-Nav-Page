@@ -25,7 +25,7 @@ import { buildSearchIndex, querySearchIndex } from './search-index.js';
 import { applyBulkOperation, clusterDuplicates, updateSelection } from './library-manager.js';
 import { agentStatusPatch, buildDiagnostics, cloudStatusPatch, conflictStatusPatch, exportSafeBackup, saveStatusPatch } from './diagnostics.js';
 import { archiveMode as archiveModeState, createMode as createModeState, deleteMode as deleteModeState, listModes, renameMode as renameModeState, reorderModes as reorderModesState, restoreMode as restoreModeState } from './modes.js';
-import { findLargestNamedFolder, mergeBookmarkFolder } from './bookmark-recovery.js';
+import { findLargestNamedFolder, mergeBookmarkFolder, rebuildBookmarkFolderStructure } from './bookmark-recovery.js?v=3.26.5';
 
 export const $  = (s,r=document)=>r.querySelector(s);
 export const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
@@ -94,6 +94,7 @@ class Core {
     if(!config || source==='sync' || migrated) await this.save(true);   // 无配置/从 sync 引导/发生迁移 → 立即落成本机权威副本
     await this.mountLayout(this.settings.layout || 'classic');
     try{ await this.recoverOriginalBookmarks(); }catch(error){ console.warn('原收藏自动恢复失败，保留当前配置并等待下次启动重试',error); }
+    try{ await this.recoverOriginalBookmarkStructure(); }catch(error){ console.warn('原收藏目录结构恢复失败，保留当前配置并等待下次启动重试',error); }
     if(!this.runtime.onboarding.completed) setTimeout(()=>this.openOnboarding(),80);
     // 远端变更：仅在 savedAt 严格更新时才回灌，杜绝"自己写入→读到旧/中间态覆盖内存→下次存旧值"的丢失循环
     onRemoteChange(async ()=>{ await this.flushSave();   // 先落盘本地未保存的防抖改动，避免被旧快照整体覆盖(吞掉刚删的卡片)
@@ -288,6 +289,30 @@ class Core {
     if(result.added) this.toast(`已恢复 ${result.added} 个原收藏`,'ok');
     return result;
   }
+  /* 第二阶段结构迁移：上一版已找回的网址按浏览器原目录归位，额外网站放进“未归类”。 */
+  async recoverOriginalBookmarkStructure(){
+    if(!isExtension || this.settings.bookmarkStructureRecoveryV327 || !bmAvailable() || !chrome.permissions?.contains) return false;
+    const granted=await new Promise(resolve=>chrome.permissions.contains({permissions:['bookmarks']},value=>{
+      void chrome.runtime?.lastError;
+      resolve(!!value);
+    }));
+    if(!granted) return false;
+    const folder=findLargestNamedFolder(await getBookmarksTree(),ROOT_TITLE);
+    if(!folder) return false;
+    const result=rebuildBookmarkFolderStructure(this.cfg,folder,{makeId:prefix=>uid(prefix),color:COLORS[this.groups.length%COLORS.length]});
+    if(!result.total) return false;
+    if(result.changed) await saveSnapshot(this.cfg,'bookmark-structure-recovery');
+    this.cfg=result.config;
+    this.settings.bookmarkStructureRecoveryV327=true;
+    if(result.changed) this.markUserEdited();
+    this._lastBmCfgSig=bmCfgSig(this.cfg); // 结构迁移仍是浏览器→导航单向读取，禁止触发 bmPush 反写。
+    await this.save(true);
+    if(result.changed){
+      this.rerender();
+      this.toast(`已按原目录整理 ${result.total} 个收藏`,'ok');
+    }
+    return result;
+  }
   /* 导航 → 浏览器（仅在分组/网站结构真的变了时才导出，避免每次点击都重做） */
   async bmPush(){ if(!isExtension || !this.bmOn() || !bmAvailable()) return;
     try{ const sig=bmCfgSig(this.cfg); if(sig===this._lastBmCfgSig) return;
@@ -355,8 +380,8 @@ class Core {
   async mountLayout(name){
     this.layout=name; this.settings.layout=name;
     if(!this.root){ this.root=$('#root'); }
-    try{ this.layoutMod = await import(`../layouts/${name}.js?v=3.26.4`); }
-    catch(e){ console.error('布局加载失败',name,e); if(name!=='fusion'){ this.layout='fusion'; this.settings.layout='fusion'; try{ this.layoutMod=await import('../layouts/fusion.js?v=3.26.4'); }catch{ this.layoutMod=null; } } else this.layoutMod=null; }
+    try{ this.layoutMod = await import(`../layouts/${name}.js?v=3.26.5`); }
+    catch(e){ console.error('布局加载失败',name,e); if(name!=='fusion'){ this.layout='fusion'; this.settings.layout='fusion'; try{ this.layoutMod=await import('../layouts/fusion.js?v=3.26.5'); }catch{ this.layoutMod=null; } } else this.layoutMod=null; }
     this.rerender();
     $$('.layout-switch [data-l]').forEach(b=>b.classList.toggle('on', b.dataset.l===name));
   }

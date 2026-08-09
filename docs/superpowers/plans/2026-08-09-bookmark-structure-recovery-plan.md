@@ -14,6 +14,8 @@
 - 不删除网站，不覆盖现有网站 ID、名称、备注、标签、图标、收藏状态和访问统计。
 - 不静默请求书签权限，不开启双向同步，不反向写浏览器书签。
 - 浏览器原目录树是唯一分类事实；只有源目录外的现有网站进入 `未归类`。
+- 导航配置文件夹封顶两级；浏览器第三级及以后折叠为带完整相对路径名的第二级兄弟目录。
+- 浏览器源根目录完全无文件夹时，才按固定的本地名称/URL 规则生成九类目录；存在任何原文件夹时禁用自动分类。
 - 全程自主执行，不设置人工查看、验收或批准门槛。
 
 ---
@@ -64,6 +66,10 @@ export function rebuildBookmarkFolderStructure(input, folder, options = {}) {
 Run: `node --test tests/bookmark-recovery.test.mjs`
 
 Expected: 所有结构测试通过；把首次结果再次输入时网站和文件夹 ID 不变、`changed === false`。
+
+- [ ] **Step 5: 为完全扁平源增加 RED/GREEN 分类循环**
+
+测试 GitHub、Figma、YouTube、Gmail、私网设备和未知网站被分到固定目录，网站 ID/备注仍复用；实现本地规则后再次运行同一测试文件并确认幂等。
 
 ### Task 2: Core 结构升级
 

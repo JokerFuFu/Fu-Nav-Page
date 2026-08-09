@@ -636,7 +636,7 @@ criteria:
       type: combined
       run: node --test tests/bookmark-recovery.test.mjs
       expected: nested folder paths and sibling order match source; current metadata is retained; unclassified items are preserved; repeated rebuild is idempotent
-    passes: false
+    passes: true
 
   - id: HOTFIX-BOOKMARK-STRUCTURE-E2E-001
     priority: E2E
@@ -649,5 +649,14 @@ criteria:
         - 启动扩展并检查网站路径、ID、备注、总数和新版本标记
         - 再次启动并检查结构与 ID 不变
       expected: original directory path restored; site count unchanged; permission requests 0; bmSync remains disabled; console error count 0
-    passes: false
+    passes: true
+
+  - id: HOTFIX-BOOKMARK-AUTO-CATEGORY-001
+    priority: P1
+    assertion: 当且仅当浏览器 Fu 导航源目录完全扁平时，网站按稳定的本地规则拆入语义分类文件夹，不再保持根层全集平铺
+    verification:
+      type: combined
+      run: node --test tests/bookmark-recovery.test.mjs
+      expected: representative AI, development, design, media, mail, network and unknown sites enter deterministic folders; existing site ids and metadata remain unchanged; second run is idempotent
+    passes: true
 ```

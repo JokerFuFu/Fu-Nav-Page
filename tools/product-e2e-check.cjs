@@ -103,7 +103,9 @@ async function setTheme(page, wanted) {
     });
     await context.addInitScript(({ importUrl, recoveryBase }) => {
       if (typeof chrome === 'undefined' || !chrome.permissions || !location.protocol.startsWith('chrome-extension')) return;
-      const recoveryMode = new URLSearchParams(location.search).get('e2e') === 'recovery-granted';
+      const recoveryCase = new URLSearchParams(location.search).get('e2e');
+      const recoveryMode = recoveryCase === 'recovery-granted' || recoveryCase === 'recovery-flat-granted';
+      const flatRecoveryMode = recoveryCase === 'recovery-flat-granted';
       window.__fuPermissionGrant = recoveryMode;
       window.__fuPermissionGranted = recoveryMode;
       window.__fuPermissionRequests = 0;
@@ -115,12 +117,22 @@ async function setTheme(page, wanted) {
       const barChildren = [{ id: '10', parentId: '1', title: 'E2E 浏览器书签', children: [{ id: '11', parentId: '10', title: '授权导入网站', url: importUrl }] }];
       if (recoveryMode) barChildren.push(
         { id: '20', parentId: '1', title: 'Fu 导航', children: [{ id: '21', parentId: '20', title: '较小旧集合', url: `${recoveryBase}/recovery/small` }] },
-        { id: '30', parentId: '1', title: 'Fu 导航', children: [
+        { id: '30', parentId: '1', title: 'Fu 导航', children: flatRecoveryMode ? [
+          { id: '41', parentId: '30', title: '家里路由器', url: 'http://192.168.1.1/' },
+          { id: '42', parentId: '30', title: 'Kimi', url: 'https://www.kimi.com/' },
+          { id: '43', parentId: '30', title: 'GitHub', url: 'https://github.com/' },
+          { id: '44', parentId: '30', title: 'Figma', url: 'https://www.figma.com/' },
+          { id: '45', parentId: '30', title: 'Gmail', url: 'https://mail.google.com/' },
+          { id: '46', parentId: '30', title: 'YouTube', url: 'https://www.youtube.com/' },
+          { id: '47', parentId: '30', title: '无特征', url: 'https://misc.example.net/' },
+        ] : [
           { id: '31', parentId: '30', title: '来源名称不应覆盖', url: `${recoveryBase}/recovery/keep/` },
           { id: '32', parentId: '30', title: '恢复网站一', url: `${recoveryBase}/recovery/one` },
           { id: '33', parentId: '30', title: '旧子目录', children: [
-            { id: '34', parentId: '33', title: '恢复网站二', url: `${recoveryBase}/recovery/two?utm_source=legacy` },
-            { id: '35', parentId: '33', title: '恢复网站一重复', url: `${recoveryBase}/recovery/one/` },
+            { id: '36', parentId: '33', title: '更深目录', children: [
+              { id: '34', parentId: '36', title: '恢复网站二', url: `${recoveryBase}/recovery/two?utm_source=legacy` },
+              { id: '35', parentId: '36', title: '恢复网站一重复', url: `${recoveryBase}/recovery/one/` },
+            ] },
           ] },
         ] },
       );
@@ -416,13 +428,16 @@ async function setTheme(page, wanted) {
     await contextA.waitForSelector('.lay-fusion');
     await contextA.waitForFunction(() => new Promise(resolveGet => chrome.storage.local.get(['fn_config'], value => {
       const group = value.fn_config?.groups?.find(item => item.name === 'Fu 导航');
-      resolveGet(value.fn_config?.settings?.bookmarkRecoveryV326 === true && group?.items?.some(item => item.name === '恢复网站二'));
+      const has = items => (items || []).some(item => item.name === '恢复网站二' || (item.type === 'folder' && has(item.items)));
+      resolveGet(value.fn_config?.settings?.bookmarkRecoveryV326 === true && value.fn_config?.settings?.bookmarkStructureRecoveryV327 === true && has(group?.items));
     })));
     const recoveryState = await storage(contextA, ['fn_config']);
     const recoveredGroup = recoveryState.fn_config.groups.find(group => group.name === 'Fu 导航');
-    const kept = recoveredGroup.items.find(item => item.id === 'recovery-keep');
+    const kept = findNodes(recoveryState.fn_config, item => item.id === 'recovery-keep')[0]?.item;
+    const recoveredTwo = findNodes(recoveryState.fn_config, item => item.name === '恢复网站二')[0];
     assert(recoveredGroup.items.length === 3, `recovery result mismatch: ${recoveredGroup.items.length}`);
     assert(kept?.name === '我的原名称' && kept.note === '原备注' && kept.tags?.[0] === '重要', 'recovery overwrote current bookmark metadata');
+    assert(recoveredTwo?.path.join('/') === 'Fu 导航/旧子目录/更深目录/恢复网站二', `recovery structure mismatch: ${recoveredTwo?.path.join('/')}`);
     assert(recoveryState.fn_config.settings.bmSync.enabled === false, 'recovery silently enabled bookmark sync');
     const measureCentering = () => contextA.evaluate(() => {
       const rect = selector => document.querySelector(selector).getBoundingClientRect();
@@ -471,9 +486,87 @@ async function setTheme(page, wanted) {
     await contextA.waitForSelector('.lay-fusion');
     const repeatedState = await storage(contextA, ['fn_config']);
     const repeatedGroup = repeatedState.fn_config.groups.find(group => group.name === 'Fu 导航');
-    assert(repeatedGroup.items.length === 3 && new Set(repeatedGroup.items.map(item => item.id)).size === 3, 'recovery is not idempotent after reload');
+    const repeatedNodes = findNodes(repeatedState.fn_config, (_item, path) => path[0] === 'Fu 导航');
+    assert(repeatedGroup.items.length === 3 && new Set(repeatedNodes.map(entry => entry.item.id)).size === repeatedNodes.length, 'recovery is not idempotent after reload');
     evidence.bookmarkRecovery = { sourceFolder: 'largest Fu 导航', restored: 2, preservedMetadata: true, idempotent: true, permissionRequests: 0 };
     evidence.centering = { desktop: desktopCentering, mobile: mobileCentering };
+
+    // 结构迁移专项：模拟已经完成旧版扁平恢复的用户，复用其稳定 ID 并把来源外网站归入“未归类”。
+    await contextA.evaluate(({ baseUrl }) => new Promise(resolveSet => chrome.storage.local.get(['fn_config'], value => {
+      const cfg = value.fn_config;
+      cfg.settings.bookmarkRecoveryV326 = true;
+      cfg.settings.bookmarkStructureRecoveryV327 = false;
+      cfg.settings.bmSync = { enabled: false };
+      cfg.groups = cfg.groups.filter(group => group.name !== 'Fu 导航');
+      cfg.groups.push({ id: 'g-structure', name: 'Fu 导航', icon: 'star', color: '#64748b', items: [
+        { id: 'structure-keep', name: '保留的用户名称', url: `${baseUrl}/recovery/keep`, note: '保留的用户备注', tags: ['原数据'], icon: '' },
+        { id: 'structure-one', name: '扁平网站一', url: `${baseUrl}/recovery/one`, note: '', icon: '' },
+        { id: 'structure-two', name: '扁平网站二', url: `${baseUrl}/recovery/two`, note: '', icon: '' },
+        { id: 'structure-extra', name: '仅导航内存在', url: `${baseUrl}/recovery/extra`, note: '不能删除', icon: '' },
+      ] });
+      cfg.savedAt = Date.now() + 3000;
+      chrome.storage.local.set({ fn_config: cfg }, resolveSet);
+    })), { baseUrl: base });
+    await contextA.goto(`chrome-extension://${extensionId}/newtab.html?e2e=recovery-granted`, { waitUntil: 'domcontentloaded' });
+    await contextA.waitForSelector('.lay-fusion');
+    await contextA.waitForFunction(() => new Promise(resolveGet => chrome.storage.local.get(['fn_config'], value => resolveGet(value.fn_config?.settings?.bookmarkStructureRecoveryV327 === true))));
+    const structuredState = await storage(contextA, ['fn_config']);
+    const structuredSites = findNodes(structuredState.fn_config, item => item.type !== 'folder' && ['structure-keep', 'structure-one', 'structure-two', 'structure-extra'].includes(item.id));
+    const structureKeep = structuredSites.find(entry => entry.item.id === 'structure-keep');
+    const structureTwo = structuredSites.find(entry => entry.item.id === 'structure-two');
+    const structureExtra = structuredSites.find(entry => entry.item.id === 'structure-extra');
+    assert(structuredSites.length === 4, `structure migration lost sites: ${structuredSites.length}`);
+    assert(structureKeep?.item.name === '保留的用户名称' && structureKeep.item.note === '保留的用户备注' && structureKeep.item.tags?.[0] === '原数据', 'structure migration overwrote current metadata');
+    assert(structureTwo?.path.join('/') === 'Fu 导航/旧子目录/更深目录/扁平网站二', `deep bookmark path mismatch: ${structureTwo?.path.join('/')}`);
+    assert(structureExtra?.path.join('/') === 'Fu 导航/未归类/仅导航内存在', `unclassified path mismatch: ${structureExtra?.path.join('/')}`);
+    assert(structuredState.fn_config.settings.bmSync.enabled === false, 'structure migration silently enabled bookmark sync');
+    assert(await contextA.evaluate(() => window.__fuPermissionRequests) === 0, 'structure migration requested bookmark permission');
+    await contextA.locator('.fx-navitem').filter({ hasText: 'Fu 导航' }).first().click();
+    assert(await contextA.locator('.fx-folder').filter({ hasText: '旧子目录' }).count() === 1, 'restored top-level folder is absent from the UI');
+    assert(await contextA.locator('.fx-folder').filter({ hasText: '未归类' }).count() === 1, 'unclassified folder is absent from the UI');
+    await contextA.locator('.fx-folder').filter({ hasText: '旧子目录' }).click();
+    await contextA.locator('.fx-folder').filter({ hasText: '更深目录' }).click();
+    assert(await contextA.getByText('扁平网站二', { exact: true }).count() === 1, 'deep restored bookmark is not reachable in the UI');
+    const structureBeforeReload = findNodes(structuredState.fn_config, (_item, path) => path[0] === 'Fu 导航').map(entry => ({ id: entry.item.id, path: entry.path.join('/') }));
+    await contextA.reload({ waitUntil: 'domcontentloaded' });
+    await contextA.waitForSelector('.lay-fusion');
+    const structuredAgain = await storage(contextA, ['fn_config']);
+    const structureAfterReload = findNodes(structuredAgain.fn_config, (_item, path) => path[0] === 'Fu 导航').map(entry => ({ id: entry.item.id, path: entry.path.join('/') }));
+    assert(JSON.stringify(structureAfterReload) === JSON.stringify(structureBeforeReload), 'structure migration changed IDs or paths after reload');
+    evidence.bookmarkStructureRecovery = { previousFlatMarker: true, sourceFolders: 2, sitesBefore: 4, sitesAfter: 4, reusedIds: 4, unclassified: 1, permissionRequests: 0, idempotent: true };
+
+    // 完全扁平源兜底：没有任何原文件夹时才使用确定性本地规则拆分，仍复用旧网站对象。
+    await contextA.evaluate(({ baseUrl }) => new Promise(resolveSet => chrome.storage.local.get(['fn_config'], value => {
+      const cfg = value.fn_config;
+      const samples = [
+        ['flat-network', '用户-家里路由器', 'http://192.168.1.1/'],
+        ['flat-ai', '用户-Kimi', 'https://www.kimi.com/'],
+        ['flat-dev', '用户-GitHub', 'https://github.com/'],
+        ['flat-design', '用户-Figma', 'https://www.figma.com/'],
+        ['flat-mail', '用户-Gmail', 'https://mail.google.com/'],
+        ['flat-media', '用户-YouTube', 'https://www.youtube.com/'],
+        ['flat-other', '用户-无特征', 'https://misc.example.net/'],
+      ];
+      cfg.settings.bookmarkRecoveryV326 = true;
+      cfg.settings.bookmarkStructureRecoveryV327 = false;
+      cfg.settings.bmSync = { enabled: false };
+      cfg.groups = cfg.groups.filter(group => group.name !== 'Fu 导航');
+      cfg.groups.push({ id: 'g-flat-e2e', name: 'Fu 导航', icon: 'star', color: '#64748b', items: samples.map(([id, name, url]) => ({ id, name, url, note: `${id}-note`, icon: '' })) });
+      cfg.savedAt = Date.now() + 4000;
+      chrome.storage.local.set({ fn_config: cfg }, resolveSet);
+    })), { baseUrl: base });
+    await contextA.goto(`chrome-extension://${extensionId}/newtab.html?e2e=recovery-flat-granted`, { waitUntil: 'domcontentloaded' });
+    await contextA.waitForSelector('.lay-fusion');
+    await contextA.waitForFunction(() => new Promise(resolveGet => chrome.storage.local.get(['fn_config'], value => resolveGet(value.fn_config?.settings?.bookmarkStructureRecoveryV327 === true))));
+    const flatState = await storage(contextA, ['fn_config']);
+    const flatGroup = flatState.fn_config.groups.find(group => group.name === 'Fu 导航');
+    const flatNames = flatGroup.items.map(item => item.name);
+    assert(JSON.stringify(flatNames) === JSON.stringify(['网络与设备', 'AI 与效率', '开发工具', '设计创意', '邮箱通讯', '影音娱乐', '其他']), `flat categories mismatch: ${flatNames.join(' | ')}`);
+    const flatSites = findNodes(flatState.fn_config, item => item.id?.startsWith('flat-'));
+    assert(flatSites.length === 7 && flatSites.every(entry => entry.item.note === `${entry.item.id}-note`), 'flat classification lost existing IDs or metadata');
+    assert(flatGroup.items.every(item => item.type === 'folder' && item.bookmarkAutoCategory === true), 'flat source still contains root-level sites');
+    assert(await contextA.evaluate(() => window.__fuPermissionRequests) === 0, 'flat classification requested bookmark permission');
+    evidence.bookmarkAutoCategory = { sourceFolders: 0, categories: flatNames, sitesBefore: 7, sitesAfter: flatSites.length, reusedIds: 7, permissionRequests: 0 };
 
     assert(errors.length === 0, `console errors: ${errors.join(' | ')}`);
     console.log(JSON.stringify({ ok: true, extensionId, evidence, davRequests: davRequests.map(request => ({ method: request.method, url: request.url, bodyBytes: request.body.length })), consoleErrors: errors.length }, null, 2));
