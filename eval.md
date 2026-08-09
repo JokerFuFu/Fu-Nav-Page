@@ -594,4 +594,38 @@ criteria:
         - 搜索所有可观察载荷和输出
       expected: secrets only exist in local secret storage and authorized request header; all other outputs have zero matches
     passes: true
+
+  - id: HOTFIX-BOOKMARK-001
+    priority: P0
+    assertion: 已授权书签能力时自动选择数据量最大的 Fu 导航文件夹并无损合并，现有条目元数据不变且重复执行幂等
+    verification:
+      type: combined
+      run: node --test tests/bookmark-recovery.test.mjs
+      operation: 在真实扩展注入多份同名书签文件夹并启动两次
+      expected: largest folder selected; missing URLs added once; existing id/note preserved; second run adds 0
+    passes: false
+
+  - id: HOTFIX-LAYOUT-001
+    priority: P1
+    assertion: 首页搜索与常用区作为统一主任务块在无组件桌面视口水平和垂直居中，不满一行的常用卡片居中排列
+    verification:
+      type: combined
+      run: node --test tests/responsive-static.test.mjs
+      viewports: [1024x768, 1440x900, 2048x955, 390x844]
+      expected: desktop no-widget primary center delta <= 2px; partial favorite row centered; mobile remains top-safe; no horizontal overflow
+    passes: false
+
+  - id: HOTFIX-E2E-001
+    priority: E2E
+    assertion: 原收藏恢复与首页居中在同一真实扩展场景共同成立，不触发静默权限请求、不覆盖当前配置
+    verification:
+      type: end-to-end
+      steps:
+        - 使用全新 profile 加载扩展并预置现有导航条目
+        - 注入已授权的 Fu 导航浏览器书签文件夹
+        - 启动并等待自动恢复落盘
+        - 隐藏所有组件并在桌面宽屏检查首页几何
+        - 重载并再次检查条目数量
+      expected: current item retained; bookmark URLs imported once; no permission request; primary centered; console error count is 0
+    passes: false
 ```
