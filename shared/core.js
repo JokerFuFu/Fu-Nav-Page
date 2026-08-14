@@ -12,7 +12,8 @@ import { applyBackground, refreshOnlineBackground, effectiveTheme, DEFAULT_ONLIN
 import { ACCENTS, DEFAULT_ACCENT_ID } from './accent-presets.js';
 import { checkAllLinks as runLinkCheck, maybeAutoCheck } from './link-check.js';
 import { putBgImage, deleteBgImage } from './bg-storage.js';
-import { readFavGrid, rankFavorites, visitItem, frecencyScore, rankByClicks, rankByFrecency } from './favorites.js';
+import { readFavGrid, rankModeFavorites, visitItem, frecencyScore, rankByClicks, rankByFrecency } from './favorites.js?v=3.26.8';
+import { formatHeroClock, migrateHeroClock, normalizeHeroClock } from './hero-clock.js?v=3.26.8';
 import { setAskProvider as updateAskProvider, submitAsk as runSubmitAsk } from './provider-action.js';
 import { migrateConfig as migrateSchema } from './config-schema.js';
 import { injectSecrets } from './config-secrets.js';
@@ -111,7 +112,7 @@ class Core {
   defaults(){ return { title:'Fu.', layout:'fusion', theme:'auto', openIn:'_blank', askProvider:'bing', showClock:true, showWeather:true, showStatus:true, locked:true, cardView:'grid', modes:[], activeMode:null, sideCollapsed:false, agentPort:7842, agentToken:'fu-nav-local', cloud:{ enabled:false, type:'webdav', url:'', user:'', pass:'', gdriveClientId:'' }, bmSync:{ enabled:false }, bmSig:'',
       background:{ enabled:true, mode:'preset', presetId:'p01', onlineSrc:{id:DEFAULT_ONLINE_SOURCE}, onlineImageId:'', localImageId:'', refreshEvery:0, lastFetchAt:0, scrimOpacity:0.55 },
       accentId: 'indigo', favGrid:{cols:8,rows:2}, lastDeadCheck: 0, demoMode:false, disabledWidgets:[],
-      widgets:[{id:'w-clock',type:'clock'},{id:'w-weather',type:'weather'},{id:'w-today',type:'today',items:[],countdowns:[]}] }; }
+      heroClock:normalizeHeroClock(), widgets:[{id:'w-weather',type:'weather'},{id:'w-today',type:'today',items:[],countdowns:[]}] }; }
   migrate(){ let dirty=false; const s=this.cfg.settings||(this.cfg.settings=this.defaults()); const needsModeMigration=!Array.isArray(s.modes); for(const[k,v]of Object.entries(this.defaults())) if(s[k]===undefined)s[k]=v;
     if(s.title==='Fu 导航') s.title='Fu.';   // 品牌重塑：旧默认标题自动升级，用户自定义过的标题不动
     if(s.cloud && !s.cloud.type){ s.cloud.type='webdav'; if(s.cloud.gdriveClientId===undefined)s.cloud.gdriveClientId=''; } // 旧 cloud 配置补后端字段
@@ -126,6 +127,8 @@ class Core {
         else s.widgets.push({id:'w-today',type:'today',items:mergedItems,countdowns:mergedCountdowns});
       }
     }   // 注意：不再"没 today 就强制补 today"——那会让用户删掉的今日卡每次 migrate 又复活（今日卡与其他卡一视同仁，可删可加）
+    // 锁屏时钟是首页常驻元素，不再属于可排序小组件；迁移只移除旧 clock 记录，其他组件和首页内容原样保留。
+    if(migrateHeroClock(s)) dirty=true;
     if(s.layout==='classic'||s.layout==='homepage') s.layout='fusion'; // 旧布局并入融合版
     if(s.background && s.background.onlineCacheUrl!==undefined){   // 旧字段是"会重定向的原始地址"，语义已变，不能留着误用
       delete s.background.onlineCacheUrl;
@@ -380,8 +383,8 @@ class Core {
   async mountLayout(name){
     this.layout=name; this.settings.layout=name;
     if(!this.root){ this.root=$('#root'); }
-    try{ this.layoutMod = await import(`../layouts/${name}.js?v=3.26.5`); }
-    catch(e){ console.error('布局加载失败',name,e); if(name!=='fusion'){ this.layout='fusion'; this.settings.layout='fusion'; try{ this.layoutMod=await import('../layouts/fusion.js?v=3.26.5'); }catch{ this.layoutMod=null; } } else this.layoutMod=null; }
+    try{ this.layoutMod = await import(`../layouts/${name}.js?v=3.26.8`); }
+    catch(e){ console.error('布局加载失败',name,e); if(name!=='fusion'){ this.layout='fusion'; this.settings.layout='fusion'; try{ this.layoutMod=await import('../layouts/fusion.js?v=3.26.8'); }catch{ this.layoutMod=null; } } else this.layoutMod=null; }
     this.rerender();
     $$('.layout-switch [data-l]').forEach(b=>b.classList.toggle('on', b.dataset.l===name));
   }
@@ -437,7 +440,7 @@ class Core {
   favGrid(){ return readFavGrid(this.settings); }
   favorites(){ const all=this.allItems(), {cols,rows}=this.favGrid();
     const cm=this.groups.find(g=>/常用|收藏|favorite|book/i.test(g.name));
-    return rankFavorites(all,this.cfg.favOrder,cm?this.flatItems(cm):[],cols*rows); }
+    return rankModeFavorites(all,this.cfg.favOrder,cm?this.flatItems(cm):[],cols*rows,this.activeModeObj()); }
   /* 场景模式：模式持有分组 id，允许一个分组归属多个模式。 */
   modes(){ return listModes(this.settings); }
   archivedModes(){ return listModes(this.settings,{status:'archived'}); }
@@ -716,9 +719,9 @@ class Core {
     setTimeout(()=>{nameI.focus();markLucide();renderSug();},50); }
 
   /* 卡片增删（首页右键 / 设置共用） */
-  addWidget(type){ const ws=this.settings.widgets=(this.settings.widgets||[]); const w={id:uid('w'),type};
+  addWidget(type){ if(type==='clock')return false; const ws=this.settings.widgets=(this.settings.widgets||[]); const w={id:uid('w'),type};
     if(type==='today'){ w.items=[]; w.countdowns=[]; } if(type==='hwmon')w.url='';
-    if(type==='clock')this.settings.showClock=true; if(type==='weather')this.settings.showWeather=true;   // 加时钟/天气同时确保未被隐藏
+    if(type==='weather')this.settings.showWeather=true;   // 加天气同时确保未被隐藏
     ws.push(w); this.markUserEdited(); this.save(); this.rerender(); if(type==='hwmon') this.openHwmonEditor(w); }   // 硬件监控加完即弹端点设置
   deleteGroup(group){ const idx=this.groups.indexOf(group); if(idx<0)return false; const affected=[];
     this.allModes().forEach(mode=>{ const hadAt=(mode.groupIds||[]).indexOf(group.id); if(hadAt>=0){ affected.push({mode,hadAt}); mode.groupIds.splice(hadAt,1); } });
@@ -726,7 +729,7 @@ class Core {
     this._offerUndo(group.name+'（'+this.flatItems(group).length+' 个网站）',()=>{ this.groups.splice(idx,0,group); affected.forEach(({mode,hadAt})=>mode.groupIds.splice(hadAt,0,group.id)); this._clearDeletedGroup(group); }); return true; }
   removeWidget(id){ const ws=this.settings.widgets||[], idx=ws.findIndex(w=>w.id===id); if(idx<0)return false; const w=ws[idx];
     this._tombstones.add(id); ws.splice(idx,1); this.markUserEdited(); this.save(true); this.rerender();
-    this._offerUndo(w.type==='today'?'今日卡片':w.type==='weather'?'天气卡片':w.type==='clock'?'时钟卡片':'硬件监控卡片',()=>{ ws.splice(idx,0,w); this._tombstones.delete(id); }); return true; }
+    this._offerUndo(w.type==='today'?'今日卡片':w.type==='weather'?'天气卡片':'硬件监控卡片',()=>{ ws.splice(idx,0,w); this._tombstones.delete(id); }); return true; }
 
   /* 硬件监控卡片编辑（Glances 端点）*/
   openHwmonEditor(w){ const labelI=this.inp(w.label||'硬件监控','名称'); const urlI=this.inp(w.url||'','http://127.0.0.1:7842（本机）或 http://服务器IP:61208');
@@ -734,12 +737,12 @@ class Core {
     const save=this.btn('保存','primary',async()=>{ w.label=labelI.value.trim()||'硬件监控'; w.url=urlI.value.trim().replace(/\/+$/,''); if(w.url) await this.ensureCloudPermission(w.url); this.markUserEdited(); this.save(true); this.rerender(); this.closeModal(); });
     this.openModal('硬件监控（Glances）',[this.field('名称',labelI),this.field('Glances 端点',urlI),hint],[this.btn('取消','ghost',()=>this.closeModal()),save]); setTimeout(()=>urlI.focus(),50); }
 
-  openWidgetManager(){ const s=this.settings, ws=s.widgets||(s.widgets=[]), disabled=s.disabledWidgets||(s.disabledWidgets=[]);
-    const names={clock:'时钟与问候',weather:'天气',today:'今日',hwmon:'硬件监控'};
-    const isEnabled=w=>w.type==='clock'?s.showClock!==false:w.type==='weather'?s.showWeather!==false:!disabled.includes(w.id);
-    const setEnabled=async(w,value)=>{ if(w.type==='clock')s.showClock=value; else if(w.type==='weather'){ if(value&&!this.weather.hasConsent())await this.enableWeatherConsent(); s.showWeather=value; } else{ const at=disabled.indexOf(w.id); if(value&&at>=0)disabled.splice(at,1); if(!value&&at<0)disabled.push(w.id); }
+  openWidgetManager(){ const s=this.settings, all=s.widgets||(s.widgets=[]), ws=all.filter(w=>w.type!=='clock'), disabled=s.disabledWidgets||(s.disabledWidgets=[]);
+    const names={weather:'天气',today:'今日',hwmon:'硬件监控'};
+    const isEnabled=w=>w.type==='weather'?s.showWeather!==false:!disabled.includes(w.id);
+    const setEnabled=async(w,value)=>{ if(w.type==='weather'){ if(value&&!this.weather.hasConsent())await this.enableWeatherConsent(); s.showWeather=value; } else{ const at=disabled.indexOf(w.id); if(value&&at>=0)disabled.splice(at,1); if(!value&&at<0)disabled.push(w.id); }
       this.markUserEdited(); this.save(true); this.rerender(); this.openWidgetManager(); };
-    const move=(index,delta)=>{ const target=index+delta; if(target<0||target>=ws.length)return; [ws[index],ws[target]]=[ws[target],ws[index]];
+    const move=(index,delta)=>{ const target=index+delta; if(target<0||target>=ws.length)return; const from=all.indexOf(ws[index]),to=all.indexOf(ws[target]); [all[from],all[to]]=[all[to],all[from]];
       this.markUserEdited(); this.save(true); this.rerender(); this.openWidgetManager(); };
     const rows=ws.length?ws.map((w,index)=>{ const row=el('div','fn-widget-row');
       const info=el('div','fn-widget-info'); info.append(el('strong',null,names[w.type]||w.type),el('span',null,w.type==='hwmon'&&!String(w.url||'').trim()?'未配置端点，首页自动隐藏':'首页顺序 '+(index+1)));
@@ -781,9 +784,10 @@ class Core {
     buttons.push(this.btn('仅删除工作区','primary',async()=>{await this.deleteMode(mode.id,'detach');this.openModeManager();},'layers'));
     this.openModal('删除工作区',[hint,warning],buttons); }
   openModeEditor(mode){ if(!mode)return this.openModeManager(); const nameI=this.inp(mode.name||'','模式名称');
-    const typeName={clock:'时钟',weather:'天气',today:'今日',hwmon:'硬件监控'};
+    const typeName={weather:'天气',today:'今日',hwmon:'硬件监控'};
     const groups=this.groups.length?this.groups.map(g=>this.toggle(g.name,(mode.groupIds||[]).includes(g.id),()=>this.toggleModeGroup(mode,g.id))):[el('div','fn-hint','还没有分组可加入')];
-    const widgets=(this.settings.widgets||[]).length?this.settings.widgets.map(w=>this.toggle(typeName[w.type]||w.type,!(mode.hiddenWidgets||[]).includes(w.id),()=>this.toggleModeWidget(mode,w.id))):[el('div','fn-hint','还没有可配置的小组件')];
+    const availableWidgets=(this.settings.widgets||[]).filter(w=>w.type!=='clock');
+    const widgets=availableWidgets.length?availableWidgets.map(w=>this.toggle(typeName[w.type]||w.type,!(mode.hiddenWidgets||[]).includes(w.id),()=>this.toggleModeWidget(mode,w.id))):[el('div','fn-hint','还没有可配置的小组件')];
     const favs=this.toggle('显示常用区',mode.showFavs!==false,value=>this.setModeShowFavs(mode,value));
     const done=this.btn('完成','primary',()=>{ if(this.renameMode(mode.id,nameI.value))this.openModeManager(mode.archived?'archived':'active'); });
     this.openModal('编辑工作区',[this.field('名称',nameI),this.sect('分组',groups,true),this.sect('小组件',widgets),favs],[this.btn('返回','ghost',()=>this.openModeManager(mode.archived?'archived':'active')),done]); setTimeout(()=>nameI.focus(),50); }
@@ -850,6 +854,34 @@ class Core {
         if(wants&&!bmWas){ const cap=await this.requestCapability('bookmarks'); if(!cap.ok){ bmS.enabled=false; this.save(true); this.toast('书签权限被拒绝，核心导航不会受影响；之后可从这里再次启用','err'); this.openSettings(); return; } }
         bmS.enabled=wants; this.save(true); if(bmS.enabled&&!bmWas)await this.bmExportNow(); this.openSettings(); }) ]); }
 
+  /* 锁屏时钟编辑器：独立于首页组件，修改先在预览中生效，保存后才写入设置。 */
+  openHeroClockEditor(){ const draft=normalizeHeroClock(this.settings.heroClock);
+    const preview=el('section','fn-clock-preview'); preview.setAttribute('aria-label','锁屏时钟实时预览');
+    const date=el('div','fn-clock-preview-date'), time=el('time','fn-clock-preview-time'), greet=el('div','fn-clock-preview-greet'); preview.append(date,time,greet);
+    const customColor=this.inp(draft.customColor); customColor.type='color'; customColor.setAttribute('aria-label','时钟自定义颜色');
+    const customField=this.field('自定义颜色',customColor);
+    const renderPreview=()=>{ const config=normalizeHeroClock(draft), face=formatHeroClock(new Date(),config);
+      for(const [key,value] of Object.entries(config)) if(key!=='customColor')preview.dataset[key]=value;
+      preview.style.setProperty('--clock-manual-color',config.customColor);
+      time.textContent=face.time; time.dateTime=face.datetime; date.textContent=face.date; greet.textContent=face.greeting;
+      date.hidden=!face.showDate; greet.hidden=!face.showGreeting; customField.hidden=config.colorMode!=='custom'; };
+    const choice=(label,key,options)=>this.field(label,this.seg(options,draft[key],value=>{draft[key]=value;renderPreview();}));
+    customColor.oninput=()=>{draft.customColor=customColor.value;renderPreview();};
+    const controls=el('div','fn-clock-controls'); controls.append(
+      choice('字体','font',[['system','系统'],['rounded','圆体'],['serif','衬线'],['mono','等宽']]),
+      choice('大小','size',[['compact','紧凑'],['standard','标准'],['large','大号']]),
+      choice('字重','weight',[['light','细'],['regular','常规'],['bold','粗']]),
+      choice('形式','style',[['solid','纯色'],['shadow','阴影'],['outline','描边']]),
+      choice('时间制式','format',[['24','24 小时'],['12','12 小时']]),
+      choice('显示信息','details',[['time','仅时间'],['date','时间与日期'],['full','完整']]),
+      choice('文字颜色','colorMode',[['auto','自动'],['light','浅色'],['dark','深色'],['custom','自定义']]),
+      customField);
+    renderPreview();
+    this.openModal('自定义锁屏时钟',[preview,controls],[
+      this.btn('取消','ghost',()=>this.closeModal()),
+      this.btn('保存','primary',()=>{ this.settings.heroClock=normalizeHeroClock(draft); this.markUserEdited(); this.save(true); this.rerender(); this.closeModal(); }),
+    ],{wide:true,initialFocus:controls.querySelector('button')}); }
+
   /* 设置 —— 常用（默认展开）/ 同步与备份 / 高级 三层（S2/S7/S9）；云与书签同步收成「摘要+按钮→子弹层」（S1） */
   openSettings(){ const s=this.settings; const titleI=this.inp(s.title||'Fu 导航');
     const agentPortI=this.inp(String(s.agentPort||7842),'7842'); agentPortI.type='number'; agentPortI.min='1'; agentPortI.max='65535'; agentPortI.inputMode='numeric';
@@ -865,6 +897,9 @@ class Core {
     const addRow=el('div','fn-wrap');
     [['today','今日'],['hwmon','硬件监控'],['weather','天气']].forEach(([t,lb])=>addRow.appendChild(this.btn(lb,'ghost',()=>{ if(t==='hwmon'){this.closeModal();} this.addWidget(t); if(t!=='hwmon')this.toast('已添加「'+lb+'」卡片，首页解锁后可拖拽排序','ok'); },'plus')));
     addRow.prepend(this.btn('管理首页组件','ghost',()=>this.openWidgetManager(),'list-ordered'));
+    const clockWrap=el('div','fn-clock-settings'); clockWrap.append(
+      this.toggle('显示锁屏时钟',s.showClock!==false,value=>{s.showClock=value;}),
+      this.btn('自定义时钟','ghost',()=>this.openHeroClockEditor(),'clock'));
     // 同步摘要（渐进披露：设置里只见状态，配置进子弹层）
     const cl=s.cloud||{}; const cloudSum= cl.enabled ? ('已启用 '+(cl.type==='gdrive'?'Google Drive':'WebDAV')) : ((cl.url||cl.gdriveClientId)?'已配置，未启用':'未配置');
     const bmSum=(s.bmSync&&s.bmSync.enabled)?'已启用自动双向同步':'未启用';
@@ -920,9 +955,9 @@ class Core {
         this.field('主题',this.seg([['auto','跟随系统'],['dark','深色'],['light','浅色']],s.theme,v=>{s.theme=v;this.applyTheme();})),
         this.field('强调色',accentGrid),
         this.field('常用区布局',favGridSeg),
+        this.field('锁屏时钟',clockWrap),
       ]),
       this.sect('组件',[
-        this.toggle('显示时钟与问候',s.showClock,v=>{s.showClock=v;}),
         this.toggle('显示天气',s.showWeather,async v=>{ if(v&&!this.weather.hasConsent())await this.enableWeatherConsent(); s.showWeather=v; }),
         this.toggle('内网在线状态探测',s.showStatus,v=>{s.showStatus=v;}),
         el('div','fn-sub','添加卡片（或在首页解锁后右键卡片区添加）'), addRow,

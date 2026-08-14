@@ -12,11 +12,17 @@
     "showWeather": true,
     "demoMode": true,
     "agentPort": 7842,
+    "heroClock": {
+      "font": "system",
+      "size": "standard",
+      "weight": "regular",
+      "style": "shadow",
+      "format": "24",
+      "details": "full",
+      "colorMode": "auto",
+      "customColor": "#f5f7ff"
+    },
     "widgets": [
-      {
-        "id": "w-clock",
-        "type": "clock"
-      },
       {
         "id": "w-weather",
         "type": "weather"

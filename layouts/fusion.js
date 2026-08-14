@@ -1,11 +1,12 @@
-/* ============ 融合布局 v3.1：极简AI首页 + 时钟/天气卡 + 右键编辑 + 拖拽 ============ */
-import { $, $$, el, safeHref } from '../shared/core.js?v=3.26.5';
+/* ============ 融合布局 v3.1：极简AI首页 + 锁屏时钟 + 右键编辑 + 拖拽 ============ */
+import { $, $$, el, safeHref } from '../shared/core.js?v=3.26.8';
 import { dashboardIcon, lucide } from '../shared/icon-map.js?v=3.26.3';
 import { fetchGlances } from '../shared/hwmon.js';
 import { PRESETS } from '../shared/bg-presets.js';
 import { effectiveTheme, ONLINE_SOURCES, DEFAULT_ONLINE_SOURCE } from '../shared/background.js';
 import { filterContent, filterKeyAction } from '../shared/provider-action.js';
-import { homeDensity, visibleWidgets } from '../shared/home-settings.js';
+import { homeDensity, visibleWidgets } from '../shared/home-settings.js?v=3.26.8';
+import { formatHeroClock, normalizeHeroClock } from '../shared/hero-clock.js?v=3.26.8';
 const picon = p => (p.icon && p.icon.startsWith('http')) ? p.icon : dashboardIcon(p.icon);
 let active='home', clockTimer=null, drag=null, clockEls=null, ctxMenu=null, ctxTrigger=null, askOutsideHandler=null, sidebarOpen=false;
 
@@ -172,6 +173,7 @@ function renderHome(core,main){
   if(!priv) home.appendChild(buildBgTrigger(core));   // 背景切换悬浮入口（隐私模式不显示，减少干扰）
   if(!priv && core.settings.demoMode) home.appendChild(buildDemoBadge(core));
   const primary=el('div','fx-home-primary');
+  if(!priv && core.settings.showClock!==false) primary.appendChild(buildHeroClock(core));
   primary.appendChild(buildAsk(core));               // 搜索是首页第一任务
   if(!priv && !(am&&am.showFavs===false)){ const favs=core.favorites(), grid=core.favGrid();
     if(favs.length){
@@ -259,10 +261,10 @@ function toggleBgPanel(core, anchor){
   const presetValues=new Set([0,15,60,720,1440,10080]), refresh=Number(bg.refreshEvery)||0, refreshKey=presetValues.has(refresh)?String(refresh):'custom';
   const customMinutes=core.inp(refreshKey==='custom'?String(refresh):'','分钟数'); customMinutes.type='number'; customMinutes.min='1'; customMinutes.step='1'; customMinutes.setAttribute('aria-label','壁纸自动更新分钟数');
   const customRefresh=el('div','fx-bg-custom fn-field');
-  const applyMinutes=core.btn('应用分钟数','ghost',()=>{ const n=Math.floor(Number(customMinutes.value)); if(!(n>0)){status.textContent='请输入大于 0 的分钟数';return;} bg.refreshEvery=n; core.save(true); status.textContent='已设为每 '+n+' 分钟检查一次'; },'timer-reset');
+  const applyMinutes=core.btn('应用分钟数','ghost',()=>{ const n=Math.floor(Number(customMinutes.value)); if(!(n>0)){status.textContent='请输入大于 0 的分钟数';return;} bg.refreshEvery=n; core.save(true); core.applyBackground(true); status.textContent='已设为每 '+n+' 分钟检查一次'; },'timer-reset');
   customRefresh.append(customMinutes,applyMinutes); customRefresh.hidden=refreshKey!=='custom';
   const refreshSeg=core.seg([['0','仅手动'],['15','15 分钟'],['60','1 小时'],['720','12 小时'],['1440','1 天'],['10080','7 天'],['custom','自定义']],refreshKey,v=>{
-    customRefresh.hidden=v!=='custom'; if(v!=='custom'){ bg.refreshEvery=Number(v); core.save(true); status.textContent=v==='0'?'已设为仅手动更新':'更新频率已保存'; }
+    customRefresh.hidden=v!=='custom'; if(v!=='custom'){ bg.refreshEvery=Number(v); core.save(true); core.applyBackground(true); status.textContent=v==='0'?'已设为仅手动更新':'更新频率已保存'; }
   });
   const refreshWrap=el('div','fx-bg-refresh'); refreshWrap.append(refreshSeg,customRefresh); panel.appendChild(refreshWrap);
   const actions=el('div','fn-wrap');
@@ -330,7 +332,7 @@ function buildAsk(core){
   return wrap;
 }
 
-/* ---------- 卡片：时钟 / 天气 / 待办 / 倒数日（可拖拽重排、可增删）---------- */
+/* ---------- 卡片：天气 / 待办 / 倒数日（可拖拽重排、可增删）---------- */
 function buildWidgetCards(core, priv){
   const row=el('div','fx-wcards');
   const am=core.activeModeObj(), hidden=(am&&am!=='privacy')?(am.hiddenWidgets||[]):[];
@@ -339,7 +341,6 @@ function buildWidgetCards(core, priv){
     if(priv && w.type!=='weather') return;   // 隐私模式只留天气
     let card=null;
     switch(w.type){
-      case 'clock':     card=buildHeroClock(core); break;
       case 'weather':   card=widgetWeather(core); break;
       case 'today':     card=widgetToday(core,w); break;
       case 'hwmon':     card=widgetHwmon(core,w); break;
@@ -383,7 +384,14 @@ function decorateWidget(core, card, w){
   card.addEventListener('contextmenu',e=>widgetMenu(core,e,w));
   return card;
 }
-function buildHeroClock(core){ const c=el('div','fx-wcard fx-hero-clock'); const t=el('div','fx-hero-time'),d=el('div','fx-hero-date'),g=el('div','fx-hero-greet'); c.append(t,d,g); clockEls={time:t,date:d,greet:g}; startClock(core); return c; }
+function buildHeroClock(core){ const config=normalizeHeroClock(core.settings.heroClock), c=el('section','fx-lock-clock');
+  c.setAttribute('aria-label','当前日期与时间');
+  for(const [key,value] of Object.entries(config)) if(key!=='customColor')c.dataset[key]=value;
+  c.style.setProperty('--clock-manual-color',config.customColor);
+  const d=el('div','fx-lock-date'),t=el('time','fx-lock-time'),g=el('div','fx-lock-greet'); c.append(d,t,g);
+  clockEls={time:t,date:d,greet:g}; startClock(core);
+  c.addEventListener('contextmenu',event=>{ event.preventDefault(); event.stopPropagation(); showCtx(event.clientX,event.clientY,[{ic:'settings-2',label:'自定义时钟',on:()=>core.openHeroClockEditor()}],c); });
+  return c; }
 function widgetWeather(core){ const c=el('div','fx-wcard fx-wc-weather'); c.textContent='天气加载中…'; fillWeather(core,c); return c; }
 /* "今日"卡片：待办 + 倒数日（可多条）+ 日历（只读，来自本机伴随服务），三节纵向堆叠 */
 function widgetToday(core,w){
@@ -721,10 +729,10 @@ function mico(name,size){ const s=el('span','lucide-mask'); s.style.webkitMaskIm
 function gbtn(ic,title,on){ const b=el('button','fx-gbtn'); b.title=title; b.onclick=on;
   const s=el('span','fx-gbtn-ico lucide-mask'); s.style.webkitMaskImage=s.style.maskImage=`url("${lucide(ic)}")`; s.style.background='currentColor'; b.appendChild(s); return b; }
 function startClock(core){
-  const tick=()=>{ if(!clockEls)return; const d=new Date(),p=n=>String(n).padStart(2,'0');
-    if(!core.settings.showClock){ clockEls.time.textContent=''; clockEls.date.textContent=''; clockEls.greet.textContent=''; return; }
-    clockEls.time.textContent=`${p(d.getHours())}:${p(d.getMinutes())}`;
-    const wk=['日','一','二','三','四','五','六'][d.getDay()]; clockEls.date.textContent=`${d.getMonth()+1}月${d.getDate()}日 周${wk}`;
-    const h=d.getHours(); clockEls.greet.textContent=h<6?'夜深了':h<11?'早上好':h<14?'中午好':h<18?'下午好':h<22?'晚上好':'夜深了'; };
+  if(clockTimer)clearInterval(clockTimer);
+  const tick=()=>{ if(!clockEls)return; const face=formatHeroClock(new Date(),core.settings.heroClock);
+    clockEls.time.textContent=face.time; clockEls.time.dateTime=face.datetime;
+    clockEls.date.textContent=face.date; clockEls.greet.textContent=face.greeting;
+    clockEls.date.hidden=!face.showDate; clockEls.greet.hidden=!face.showGreeting; };
   tick(); clockTimer=setInterval(tick,1000*15);
 }

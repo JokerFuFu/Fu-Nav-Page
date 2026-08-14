@@ -79,8 +79,8 @@ test('drawer and new motion states are neutralized by reduced motion', () => {
   assert.match(css, /@media \(prefers-reduced-motion:\s*reduce\)\{[\s\S]*?\.fx-side[\s\S]*?transition-duration:\.01ms\s*!important/);
 });
 
-test('popup shrinks below its preferred extension width without clipping actions', () => {
-  assert.match(popupCss, /width:min\(420px,100vw\)/);
-  assert.match(popupCss, /max-width:100vw/);
+test('action popup declares a stable preferred width without viewport-unit negotiation', () => {
+  assert.match(popupCss, /body\s*\{[^}]*width:420px/);
+  assert.doesNotMatch(popupCss, /body\s*\{[^}]*\b(?:min-|max-)?width:[^;}]*vw/);
   assert.match(popupCss, /overflow-x:hidden/);
 });

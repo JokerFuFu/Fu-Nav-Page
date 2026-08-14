@@ -659,4 +659,13 @@ criteria:
       run: node --test tests/bookmark-recovery.test.mjs
       expected: representative AI, development, design, media, mail, network and unknown sites enter deterministic folders; existing site ids and metadata remain unchanged; second run is idempotent
     passes: true
+
+  - id: HOTFIX-POPUP-WIDTH-001
+    priority: P1
+    assertion: Chrome 工具栏收藏 popup 使用稳定的合理宽度，标题、双列表单和底部主操作不再因根视口收缩而逐字换行或被裁切
+    verification:
+      type: combined
+      run: node --test tests/responsive-static.test.mjs && node tools/popup-layout-check.cjs .
+      expected: static popup width rule PASS; real action popup innerWidth is 400–440px; title height <= 24px; primary action is fully visible
+    passes: true
 ```

@@ -13,7 +13,6 @@ test('uses compact home below laptop height and mobile layout by width', () => {
 
 test('hides unconfigured hardware and preserves configured widget order', () => {
   const settings = {
-    showClock: true,
     showWeather: true,
     widgets: [
       { id: 'w1', type: 'hwmon', url: '' },
@@ -23,12 +22,12 @@ test('hides unconfigured hardware and preserves configured widget order', () => 
     ],
   };
 
-  assert.deepEqual(visibleWidgets(settings).map((widget) => widget.id), ['w2', 'w3', 'w4']);
+  assert.deepEqual(visibleWidgets(settings).map(widget => widget.id), ['w2', 'w3']);
 });
 
-test('honors component toggles without deleting their persisted order', () => {
+test('honors component toggles and never renders a legacy clock as a component', () => {
   const settings = {
-    showClock: false,
+    showClock: true,
     showWeather: false,
     disabledWidgets: ['w-today'],
     widgets: [
@@ -39,14 +38,15 @@ test('honors component toggles without deleting their persisted order', () => {
   };
 
   assert.deepEqual(visibleWidgets(settings), []);
-  assert.deepEqual(settings.widgets.map((widget) => widget.id), ['w-today', 'w-clock', 'w-weather']);
+  assert.deepEqual(settings.widgets.map(widget => widget.id), ['w-today', 'w-clock', 'w-weather']);
 });
 
-test('default seed is an explicit demo without hardware monitoring', async () => {
+test('default seed is an explicit demo without legacy clock or hardware components', async () => {
   const seed = JSON.parse(await readFile(new URL('../data/seed.json', import.meta.url), 'utf8'));
   assert.equal(seed.settings.demoMode, true);
-  assert.deepEqual(seed.settings.widgets.map((widget) => widget.type), ['clock', 'weather', 'today']);
-  assert.equal(seed.settings.widgets.some((widget) => widget.type === 'hwmon'), false);
-  const pinned = seed.groups.flatMap((group) => group.items).filter((item) => item.fav === true);
+  assert.deepEqual(seed.settings.widgets.map(widget => widget.type), ['weather', 'today']);
+  assert.equal(seed.settings.heroClock.colorMode, 'auto');
+  assert.equal(seed.settings.widgets.some(widget => widget.type === 'hwmon'), false);
+  const pinned = seed.groups.flatMap(group => group.items).filter(item => item.fav === true);
   assert.ok(pinned.length >= 8, 'seed must fill the first row of the default 8-column favorites grid');
 });

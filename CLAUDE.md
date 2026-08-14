@@ -53,3 +53,4 @@
 - 2026-08-09 ES Module 的 URL（含 query）参与模块身份：`newtab.html` 的 core 入口与 `layouts/fusion.js` 对 core 的 import 必须是**完全相同的版本 URL**，否则同一模块会实例化两次、重复 boot 和注册 storage listener。版本升级时同步改两处，并由 `tests/offline-static.test.mjs` 守住。
 - 2026-08-09 树节点的新增、编辑、删除、移动必须走 `shared/tree-ops.js` 的稳定 ID 递归操作；popup 目标选择也必须列出可保存的所有嵌套文件夹。不要再写只扫描 `group.items` 第一层的局部遍历。
 - 2026-08-09 模态、菜单、抽屉和表单统一满足可访问基元：可访问名称、`role=dialog`、焦点约束/归还、Escape 关闭、背景 inert、密码字段不明文、390/760/1024 宽度无横向溢出；视觉改动后跑五宽度八表面的矩阵，不把人工验收转交给用户。
+- 2026-08-10 Chrome action popup 的首选尺寸不能写 `width:min(420px,100vw)` / `max-width:100vw`：popup 初始 viewport 依赖内容尺寸，`vw` 会形成尺寸协商循环并收缩到内容最小宽度；根页面用明确 `420px`，响应式只约束内部内容。

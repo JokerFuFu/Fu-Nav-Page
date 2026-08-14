@@ -39,3 +39,11 @@ export function rankFavorites(all,favOrder,fallback,cap,now=Date.now()){
   (fallback||[]).forEach(x=>add(x,false));
   return out.slice(0,cap);
 }
+
+export function rankModeFavorites(all,favOrder,fallback,cap,mode,now=Date.now()){
+  if(mode==='privacy')return [];
+  if(!mode)return rankFavorites(all,favOrder,fallback,cap,now);
+  const allowed=new Set(Array.isArray(mode.groupIds)?mode.groupIds:[]);
+  const inMode=entries=>(entries||[]).filter(entry=>allowed.has(entry?.group?.id));
+  return rankFavorites(inMode(all),favOrder,inMode(fallback),cap,now);
+}

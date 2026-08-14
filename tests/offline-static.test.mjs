@@ -26,6 +26,42 @@ test('the layout reuses the exact core module URL so boot runs only once', async
   assert.equal(dependency, entry);
 });
 
+test('homepage hotfix modules share the entry cache version in long-lived Chrome profiles', async () => {
+  const [newtab, core, fusion] = await Promise.all([read('newtab.html'), read('shared/core.js'), read('layouts/fusion.js')]);
+  const version = newtab.match(/src=["']shared\/core\.js\?v=([^"']+)["']/)?.[1];
+  assert.ok(version, 'newtab core entry must have an explicit cache version');
+  assert.match(core, new RegExp(`from ['"]\\./favorites\\.js\\?v=${version.replaceAll('.', '\\.')}`));
+  assert.match(core, new RegExp(`from ['"]\\./hero-clock\\.js\\?v=${version.replaceAll('.', '\\.')}`));
+  assert.match(core, new RegExp(`layouts/\\$\\{name\\}\\.js\\?v=${version.replaceAll('.', '\\.')}`));
+  assert.match(fusion, new RegExp(`from ['"]\\.\\./shared/home-settings\\.js\\?v=${version.replaceAll('.', '\\.')}`));
+  assert.match(fusion, new RegExp(`from ['"]\\.\\./shared/hero-clock\\.js\\?v=${version.replaceAll('.', '\\.')}`));
+});
+
+test('lock screen clock is a permanent hero above search and outside widget lifecycle', async () => {
+  const [core, fusion] = await Promise.all([read('shared/core.js'), read('layouts/fusion.js')]);
+  const renderHome = fusion.match(/function renderHome\(core,main\)\{[\s\S]*?(?=\nfunction buildDemoBadge)/)?.[0] || '';
+  const widgets = fusion.match(/function buildWidgetCards\(core, priv\)\{[\s\S]*?(?=\n\/\* 卡片本身)/)?.[0] || '';
+  const hero = fusion.match(/function buildHeroClock\(core\)\{[\s\S]*?(?=\nfunction widgetWeather)/)?.[0] || '';
+
+  assert.ok(renderHome.indexOf('buildHeroClock(core)') < renderHome.indexOf('buildAsk(core)'), 'clock must render before search');
+  assert.doesNotMatch(hero, /fx-wcard/);
+  assert.doesNotMatch(widgets, /case ['"]clock['"]/);
+  assert.match(core, /migrateHeroClock\(s\)/);
+  assert.doesNotMatch(core, /ensureClockWidget|setClockEnabled|clockEnabled/);
+  assert.match(core, /显示锁屏时钟/);
+  assert.match(core, /自定义时钟/);
+});
+
+test('wallpaper refresh frequency changes resync the active homepage schedule', async () => {
+  const fusion = await read('layouts/fusion.js');
+  const start = fusion.indexOf("const applyMinutes=core.btn('应用分钟数'");
+  const end = fusion.indexOf("const refreshWrap=el('div','fx-bg-refresh')", start);
+  assert.ok(start >= 0 && end > start, 'wallpaper refresh settings section is missing');
+  const refreshSettings = fusion.slice(start, end);
+  assert.equal((refreshSettings.match(/core\.applyBackground\(true\)/g)||[]).length, 2,
+    'preset and custom refresh frequency saves must both resync the homepage scheduler');
+});
+
 test('core and arbitrary group icons resolve to bundled data URLs', async () => {
   const { lucide, LOCAL_LUCIDE_NAMES } = await import('../shared/icon-map.js');
   for (const name of ['server', 'folder', 'search', 'settings', 'menu', 'cloud-rain', 'unknown-user-icon']) {

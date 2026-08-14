@@ -6,10 +6,72 @@
  */
 import { PRESETS } from './bg-presets.js';
 import { putBgImage, deleteBgImage, bgObjectURL } from './bg-storage.js';
+import { chooseHeroClockTone, sampleCoverRegionLuminance } from './hero-clock.js?v=3.26.8';
 
 export const DEFAULT_ONLINE_SOURCE='ycy';
-let autoRefreshInFlight=null;
+let clockToneTicket=0;
 const previewMode=()=>typeof chrome==='undefined'||!(chrome.storage&&chrome.storage.local);
+
+function refreshIntervalMs(bg){
+  const minutes=Number(bg&&bg.refreshEvery);
+  return Number.isFinite(minutes)&&minutes>0 ? minutes*60000 : 0;
+}
+
+/* 首页在线壁纸使用一次性 timer，而不是 setInterval：每轮都从持久化的 lastFetchAt
+ * 重新计算，刷新耗时、页面休眠或用户改频率都不会让计划越跑越偏。时钟边界可注入，
+ * 让“15 分钟就是 15 分钟”不依赖真实等待即可回归验证。 */
+export function createOnlineRefreshScheduler(options={}){
+  const now=options.now||(()=>Date.now());
+  const setTimer=options.setTimer||((fn,delay)=>setTimeout(fn,delay));
+  const clearTimer=options.clearTimer||(id=>clearTimeout(id));
+  let current=null, timer=null, running=false, retryAt=0;
+
+  const eligible=state=>{
+    const bg=state&&state.background;
+    return !!(state&&state.onHome&&bg&&bg.enabled&&bg.mode==='online'&&refreshIntervalMs(bg)>0&&typeof state.refresh==='function');
+  };
+  const clear=()=>{ if(timer!==null){ clearTimer(timer); timer=null; } };
+  const plan=()=>{
+    clear();
+    if(running||!eligible(current))return;
+    const interval=refreshIntervalMs(current.background);
+    const lastFetch=Number(current.background.lastFetchAt)||0;
+    const target=retryAt||lastFetch+interval;
+    const delay=Math.max(0,target-now());
+    timer=setTimer(async()=>{
+      timer=null;
+      const job=current;
+      if(running||!eligible(job)){ plan(); return; }
+      running=true;
+      let result;
+      try{ result=await job.refresh(); }catch{ result={ok:false}; }
+      running=false;
+      // 设置/路由在请求期间发生变化时，sync 已经给出更新后的计划，不沿用旧任务的失败时间。
+      if(current===job)retryAt=result&&result.ok?0:now()+refreshIntervalMs(job.background);
+      plan();
+    },delay);
+  };
+
+  return {
+    sync(state){ current=state||null; retryAt=0; plan(); },
+    stop(){ current=null; retryAt=0; clear(); },
+  };
+}
+
+const autoRefreshScheduler=createOnlineRefreshScheduler();
+
+function syncOnlineRefresh(core,onHome,bg){
+  autoRefreshScheduler.sync({
+    onHome,
+    background:bg,
+    refresh:async()=>{
+      const result=await refreshOnlineBackground(core,bg.onlineSrc||{id:DEFAULT_ONLINE_SOURCE},{apply:false});
+      // 自动更新写入缓存后必须重画当前首页；若期间已离开首页，则只保留缓存供下次进入使用。
+      if(result.ok&&core._onHome===true)await applyBackground(core,true);
+      return result;
+    },
+  });
+}
 
 /* 当前"生效"的主题（auto 时看系统偏好），供预置图挑选深/浅变体、强调色复用 */
 export function effectiveTheme(core){
@@ -27,9 +89,12 @@ export function resolveBackgroundScrim(theme, requested){
 export async function applyBackground(core, onHome){
   const bg = core.settings.background;
   const body = document.body;
+  syncOnlineRefresh(core,onHome,bg);
   if(!onHome || !bg || !bg.enabled || bg.mode==='none'){
+    clockToneTicket++;
     body.classList.remove('bg-photo');
     body.style.removeProperty('--fx-bg-img');
+    body.removeAttribute('data-clock-tone');
     return;
   }
   let url = null;
@@ -45,10 +110,6 @@ export async function applyBackground(core, onHome){
       bg.presetId = bg.presetId || 'p01';
       const dp = PRESETS.find(x=>x.id===bg.presetId)||PRESETS[0]; url = dp[effectiveTheme(core)] || dp.dark;
     }
-    if(isOnlineRefreshDue(bg) && !autoRefreshInFlight){
-      autoRefreshInFlight=refreshOnlineBackground(core,bg.onlineSrc||{id:DEFAULT_ONLINE_SOURCE},{apply:false})
-        .catch(()=>null).finally(()=>{autoRefreshInFlight=null;});
-    }
   } else if(bg.mode==='local'){
     url = await bgObjectURL(bg.localImageId);
     if(!url){ // 换设备后本机没有这张图 → 静默降级为预置默认图
@@ -56,13 +117,22 @@ export async function applyBackground(core, onHome){
       const dp = PRESETS.find(x=>x.id===bg.presetId)||PRESETS[0]; url = dp[effectiveTheme(core)] || dp.dark;
     }
   }
-  if(!url){ body.classList.remove('bg-photo'); body.style.removeProperty('--fx-bg-img'); return; }
+  if(!url){ clockToneTicket++; body.classList.remove('bg-photo'); body.style.removeProperty('--fx-bg-img'); body.removeAttribute('data-clock-tone'); return; }
   // 相对路径转绝对 URL：--fx-bg-img 经 var() 代入 base.css 时，相对 url() 会以样式表(/shared/)为基准
   // 解析而非文档根，导致 /shared/icons/... 404（扩展环境同理）；blob:/http(s):/data: 已是绝对，原样保留。
   const absUrl = /^(?:https?:|blob:|data:)/.test(url) ? url : new URL(url, document.baseURI).href;
   body.style.setProperty('--fx-bg-img', `url("${absUrl}")`);
-  body.style.setProperty('--fx-bg-scrim', String(resolveBackgroundScrim(effectiveTheme(core),bg.scrimOpacity)));
+  const theme=effectiveTheme(core), scrim=resolveBackgroundScrim(theme,bg.scrimOpacity);
+  body.style.setProperty('--fx-bg-scrim', String(scrim));
   body.classList.add('bg-photo');
+  // 取样异步期间先用主题安全回退；票据保证快速换图时只有最后一张能改写颜色。
+  const ticket=++clockToneTicket;
+  body.dataset.clockTone=theme==='dark'?'light':'dark';
+  const region=innerWidth>760?{x:.28,y:.03,width:.56,height:.3}:{x:.12,y:.03,width:.76,height:.3};
+  const luminance=await sampleCoverRegionLuminance(absUrl,{region});
+  if(ticket!==clockToneTicket || !body.classList.contains('bg-photo'))return;
+  const tone=chooseHeroClockTone({luminance,scrimOpacity:scrim*.72});
+  if(tone)body.dataset.clockTone=tone.tone;
 }
 
 /* ---- 在线源 ---- */
