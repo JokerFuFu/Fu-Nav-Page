@@ -16,8 +16,10 @@ export function wmo(code, isDay){ const e=WMO[code]||WMO[3]; return { text:e[0],
 const CACHE_KEY='fn_weather', LOC_KEY='fn_geo', TTL=20*60*1000;
 const j = s => { try{return JSON.parse(s);}catch{return null;} };
 
-async function geo(){
-  const c=j(localStorage.getItem(LOC_KEY));
+const browserStorage = () => typeof localStorage !== 'undefined' ? localStorage : { getItem:()=>null, setItem:()=>{}, removeItem:()=>{} };
+
+async function geo(storage, fetcher){
+  const c=j(storage.getItem(LOC_KEY));
   if(c && c.lat) return c;
   // 用本身支持 CORS(Access-Control-Allow-Origin:*) 的定位源，扩展里直接可用、不依赖 host 授权。
   // 不用 ipapi.co —— 它会限流(429)且不稳。
@@ -26,22 +28,24 @@ async function geo(){
     ['https://get.geojs.io/v1/ip/geo.json', d=>(d && d.latitude)?{lat:+d.latitude, lon:+d.longitude, city:d.city||''}:null],
   ];
   for(const [url,pick] of srcs){
-    try{ const r=await fetch(url); if(!r.ok) continue; const loc=pick(await r.json());
-      if(loc && loc.lat){ localStorage.setItem(LOC_KEY, JSON.stringify(loc)); return loc; } }catch{}
+    try{ const r=await fetcher(url); if(!r.ok) continue; const loc=pick(await r.json());
+      if(loc && loc.lat){ storage.setItem(LOC_KEY, JSON.stringify(loc)); return loc; } }catch{}
   }
   return null;
 }
 
-export async function getWeather(force){
-  const cached=j(localStorage.getItem(CACHE_KEY));
+export async function getWeather(force, options={}){
+  if(options.consent!==true) return null;
+  const storage=options.storage||browserStorage(), fetcher=options.fetcher||fetch;
+  const cached=j(storage.getItem(CACHE_KEY));
   if(!force && cached && (Date.now()-cached.ts)<TTL) return cached.data;
-  const loc = (cached && cached.data && cached.data.lat) ? cached.data : await geo();
+  const loc = (cached && cached.data && cached.data.lat) ? cached.data : await geo(storage,fetcher);
   if(!loc || !loc.lat) return cached ? cached.data : null;
   const u=`https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}`
     +`&current=temperature_2m,apparent_temperature,is_day,weather_code,relative_humidity_2m,wind_speed_10m`
     +`&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=5`;
   try{
-    const r=await fetch(u); const d=await r.json(); const c=d.current;
+    const r=await fetcher(u); const d=await r.json(); const c=d.current;
     const data={
       lat:loc.lat, lon:loc.lon, city:loc.city,
       temp:Math.round(c.temperature_2m), feels:Math.round(c.apparent_temperature),
@@ -50,7 +54,7 @@ export async function getWeather(force){
       daily:(d.daily.time||[]).slice(0,5).map((t,i)=>({date:t, code:d.daily.weather_code[i], hi:Math.round(d.daily.temperature_2m_max[i]), lo:Math.round(d.daily.temperature_2m_min[i])})),
       ...wmo(c.weather_code, c.is_day),
     };
-    localStorage.setItem(CACHE_KEY, JSON.stringify({ts:Date.now(), data}));
+    storage.setItem(CACHE_KEY, JSON.stringify({ts:Date.now(), data}));
     return data;
   }catch{ return cached ? cached.data : null; }
 }

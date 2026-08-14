@@ -13,8 +13,9 @@
 
 ## 工程纪律
 
-- 本项目**没有自动化测试**。改完用 `python3 -m http.server 8000` + 打开 `newtab.html` 手动验证；`shared/storage.js` 非扩展环境自动走 localStorage + `data/seed.json`，不用打桩 chrome API。
-- 只在真实扩展环境（`chrome://extensions` 加载已解压）才能测：书签双向同步(`chrome.bookmarks`)、跨域授权(`chrome.permissions`)、本机 agent 的 LNA 行为——预览服务器测不出。
+- 项目有三层自动验收：`npm test` 跑 Node 单元/静态规则，`npm run verify:static` 跑敏感字段、权限和三件套合约检查，`npm run verify:e2e` 用全新临时 Chromium profile 加载真实扩展，跑 newtab、popup、background、storage、WebDAV 与凭据边界组合场景。`tools/offline-browser-check.cjs` 负责断网图标与核心页面补充检查；不能用预览页通过代替扩展 E2E。
+- 自主功能任务必须先读 spec/plan/eval 三件套。spec 定义建什么，plan 定义怎么建，`eval.md` 是完成的唯一标准；eval 的 ID、断言、验证方式和阈值只增不删不改，只能在实际证据通过后切换 `passes`。至少保留一条跨 newtab、popup、background 和 storage 的组合判据。
+- 书签双向同步(`chrome.bookmarks`)、跨域授权(`chrome.permissions`)、本机 agent 的 LNA 行为只能在加载已解压的真实扩展上下文验证。原生权限气泡无法由无头浏览器操作时，自动 E2E 可在真实扩展页面只替换权限 API 边界，必须在验收记录明确标注，不能宣称验证了浏览器原生气泡 UI。
 - 无构建步骤：纯 ES modules，改完刷新即生效；但无头预览有模块缓存，换 JS/CSS 后要**重启**预览浏览器进程再截图，不能只 reload。
 - `codex-image-runs/`、`/*.png` 已 gitignore，不要手动提交截图/出图产物。
 - 提交信息用中文、`feat:/fix:/docs:/chore:` 前缀，一类改动一笔提交。
@@ -47,3 +48,9 @@
 - 2026-07-09 「删了又复活」四轮排查的两条铁律：① **migrate() 里不许写"缺默认件就补回"的常驻兜底**（`没 today 就 push today` 让用户每次删除都在下次加载被复活；默认件只属于 seed/一次性迁移）。② **数据同步不许有任何"后台自动覆盖本地"的路径**——sync/local/云端多源 + savedAt 裁决 + add-only 合并 = 删除必然复活。现架构：`chrome.storage.local` 唯一权威、sync 只做新设备引导快照(60s 节流镜像)、WebDAV 云端**手动**「从云恢复」拉取；popup 增删经 `fn_inbox` 增量收件箱 + 会话墓碑兑现，不整份 diff 合并。新增任何同步/合并逻辑前先对照这条。
 - 2026-07-09 排查数据"幽灵复活"类 bug 时，**先查数据初始化/迁移逻辑（migrate/defaults/seed），再查同步**——本次被同步表象带偏四轮补丁，真凶是 migrate 一行强制补卡；「配置里没有它、界面上却有」十有八九是渲染层/迁移层自己造的（agent 派生卡、migrate 补默认件），不是存储层。
 - 2026-07-13 秒级异步操作（在线壁纸拉取这类先网络后落盘）两条硬规矩：① 反馈落在**被点控件上**（就地 spinner，DESIGN.md 动效分层 spinner 档）——只更新面板远处的 status 文本等于零反馈，用户感知为"点了没反应/特别慢"；② 加模块级 ticket **last-wins**——等待期间用户改点新目标，旧请求完成后不许回头覆盖 settings（旧代码"先点慢源再点快源→慢源迟到反而胜出"已实测复现）。另：预览环境模块缓存验证不到新 JS 时，给 launch.json 换个端口（新 origin 缓存全新）比重启浏览器进程更省事。
+- 2026-08-09 配置与 secret 必须分层：同步、导出、云端正文和诊断只接收 `sanitizeConfig` 后的安全配置；WebDAV user/pass、Agent Token 只存本机 `fn_secrets_v1`，运行时通过 `injectSecrets` 回注。新增凭据字段时必须同时补 secret 扫描 E2E，不能只靠 UI 隐藏。
+- 2026-08-09 `chrome.storage.local` 是唯一权威源，`sync` 只是节流的新设备引导快照。跨标签旧编辑器保存前必须基于最新 local 重放本次稳定-ID操作，并 `await save(true)` 后再关闭编辑器；否则 storage 事件可能先采用远端配置，或旧上下文整份覆盖并复活删除项。
+- 2026-08-09 ES Module 的 URL（含 query）参与模块身份：`newtab.html` 的 core 入口与 `layouts/fusion.js` 对 core 的 import 必须是**完全相同的版本 URL**，否则同一模块会实例化两次、重复 boot 和注册 storage listener。版本升级时同步改两处，并由 `tests/offline-static.test.mjs` 守住。
+- 2026-08-09 树节点的新增、编辑、删除、移动必须走 `shared/tree-ops.js` 的稳定 ID 递归操作；popup 目标选择也必须列出可保存的所有嵌套文件夹。不要再写只扫描 `group.items` 第一层的局部遍历。
+- 2026-08-09 模态、菜单、抽屉和表单统一满足可访问基元：可访问名称、`role=dialog`、焦点约束/归还、Escape 关闭、背景 inert、密码字段不明文、390/760/1024 宽度无横向溢出；视觉改动后跑五宽度八表面的矩阵，不把人工验收转交给用户。
+- 2026-08-10 Chrome action popup 的首选尺寸不能写 `width:min(420px,100vw)` / `max-width:100vw`：popup 初始 viewport 依赖内容尺寸，`vw` 会形成尺寸协商循环并收缩到内容最小宽度；根页面用明确 `420px`，响应式只约束内部内容。

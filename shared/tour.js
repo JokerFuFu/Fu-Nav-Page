@@ -36,7 +36,7 @@ export function startTour(core){
   let index=0, current=null, finished=false;
   const mask=document.createElement('div'),pop=document.createElement('section'); mask.className='fn-tour-mask'; pop.className='fn-tour-pop';
   const clearStep=async()=>{ if(!current)return; current.el?.classList.remove('fn-tour-hl'); current.el?.closest('.fn-backdrop')?.classList.remove('fn-tour-elevated'); if(current.step.cleanup)await current.step.cleanup(core); current=null; };
-  const done=async()=>{ if(finished)return; finished=true; await clearStep(); mask.remove(); pop.remove(); window.removeEventListener('resize',draw); document.removeEventListener('keydown',key); core.settings.onboarded=true; core.save(true); };
+  const done=async()=>{ if(finished)return; finished=true; await clearStep(); mask.remove(); pop.remove(); window.removeEventListener('resize',draw); document.removeEventListener('keydown',key); core.settings.onboarded=true; core.settings.demoMode=false; core.save(true); core.rerender(); };
   const key=e=>{ if(e.key==='Escape')done(); };
   const advance=async delta=>{ index=Math.max(0,Math.min(STEPS.length-1,index+delta)); await draw(); };
   const draw=async()=>{ if(finished)return; await clearStep(); const step=STEPS[index]; if(step.before)await step.before(core); const target=step.sel?await waitFor(step.sel):null;

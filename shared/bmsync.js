@@ -157,17 +157,20 @@ export async function importConfig(cfg){
   let added=0, removed=0, ci=(cfg.groups||[]).length;
 
   /* 把浏览器节点的子项(书签+子文件夹)递归对齐到 navArr（增/改名 + 删除确曾同步的书签；文件夹整体删不自动传播）*/
-  const mergeChildren=(navArr, browserChildren)=>{
-    const bm=browserChildren.filter(k=>k.url);
+  const mergeChildren=(navArr, browserChildren, depth=0)=>{
+    // 产品树封顶两级：浏览器书签更深时把第三级及后代网站无损展平到第二级，不创建非法树。
+    const flattenBookmarks=nodes=>(nodes||[]).flatMap(node=>node.url?[node]:flattenBookmarks(node.children));
+    const levelChildren=depth>=2?flattenBookmarks(browserChildren):browserChildren;
+    const bm=levelChildren.filter(k=>k.url);
     const browserUrls=new Set(bm.map(k=>normUrl(k.url)));
     const navByUrl=new Map(navArr.filter(it=>!isFolder(it)).map(it=>[normUrl(it.url),it]));
     for(const k of bm){ const it=navByUrl.get(normUrl(k.url));
       if(!it){ navArr.push({ id:uid('i'), name:k.title||k.url, url:k.url, note:'', icon:'' }); added++; }
       else if(k.title && it.name!==k.title){ it.name=k.title; } }
-    const subs=browserChildren.filter(k=>!k.url);
+    const subs=levelChildren.filter(k=>!k.url);
     for(const sf of subs){ let nf=navArr.find(it=>isFolder(it)&&it.name===sf.title);
       if(!nf){ nf={ id:uid('f'), type:'folder', name:sf.title||'文件夹', icon:'folder', items:[] }; navArr.push(nf); }
-      mergeChildren(nf.items, sf.children||[]); }   // 递归任意层子文件夹
+      mergeChildren(nf.items, sf.children||[],depth+1); }
     const before=navArr.length;
     const kept=navArr.filter(it=> isFolder(it) ? true : browserUrls.has(normUrl(it.url)) );
     removed += before-kept.length;
@@ -177,7 +180,7 @@ export async function importConfig(cfg){
   for(const f of folders){
     let g=(cfg.groups||[]).find(x=>x.name===f.title);
     if(!g){ g={ id:uid('g'), name:f.title||'书签', icon:'folder', color:GROUP_COLORS[ci++%GROUP_COLORS.length], collapsed:false, items:[] }; cfg.groups.push(g); }
-    mergeChildren(g.items, f.children||[]);
+    mergeChildren(g.items, f.children||[],0);
   }
   return { added, removed, sig:sigOf(node) };
 }

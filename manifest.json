@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Fu 导航",
-  "version": "3.23.1",
-  "description": "浏览器首页导航 · 极简AI搜索/分组 · 真实图标 · 时钟天气 · 一键收藏当前页(已收藏角标提示) · 书签双向同步 · 多端同步 · homelab 面板。",
+  "version": "3.26.2",
+  "description": "浏览器首页导航 · AI搜索与书签库 · 嵌套收藏 · 工作区 · 安全备份恢复 · 响应式 homelab 面板。",
   "chrome_url_overrides": {
     "newtab": "newtab.html"
   },
@@ -16,10 +16,12 @@
   },
   "permissions": [
     "storage",
-    "bookmarks",
     "favicon",
     "activeTab",
-    "tabs",
+    "tabs"
+  ],
+  "optional_permissions": [
+    "bookmarks",
     "identity"
   ],
   "host_permissions": [

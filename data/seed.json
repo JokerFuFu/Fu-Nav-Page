@@ -4,20 +4,25 @@
     "title": "Fu.",
     "theme": "auto",
     "openIn": "_blank",
-    "searchEngine": "bing",
     "showClock": true,
     "showSearch": true,
     "showStatus": true,
     "locked": true,
     "layout": "fusion",
     "showWeather": true,
+    "demoMode": true,
     "agentPort": 7842,
-    "agentToken": "fu-nav-local",
+    "heroClock": {
+      "font": "system",
+      "size": "standard",
+      "weight": "regular",
+      "style": "shadow",
+      "format": "24",
+      "details": "full",
+      "colorMode": "auto",
+      "customColor": "#f5f7ff"
+    },
     "widgets": [
-      {
-        "id": "w-clock",
-        "type": "clock"
-      },
       {
         "id": "w-weather",
         "type": "weather"
@@ -43,6 +48,8 @@
           "name": "GitHub",
           "url": "https://github.com/",
           "note": "",
+          "tags": ["开发", "代码"],
+          "aliases": ["代码托管"],
           "fav": true
         },
         {
@@ -70,13 +77,15 @@
           "id": "i005",
           "name": "微博",
           "url": "https://weibo.com/",
-          "note": ""
+          "note": "",
+          "fav": true
         },
         {
           "id": "i006",
           "name": "豆瓣",
           "url": "https://www.douban.com/",
-          "note": ""
+          "note": "",
+          "fav": true
         }
       ]
     },
@@ -97,7 +106,9 @@
               "id": "i007",
               "name": "DSM 管理",
               "url": "https://192.168.1.10:5001/",
-              "note": "群晖/绿联等 NAS 后台，改成你的 IP"
+              "note": "群晖/绿联等 NAS 后台，改成你的 IP",
+              "tags": ["内网", "NAS"],
+              "aliases": ["群晖"]
             },
             {
               "id": "i008",
@@ -137,13 +148,15 @@
           "id": "i012",
           "name": "主路由器",
           "url": "http://192.168.1.1/",
-          "note": "改成你的路由器地址"
+          "note": "改成你的路由器地址",
+          "fav": true
         },
         {
           "id": "i013",
           "name": "AdGuard Home",
           "url": "http://192.168.1.2:3000/",
-          "note": ""
+          "note": "",
+          "fav": true
         }
       ]
     },

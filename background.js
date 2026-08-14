@@ -6,7 +6,8 @@
  */
 import { loadConfig, saveConfig } from './shared/storage.js';
 import { exportConfig as bmExport, importConfig as bmImport, rootSignature, bmAvailable, cfgSignature, acquireBmLock, releaseBmLock } from './shared/bmsync.js';
-import { normUrl } from './shared/icon-map.js';
+import { normalizeUrl } from './shared/url.js';
+const normUrl = url => normalizeUrl(url,'strict');
 
 function badge(text, color){
   try{ chrome.action.setBadgeText({text}); chrome.action.setBadgeBackgroundColor({color}); setTimeout(()=>chrome.action.setBadgeText({text:''}), 1500); }catch{}

@@ -1,10 +1,16 @@
 /* ============ 图标装配 ============ */
 import { isExtension } from './storage.js';
-import { brandIcon, faviconCandidates, hostOf, isPrivateHost, lucide, FORCE_LETTER } from './icon-map.js';
+import { brandIcon, brandIconCandidates, hostOf, isPrivateHost, lucide, LOCAL_LUCIDE_NAMES, FORCE_LETTER } from './icon-map.js?v=3.26.0';
 
 const PALETTE=['#5b8def','#22a3b5','#36b37e','#e2a032','#e0567a','#9b6ef3','#ef6b4d','#3aa0a0','#7a86f0','#c2557a'];
 function colorFor(s){ let h=0; for(let i=0;i<s.length;i++) h=(h*31+s.charCodeAt(i))>>>0; return PALETTE[h%PALETTE.length]; }
 function initialOf(name,url){ const s=(name||'').trim(); if(s) return s[0].toUpperCase(); const h=hostOf(url); return (h[0]||'?').toUpperCase(); }
+
+export function readableTextColor(value){ const raw=String(value||'').trim(),full=/^#[0-9a-f]{3}$/i.test(raw)?'#'+raw.slice(1).split('').map(x=>x+x).join(''):raw;
+  if(!/^#[0-9a-f]{6}$/i.test(full))return '#ffffff'; const rgb=full.slice(1).match(/../g).map(x=>Number.parseInt(x,16));
+  const lum=rgb.map(channel=>{const n=channel/255;return n<=.04045?n/12.92:((n+.055)/1.055)**2.4;}).reduce((sum,n,index)=>sum+n*[.2126,.7152,.0722][index],0);
+  const dark='#000000',whiteContrast=1.05/(lum+.05),darkContrast=(lum+.05)/.05; return darkContrast>=whiteContrast?dark:'#ffffff'; }
+function applyLetterColors(box,background){ box.style.background=background; box.style.color=readableTextColor(background); }
 
 function extFavicon(url,size=64){ return isExtension ? `/_favicon/?pageUrl=${encodeURIComponent(url)}&size=${Math.min(size,64)}` : null; }
 
@@ -13,22 +19,24 @@ function sizeLetter(box, pct){ let n=0; const apply=()=>{ const h=box.clientHeig
 
 /* 给 .ico 容器装配网站/服务图标 + 兜底链 */
 export function mountItemIcon(box, item, size=64){
-  box.textContent=''; box.classList.remove('is-letter'); box.style.background=''; box.style.fontSize='';
+  box.textContent=''; box.classList.remove('is-letter'); box.style.background=''; box.style.color=''; box.style.fontSize='';
   // 自定义「纯色字母图标」：L|文字|颜色|字号%（编辑器纯色模式，字号可省略）
-  if(item.icon && item.icon.slice(0,2)==='L|'){ const p=item.icon.split('|'); box.classList.add('is-letter'); box.textContent=(p[1]||'?'); box.style.background=p[2]||colorFor(item.url||item.name||'?'); if(p[3]) sizeLetter(box,+p[3]||45); return; }
+  if(item.icon && item.icon.slice(0,2)==='L|'){ const p=item.icon.split('|'),background=p[2]||colorFor(item.url||item.name||'?'); box.classList.add('is-letter'); box.textContent=(p[1]||'?'); applyLetterColors(box,background); if(p[3]) sizeLetter(box,+p[3]||45); return; }
   const host=hostOf(item.url), priv=isPrivateHost(host);
   const cands=[];
-  if(item.icon) cands.push(item.icon);
+  if(item.icon) cands.push(item.icon); // 用户明确指定的图标优先
   const brand=brandIcon(item);
-  if(brand && brand!==FORCE_LETTER) cands.push(brand);
   const letter=()=>{ box.classList.add('is-letter');
     const hasCtx=!!(((item.name||'').trim())||((item.url||'').trim()));
     if(!hasCtx){ box.classList.add('is-empty'); box.textContent='?'; return; }   // 空占位走中性样式(css .is-empty)，不吃彩色哈希
-    box.textContent=initialOf(item.name,item.url); box.style.background=colorFor(item.url||item.name); };
+    box.textContent=initialOf(item.name,item.url); applyLetterColors(box,colorFor(item.url||item.name)); };
   // 强制字母（图标库无对应且 url 易误中）：仅当没有自定义图标时
   if(brand===FORCE_LETTER && !item.icon){ letter(); return; }
-  if(!priv) cands.push(...faviconCandidates(item.url));
-  const ef=extFavicon(item.url,size); if(ef) cands.push(ef);
+  // 自动候选固定为：浏览器本地 favicon → 本机缓存 → 固定版本品牌源 → 字母 fallback。
+  // 公网站点不再在每次渲染时请求 Google favicon；Google/icon.horse 只保留在用户主动打开的在线图标编辑器里。
+  const automatic=brandIconCandidates(item,{extensionFavicon:extFavicon(item.url,size),cachedIcon:item.cachedIcon});
+  automatic.forEach(src=>{if(src!==FORCE_LETTER&&!cands.includes(src))cands.push(src);});
+  if(priv && !item.icon && !extFavicon(item.url,size) && !brand){ letter(); return; }
   if(!cands.length){ letter(); return; }
   const img=document.createElement('img'); img.loading='lazy'; img.alt=''; img.decoding='async';
   let i=0, settled=false, tmr=null;
@@ -40,8 +48,7 @@ export function mountItemIcon(box, item, size=64){
   box.appendChild(img); tryLoad(cands[0]);
 }
 
-/* Lucide 线性图标（mask 实现，跟随 currentColor），失败回退 emoji */
-const lucideOK=new Map();
+/* 本地线性图标（mask 实现，跟随 currentColor）；未知名称由 lucide() 返回本地 circle。 */
 const urlOK=new Set();   // 本会话曾成功加载过的自定义图标 URL → 再渲染不因瞬时错误闪现 emoji
 export function mountGroupIcon(box, group){
   const ic=group.icon||''; const emoji=group.emoji||(/^[\x00-\x7f]+$/.test(ic)?'📁':ic);
@@ -56,15 +63,9 @@ export function mountGroupIcon(box, group){
   }
   // 纯 ascii 视为 lucide 名
   if(/^[a-z0-9-]+$/.test(ic)){
-    const apply=()=>{ const u=`url("${lucide(ic)}")`; box.classList.add('lucide-mask');
+    const apply=()=>{ const localName=LOCAL_LUCIDE_NAMES.includes(ic)?ic:'folder'; const u=`url("${lucide(localName)}")`; box.classList.add('lucide-mask');
       box.style.webkitMaskImage=u; box.style.maskImage=u; box.style.background='currentColor'; };
-    if(lucideOK.get(ic)===true) return apply();
-    if(lucideOK.get(ic)===false){ box.textContent=emoji; return; }
-    box.textContent=emoji; // 先占位
-    const probe=new Image();
-    probe.onload=()=>{ lucideOK.set(ic,true); box.textContent=''; apply(); };
-    probe.onerror=()=>{ lucideOK.set(ic,false); };
-    probe.src=lucide(ic);
+    apply();
   } else {
     box.textContent=ic||'📁';
   }

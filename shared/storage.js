@@ -1,14 +1,16 @@
+import { injectSecrets, splitSecrets } from './config-secrets.js';
+
 /* ============ 存储层 ============
- * 目标：配置在所有终端同步。
- * - 扩展环境：chrome.storage.sync（随账号同步到所有 Chrome/Edge），
- *   单项上限 8KB，故把 JSON 切片为多个 chunk；同时镜像一份到 local 做离线缓存/兜底。
- * - 配置过大无法同步时：自动降级到 local（仅本机），并提示。
+ * 目标：本机编辑可靠优先，新设备仍能从账号快照初始化。
+ * - 扩展环境：chrome.storage.local 是唯一权威源；chrome.storage.sync 只保存节流、安全的切片快照。
+ * - 配置过大或 sync 暂时失败时：本机保存不受影响，并返回真实状态供 UI 提示。
  * - 非扩展环境（直接打开 html 预览）：用 localStorage。
  */
 const ITEM_BYTES = 7600;            // 每片字节数，留余量 < 8192
 const META = 'fn_meta';
 const CHUNK = 'fn_c';
 const LOCAL = 'fn_config';
+const SECRETS = 'fn_secrets_v1';
 const MAX_CHUNKS = 480;             // sync 总量约 100KB / 512 项
 
 export const isExtension = typeof chrome !== 'undefined' && !!(chrome.storage && chrome.storage.sync);
@@ -18,6 +20,22 @@ const sSet = o => new Promise((res, rej) => chrome.storage.sync.set(o, () => chr
 const sDel = k => new Promise(r => chrome.storage.sync.remove(k, r));
 const lGet = k => new Promise(r => chrome.storage.local.get(k, r));
 const lSet = o => new Promise(r => chrome.storage.local.set(o, r));
+
+export async function loadSecrets(){
+  if(isExtension){
+    try{ return (await lGet(SECRETS))[SECRETS] || {}; }catch{ return {}; }
+  }
+  try{ return JSON.parse(localStorage.getItem(SECRETS)||'{}'); }catch{ return {}; }
+}
+
+export async function saveSecrets(patch){
+  const next={...(await loadSecrets()),...(patch||{})};
+  if(isExtension) await lSet({[SECRETS]:next});
+  else localStorage.setItem(SECRETS,JSON.stringify(next));
+  return next;
+}
+
+async function withSecrets(config){ return injectSecrets(config,await loadSecrets()); }
 
 function sliceUtf8(str, max){
   // 按字节安全切片（避免拆断多字节字符）
@@ -37,7 +55,7 @@ function sliceUtf8(str, max){
 export async function loadConfig(){
   if(isExtension){
     // local 是唯一权威源：只要本机有配置就用它，杜绝跨设备/跨上下文的旧 sync 快照把本地改动(尤其删除)覆盖掉。
-    try{ const localCfg = (await lGet(LOCAL))[LOCAL] || null; if(localCfg) return { config: localCfg, source:'local' }; }catch(e){}
+    try{ const localCfg = (await lGet(LOCAL))[LOCAL] || null; if(localCfg) return { config: await withSecrets(localCfg), source:'local' }; }catch(e){}
     // 本机为空(首次安装 / 新设备)才从 sync 引导一次
     try{
       const meta = (await sGet(META))[META];
@@ -45,13 +63,13 @@ export async function loadConfig(){
         const keys = Array.from({length:meta.chunks},(_,i)=>CHUNK+i);
         const parts = await sGet(keys);
         let s=''; for(let i=0;i<meta.chunks;i++) s += parts[CHUNK+i] || '';
-        if(s) return { config: JSON.parse(s), source:'sync' };
+        if(s) return { config: await withSecrets(JSON.parse(s)), source:'sync' };
       }
     }catch(e){ console.warn('sync 引导读取失败', e); }
     return { config:null, source:null };
   }
   const s = localStorage.getItem(LOCAL);
-  return { config: s ? JSON.parse(s) : null, source: s ? 'local' : null };
+  return { config: s ? await withSecrets(JSON.parse(s)) : null, source: s ? 'local' : null };
 }
 
 /* sync 镜像节流：local 已是唯一权威，sync 只充当"新设备首次引导"的快照，不追实时。
@@ -74,13 +92,14 @@ async function _mirrorToSync(json, ver){
 
 export async function saveConfig(config){
   config.savedAt = Date.now();                 // 时间戳：本机 local 权威判新用
-  const json = JSON.stringify(config);
+  const split=splitSecrets(config); await saveSecrets(split.secrets);
+  const safeConfig=split.config, json = JSON.stringify(safeConfig);
   if(!isExtension){
     localStorage.setItem(LOCAL, json);
     return { ok:true, synced:false, reason:'preview' };
   }
   // 始终先镜像到 local（唯一权威，最快最可靠）
-  await lSet({ [LOCAL]: config });
+  await lSet({ [LOCAL]: safeConfig });
   const chunks = sliceUtf8(json, ITEM_BYTES);
   if(chunks.length > MAX_CHUNKS){
     return { ok:true, synced:false, reason:'too-large' };
@@ -90,12 +109,12 @@ export async function saveConfig(config){
     _syncPendingJson = json;
     clearTimeout(_syncTimer);
     _syncTimer = setTimeout(()=>{ const j=_syncPendingJson; _syncPendingJson=null; if(!j) return;
-      _syncLastTs = Date.now(); _mirrorToSync(j, config.version).catch(()=>{}); }, SYNC_MIN_GAP - (now - _syncLastTs));
+      _syncLastTs = Date.now(); _mirrorToSync(j, safeConfig.version).catch(()=>{}); }, SYNC_MIN_GAP - (now - _syncLastTs));
     return { ok:true, synced:false, reason:'throttled' };   // 本机已存好；sync 快照稍后跟上
   }
   _syncLastTs = now;
   try{
-    await _mirrorToSync(json, config.version);
+    await _mirrorToSync(json, safeConfig.version);
     return { ok:true, synced:true };
   }catch(e){
     console.warn('sync 写入失败（仅存本机）:', (e && e.message) || e);
@@ -111,7 +130,7 @@ const INBOX = 'fn_inbox';
 export async function pushInbox(ops){
   if(!isExtension || !ops || !ops.length) return;
   try{ const cur=(await lGet(INBOX))[INBOX]||[];
-    const stamped=ops.map(o=>({ ...o, _k: Math.random().toString(36).slice(2)+Date.now().toString(36) }));   // 唯一键：drain 按键清理
+    const stamped=ops.map((o,index)=>{ const opId=o.opId||o._k||Math.random().toString(36).slice(2)+Date.now().toString(36)+index.toString(36); return { ...o, opId, at:o.at||Date.now(), _k:opId }; });   // opId：幂等兑现；_k 保留 drain 兼容
     await lSet({ [INBOX]: cur.concat(stamped) }); }catch{}
 }
 export async function drainInbox(){

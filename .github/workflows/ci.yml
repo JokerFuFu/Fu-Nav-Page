@@ -21,15 +21,16 @@ jobs:
 
       - name: 校验所有 .js 语法(ES modules)
         run: |
-          # 项目是纯 ES modules 但文件用 .js 扩展名且无 package.json,
-          # 临时声明 type:module 让 node --check 以 ESM 模式解析(仅解析不执行)
-          echo '{"type":"module"}' > package.json
           fail=0
           while IFS= read -r -d '' f; do
             node --check "$f" || { echo "::error file=$f::JS 语法错误"; fail=1; }
           done < <(find . -name '*.js' -not -path './.git/*' -print0)
-          rm -f package.json
           exit $fail
+
+      - name: 单元测试与静态验收
+        run: |
+          npm test
+          npm run verify:static
 
       - name: 校验关键 JSON 文件
         run: |
