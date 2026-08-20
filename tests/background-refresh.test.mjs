@@ -1,88 +1,87 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createOnlineRefreshScheduler } from '../shared/background.js';
 
-function fakeClock(start=1_000_000){
-  let now=start, nextId=0;
-  const timers=new Map(), cleared=[];
-  return {
-    now:()=>now,
-    setTimer(fn,delay){ const id=++nextId; timers.set(id,{fn,delay}); return id; },
-    clearTimer(id){ if(timers.delete(id))cleared.push(id); },
-    active(){ return [...timers.entries()].map(([id,timer])=>({id,...timer})); },
-    cleared,
-    async fireNext(){
-      const [id,timer]=timers.entries().next().value||[];
-      assert.ok(timer,'expected an active refresh timer');
-      timers.delete(id); now+=timer.delay;
-      await timer.fn();
-    },
-  };
+const planner = await import('../shared/wallpaper-refresh.js').catch(()=>null);
+
+function onlineBackground(overrides={}){
+  return { enabled:true, mode:'online', refreshEvery:15, lastFetchAt:1_000_000, onlineSrc:{id:'bing'}, ...overrides };
 }
 
-function onlineBackground(clock,overrides={}){
-  return { enabled:true, mode:'online', refreshEvery:15, lastFetchAt:clock.now(), onlineSrc:{id:'bing'}, ...overrides };
-}
-
-test('online wallpaper refresh uses the selected interval and rearms after success', async()=>{
-  const clock=fakeClock(), bg=onlineBackground(clock);
-  const scheduler=createOnlineRefreshScheduler(clock);
-  let refreshes=0;
-
-  scheduler.sync({ onHome:true, background:bg, refresh:async()=>{
-    refreshes++;
-    bg.lastFetchAt=clock.now();
-    return {ok:true};
-  }});
-
-  assert.equal(clock.active().length,1);
-  assert.equal(clock.active()[0].delay,15*60_000);
-  await clock.fireNext();
-  assert.equal(refreshes,1);
-  assert.equal(clock.active().length,1);
-  assert.equal(clock.active()[0].delay,15*60_000);
+test('durable wallpaper planner exposes one stable alarm identity', ()=>{
+  assert.ok(planner,'durable wallpaper planner module is missing');
+  assert.equal(planner.WALLPAPER_REFRESH_ALARM,'fu-nav-wallpaper-refresh');
 });
 
-test('an overdue online wallpaper refresh runs immediately', async()=>{
-  const clock=fakeClock(), bg=onlineBackground(clock,{lastFetchAt:clock.now()-15*60_000-1});
-  const scheduler=createOnlineRefreshScheduler(clock);
-  let refreshes=0;
-  scheduler.sync({onHome:true,background:bg,refresh:async()=>{ refreshes++; bg.lastFetchAt=clock.now(); return {ok:true}; }});
-
-  assert.equal(clock.active()[0].delay,0);
-  await clock.fireNext();
-  assert.equal(refreshes,1);
+test('online wallpaper plan uses the selected interval from the latest successful fetch', ()=>{
+  assert.ok(planner,'durable wallpaper planner module is missing');
+  const bg=onlineBackground(), now=1_300_000;
+  assert.deepEqual(planner.wallpaperRefreshPlan(bg,now),{
+    enabled:true,
+    due:false,
+    dueAt:1_900_000,
+    delay:600_000,
+  });
 });
 
-test('a failed refresh keeps the user-selected interval instead of spinning', async()=>{
-  const clock=fakeClock(), bg=onlineBackground(clock,{refreshEvery:60});
-  const scheduler=createOnlineRefreshScheduler(clock);
-  scheduler.sync({onHome:true,background:bg,refresh:async()=>({ok:false,reason:'offline'})});
-
-  await clock.fireNext();
-  assert.equal(clock.active().length,1);
-  assert.equal(clock.active()[0].delay,60*60_000);
+test('an overdue wallpaper is due immediately', ()=>{
+  assert.ok(planner,'durable wallpaper planner module is missing');
+  const bg=onlineBackground({refreshEvery:1,lastFetchAt:1_000_000});
+  assert.deepEqual(planner.wallpaperRefreshPlan(bg,1_060_001),{
+    enabled:true,
+    due:true,
+    dueAt:1_060_000,
+    delay:0,
+  });
 });
 
-test('frequency changes replan immediately and disabled states cancel the timer', ()=>{
-  const clock=fakeClock(), bg=onlineBackground(clock,{refreshEvery:60});
-  const scheduler=createOnlineRefreshScheduler(clock);
-  const refresh=async()=>({ok:true});
-  scheduler.sync({onHome:true,background:bg,refresh});
-  const firstTimer=clock.active()[0].id;
+test('a failed attempt advances the same user interval instead of spinning', ()=>{
+  assert.ok(planner,'durable wallpaper planner module is missing');
+  const bg=onlineBackground({refreshEvery:60,lastFetchAt:1_000_000});
+  const state={sourceKey:'bing',lastFetchAt:0,lastAttemptAt:2_000_000};
+  assert.deepEqual(planner.wallpaperRefreshPlan(bg,2_100_000,state),{
+    enabled:true,
+    due:false,
+    dueAt:5_600_000,
+    delay:3_500_000,
+  });
+});
 
-  bg.refreshEvery=15;
-  scheduler.sync({onHome:true,background:bg,refresh});
-  assert.ok(clock.cleared.includes(firstTimer));
-  assert.equal(clock.active()[0].delay,15*60_000);
-
-  for(const state of [
-    {onHome:true, background:{...bg,refreshEvery:0}},
-    {onHome:false,background:bg},
-    {onHome:true, background:{...bg,enabled:false}},
-    {onHome:true, background:{...bg,mode:'preset'}},
+test('manual, disabled and non-online backgrounds create no durable plan', ()=>{
+  assert.ok(planner,'durable wallpaper planner module is missing');
+  for(const bg of [
+    onlineBackground({refreshEvery:0}),
+    onlineBackground({enabled:false}),
+    onlineBackground({mode:'preset'}),
+    null,
   ]){
-    scheduler.sync({...state,refresh});
-    assert.equal(clock.active().length,0);
+    assert.deepEqual(planner.wallpaperRefreshPlan(bg,2_000_000),{
+      enabled:false,
+      due:false,
+      dueAt:null,
+      delay:null,
+    });
   }
+});
+
+test('a delayed download can commit only to the same still-enabled online source', ()=>{
+  assert.ok(planner,'durable wallpaper planner module is missing');
+  const original=onlineBackground({onlineImageId:'bg_a',onlineSrc:{id:'custom',url:'https://img.example/a'}});
+  const expected=planner.wallpaperRefreshSnapshot(original);
+  assert.equal(planner.canCommitWallpaperRefresh({...original},expected),true);
+  assert.equal(planner.canCommitWallpaperRefresh({...original,onlineImageId:'bg_newer'},expected),false);
+  assert.equal(planner.canCommitWallpaperRefresh({...original,onlineSrc:{id:'custom',url:'https://img.example/b'}},expected),false);
+  assert.equal(planner.canCommitWallpaperRefresh({...original,mode:'preset'},expected),false);
+  assert.equal(planner.canCommitWallpaperRefresh({...original,refreshEvery:0},expected),false);
+});
+
+test('durable runtime state advances the plan only for the current source', ()=>{
+  const bg=onlineBackground({refreshEvery:15,lastFetchAt:1_000_000,onlineSrc:{id:'bing'}});
+  const currentState={sourceKey:'bing',lastFetchAt:2_000_000,lastAttemptAt:0,onlineImageId:'bg_runtime'};
+  assert.deepEqual(planner.wallpaperRefreshPlan(bg,2_100_000,currentState),{
+    enabled:true,due:false,dueAt:2_900_000,delay:800_000,
+  });
+  const staleState={...currentState,sourceKey:'ycy'};
+  assert.deepEqual(planner.wallpaperRefreshPlan(bg,2_100_000,staleState),{
+    enabled:true,due:true,dueAt:1_900_000,delay:0,
+  });
 });

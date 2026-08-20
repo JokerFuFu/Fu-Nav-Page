@@ -91,14 +91,6 @@ async function createSolidBackground(page, color) {
     const chunks = [];
     request.on('data', chunk => chunks.push(chunk));
     request.on('end', () => {
-      if (request.url.startsWith('/wallpaper-auto.svg')) {
-        markWallpaperRequested();
-        wallpaperResponseGate.then(() => {
-          response.writeHead(200, { 'Content-Type': 'image/svg+xml', 'Access-Control-Allow-Origin': '*' });
-          response.end('<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#ffffff"/></svg>');
-        });
-        return;
-      }
       const body = Buffer.concat(chunks).toString('utf8');
       response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       response.end(`<!doctype html><title>${request.url}</title><h1>Fu Nav E2E ${request.url}</h1>`);
@@ -120,6 +112,15 @@ async function createSolidBackground(page, color) {
       if (request.method() === 'PROPFIND') await route.fulfill({ status: 207, contentType: 'application/xml', body: '<?xml version="1.0"?><d:multistatus xmlns:d="DAV:"></d:multistatus>' });
       else if (request.method() === 'GET') await route.fulfill({ status: 404, body: '' });
       else await route.fulfill({ status: 201, body: 'ok' });
+    });
+    await context.route('http://127.0.0.1:7842/wallpaper-auto.svg**', async route => {
+      markWallpaperRequested();
+      await wallpaperResponseGate;
+      await route.fulfill({
+        status: 200,
+        contentType: 'image/svg+xml',
+        body: '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#ffffff"/></svg>',
+      });
     });
     await context.addInitScript(({ importUrl, recoveryBase }) => {
       if (typeof chrome === 'undefined' || !chrome.permissions || !location.protocol.startsWith('chrome-extension')) return;
@@ -725,7 +726,7 @@ async function createSolidBackground(page, color) {
       };
       value.fn_config.savedAt = Date.now() + 8000;
       chrome.storage.local.set({ fn_config: value.fn_config }, resolveSet);
-    })), { imageId: oldOnlineBackground, sourceUrl: `${base}/wallpaper-auto.svg`, lastFetchAt: oldFetchAt });
+    })), { imageId: oldOnlineBackground, sourceUrl: 'http://127.0.0.1:7842/wallpaper-auto.svg', lastFetchAt: oldFetchAt });
     await contextA.goto(`chrome-extension://${extensionId}/newtab.html?e2e=wallpaper-auto`, { waitUntil: 'domcontentloaded' });
     await contextA.waitForSelector('body.bg-photo');
     await wallpaperRequested;
@@ -745,11 +746,11 @@ async function createSolidBackground(page, color) {
       url: location.href,
       sameDocument: window.__wallpaperRefreshSentinel === 'same-document',
     }));
-    const storedAfterAutoRefresh = await storage(contextA, ['fn_config']);
+    const storedAfterAutoRefresh = await storage(contextA, ['fn_config','fn_wallpaper_refresh_v1']);
     assert(afterAutoRefresh.sameDocument && afterAutoRefresh.url === beforeAutoRefresh.url, 'scheduled wallpaper refresh reloaded or replaced the current document');
     assert(afterAutoRefresh.image !== beforeAutoRefresh.image, 'scheduled wallpaper refresh did not apply the new image to the current page');
-    assert(storedAfterAutoRefresh.fn_config.settings.background.onlineImageId !== oldOnlineBackground, 'scheduled wallpaper refresh did not replace the cached image');
-    assert(storedAfterAutoRefresh.fn_config.settings.background.lastFetchAt > oldFetchAt, 'scheduled wallpaper refresh did not persist its fetch time');
+    assert(storedAfterAutoRefresh.fn_wallpaper_refresh_v1?.onlineImageId && storedAfterAutoRefresh.fn_wallpaper_refresh_v1.onlineImageId !== oldOnlineBackground, 'scheduled wallpaper refresh did not replace the runtime cached image');
+    assert(storedAfterAutoRefresh.fn_wallpaper_refresh_v1.lastFetchAt > oldFetchAt, 'scheduled wallpaper refresh did not persist its fetch time');
     evidence.wallpaperAutoRefresh = { frequencyMinutes: 1, sameDocument: true, imageChanged: true, fetchTimeAdvanced: true };
 
     assert(errors.length === 0, `console errors: ${errors.join(' | ')}`);

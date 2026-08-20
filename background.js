@@ -7,6 +7,9 @@
 import { loadConfig, saveConfig } from './shared/storage.js';
 import { exportConfig as bmExport, importConfig as bmImport, rootSignature, bmAvailable, cfgSignature, acquireBmLock, releaseBmLock } from './shared/bmsync.js';
 import { normalizeUrl } from './shared/url.js';
+import { DEFAULT_ONLINE_SOURCE, downloadOnlineBackground } from './shared/background.js';
+import { deleteBgImage } from './shared/bg-storage.js';
+import { canCommitWallpaperRefresh, clearWallpaperRefreshState, loadWallpaperRefreshState, saveWallpaperRefreshState, WALLPAPER_REFRESH_ALARM, wallpaperRefreshPlan, wallpaperRefreshSnapshot, wallpaperSourceKey } from './shared/wallpaper-refresh.js';
 const normUrl = url => normalizeUrl(url,'strict');
 
 function badge(text, color){
@@ -106,4 +109,91 @@ if(chrome.storage && chrome.storage.onChanged){
       schedule();
     }catch{}
   });
+}
+
+/* ---- 在线壁纸持久自动更新 ----
+ * 新标签页通常在用户点开网站后立即消失，页面 timer 不能承担“每 N 分钟”。
+ * one-shot alarm 按持久化时间重建，适配 MV3 Service Worker 随时休眠/重启。 */
+let wallpaperBusy=false, wallpaperPending=false;
+async function clearWallpaperAlarm(){ await chrome.alarms.clear(WALLPAPER_REFRESH_ALARM); }
+async function createWallpaperAlarm(when){ await chrome.alarms.create(WALLPAPER_REFRESH_ALARM,{when}); }
+
+async function discardWallpaperRuntime(background,state){
+  const removed=state||await clearWallpaperRefreshState();
+  if(state)await clearWallpaperRefreshState();
+  if(removed&&removed.onlineImageId&&removed.onlineImageId!==background?.onlineImageId)await deleteBgImage(removed.onlineImageId);
+}
+
+async function currentWallpaperPlan(){
+  const [{config},state]=await Promise.all([loadConfig(),loadWallpaperRefreshState()]);
+  const background=config&&config.settings&&config.settings.background;
+  const sourceKey=wallpaperSourceKey(background&&background.onlineSrc);
+  if(state&&state.sourceKey!==sourceKey){ await discardWallpaperRuntime(background,state); return {background,state:null,plan:wallpaperRefreshPlan(background)}; }
+  return {background,state,plan:wallpaperRefreshPlan(background,Date.now(),state)};
+}
+
+async function reconcileWallpaperRefresh(){
+  if(wallpaperBusy){ wallpaperPending=true; return; }
+  wallpaperBusy=true;
+  let uncommittedImageId='';
+  try{
+    const {background:bg,state,plan}=await currentWallpaperPlan();
+    if(!plan.enabled){ if(state)await discardWallpaperRuntime(bg,state); return; }
+    if(!plan.due)return;
+
+    const snapshot=wallpaperRefreshSnapshot(bg);
+    const attemptAt=Date.now();
+    const attemptState={...(state||{}),sourceKey:snapshot.sourceKey,lastAttemptAt:attemptAt};
+    await saveWallpaperRefreshState(attemptState);
+    const retry=wallpaperRefreshPlan(bg,Date.now(),attemptState);
+    await createWallpaperAlarm(retry.dueAt); // 持久状态与 alarm 都确认成功后，才允许开始外部 I/O
+    const download=await downloadOnlineBackground(bg.onlineSrc||{id:DEFAULT_ONLINE_SOURCE},{requestPermission:false});
+    uncommittedImageId=download.imageId||'';
+
+    const [{config:latest},latestState]=await Promise.all([loadConfig(),loadWallpaperRefreshState()]);
+    const latestBg=latest&&latest.settings&&latest.settings.background;
+    if(!download.ok){
+      if(canCommitWallpaperRefresh(latestBg,snapshot)&&latestState?.lastAttemptAt===attemptAt){
+        await saveWallpaperRefreshState({...latestState,lastAttemptAt:Date.now()});
+      }
+      return;
+    }
+    if(!canCommitWallpaperRefresh(latestBg,snapshot)||latestState?.lastAttemptAt!==attemptAt){
+      if(uncommittedImageId)await deleteBgImage(uncommittedImageId);
+      uncommittedImageId='';
+      return;
+    }
+
+    const oldRuntimeImageId=latestState.onlineImageId;
+    await saveWallpaperRefreshState({
+      sourceKey:snapshot.sourceKey,
+      onlineImageId:download.imageId,
+      lastFetchAt:Date.now(),
+      lastAttemptAt:0,
+    });
+    uncommittedImageId='';
+    if(oldRuntimeImageId&&oldRuntimeImageId!==download.imageId&&oldRuntimeImageId!==latestBg.onlineImageId)await deleteBgImage(oldRuntimeImageId);
+  }catch(error){
+    if(uncommittedImageId)await deleteBgImage(uncommittedImageId);
+    console.warn('在线壁纸后台更新失败',error);
+  }
+  finally{
+    try{
+      const {background,state,plan:next}=await currentWallpaperPlan();
+      if(next.enabled)await createWallpaperAlarm(next.dueAt);
+      else await clearWallpaperAlarm();
+    }catch(error){ console.warn('在线壁纸后台排期失败',error); }
+    wallpaperBusy=false;
+    if(wallpaperPending){ wallpaperPending=false; void reconcileWallpaperRefresh(); }
+  }
+}
+
+if(chrome.alarms){
+  chrome.alarms.onAlarm.addListener(alarm=>{ if(alarm&&alarm.name===WALLPAPER_REFRESH_ALARM)void reconcileWallpaperRefresh(); });
+  if(chrome.runtime.onStartup)chrome.runtime.onStartup.addListener(()=>{ void reconcileWallpaperRefresh(); });
+  if(chrome.runtime.onInstalled)chrome.runtime.onInstalled.addListener(()=>{ void reconcileWallpaperRefresh(); });
+  if(chrome.storage&&chrome.storage.onChanged)chrome.storage.onChanged.addListener((changes,area)=>{
+    if(area==='local'&&changes&&changes.fn_config)void reconcileWallpaperRefresh();
+  });
+  void reconcileWallpaperRefresh();
 }
