@@ -7,71 +7,11 @@
 import { PRESETS } from './bg-presets.js';
 import { putBgImage, deleteBgImage, bgObjectURL } from './bg-storage.js';
 import { chooseHeroClockTone, sampleCoverRegionLuminance } from './hero-clock.js?v=3.26.8';
+import { clearWallpaperRefreshState, loadWallpaperRefreshState, wallpaperSourceKey } from './wallpaper-refresh.js';
 
 export const DEFAULT_ONLINE_SOURCE='ycy';
 let clockToneTicket=0;
 const previewMode=()=>typeof chrome==='undefined'||!(chrome.storage&&chrome.storage.local);
-
-function refreshIntervalMs(bg){
-  const minutes=Number(bg&&bg.refreshEvery);
-  return Number.isFinite(minutes)&&minutes>0 ? minutes*60000 : 0;
-}
-
-/* 首页在线壁纸使用一次性 timer，而不是 setInterval：每轮都从持久化的 lastFetchAt
- * 重新计算，刷新耗时、页面休眠或用户改频率都不会让计划越跑越偏。时钟边界可注入，
- * 让“15 分钟就是 15 分钟”不依赖真实等待即可回归验证。 */
-export function createOnlineRefreshScheduler(options={}){
-  const now=options.now||(()=>Date.now());
-  const setTimer=options.setTimer||((fn,delay)=>setTimeout(fn,delay));
-  const clearTimer=options.clearTimer||(id=>clearTimeout(id));
-  let current=null, timer=null, running=false, retryAt=0;
-
-  const eligible=state=>{
-    const bg=state&&state.background;
-    return !!(state&&state.onHome&&bg&&bg.enabled&&bg.mode==='online'&&refreshIntervalMs(bg)>0&&typeof state.refresh==='function');
-  };
-  const clear=()=>{ if(timer!==null){ clearTimer(timer); timer=null; } };
-  const plan=()=>{
-    clear();
-    if(running||!eligible(current))return;
-    const interval=refreshIntervalMs(current.background);
-    const lastFetch=Number(current.background.lastFetchAt)||0;
-    const target=retryAt||lastFetch+interval;
-    const delay=Math.max(0,target-now());
-    timer=setTimer(async()=>{
-      timer=null;
-      const job=current;
-      if(running||!eligible(job)){ plan(); return; }
-      running=true;
-      let result;
-      try{ result=await job.refresh(); }catch{ result={ok:false}; }
-      running=false;
-      // 设置/路由在请求期间发生变化时，sync 已经给出更新后的计划，不沿用旧任务的失败时间。
-      if(current===job)retryAt=result&&result.ok?0:now()+refreshIntervalMs(job.background);
-      plan();
-    },delay);
-  };
-
-  return {
-    sync(state){ current=state||null; retryAt=0; plan(); },
-    stop(){ current=null; retryAt=0; clear(); },
-  };
-}
-
-const autoRefreshScheduler=createOnlineRefreshScheduler();
-
-function syncOnlineRefresh(core,onHome,bg){
-  autoRefreshScheduler.sync({
-    onHome,
-    background:bg,
-    refresh:async()=>{
-      const result=await refreshOnlineBackground(core,bg.onlineSrc||{id:DEFAULT_ONLINE_SOURCE},{apply:false});
-      // 自动更新写入缓存后必须重画当前首页；若期间已离开首页，则只保留缓存供下次进入使用。
-      if(result.ok&&core._onHome===true)await applyBackground(core,true);
-      return result;
-    },
-  });
-}
 
 /* 当前"生效"的主题（auto 时看系统偏好），供预置图挑选深/浅变体、强调色复用 */
 export function effectiveTheme(core){
@@ -89,7 +29,6 @@ export function resolveBackgroundScrim(theme, requested){
 export async function applyBackground(core, onHome){
   const bg = core.settings.background;
   const body = document.body;
-  syncOnlineRefresh(core,onHome,bg);
   if(!onHome || !bg || !bg.enabled || bg.mode==='none'){
     clockToneTicket++;
     body.classList.remove('bg-photo');
@@ -104,7 +43,11 @@ export async function applyBackground(core, onHome){
   } else if(bg.mode==='online'){
     // 在线源现在也是本地缓存的一份图片二进制，跟"本地上传"走同一套存取，读的时候完全不发网络请求，
     // 也就不存在"存下来的地址每次加载都换一张"这个问题了（那是旧版直接存网络 URL 才有的坑）。
-    url = await bgObjectURL(bg.onlineImageId);
+    const runtime=await loadWallpaperRefreshState();
+    const runtimeMatches=runtime&&runtime.sourceKey===wallpaperSourceKey(bg.onlineSrc)
+      && (Number(runtime.lastFetchAt)||0)>=(Number(bg.lastFetchAt)||0);
+    if(runtimeMatches&&runtime.onlineImageId)url=await bgObjectURL(runtime.onlineImageId);
+    if(!url)url=await bgObjectURL(bg.onlineImageId);
     if(!url && previewMode()) url=bg.onlineDirectUrl||null;   // 预览受 CORS 限制，校验通过后仅存直连 URL
     if(!url){ // 换设备后本机没有缓存，当前页用预置图兜底，但保留 online 模式以便后台补拉
       bg.presetId = bg.presetId || 'p01';
@@ -136,19 +79,22 @@ export async function applyBackground(core, onHome){
 }
 
 /* ---- 在线源 ---- */
-function ensurePermission(url){
-  return new Promise(res=>{
-    try{
-      if(typeof chrome==='undefined' || !chrome.permissions){ res(true); return; } // 非扩展预览环境
-      const origin = new URL(url).origin + '/*';
-      chrome.permissions.request({origins:[origin]}, res);
-    }catch{ res(true); }
-  });
+async function ensurePermission(url,options={}){
+  try{
+    if(typeof chrome==='undefined' || !chrome.permissions)return true; // 非扩展预览环境
+    const origin = new URL(url).origin + '/*', query={origins:[origin]};
+    const granted=typeof chrome.permissions.contains==='function'
+      ? await new Promise(resolve=>chrome.permissions.contains(query,value=>{ void chrome.runtime?.lastError; resolve(!!value); }))
+      : false;
+    if(granted)return true;
+    if(options.requestPermission===false)return false; // 后台任务没有用户手势，不能弹权限请求
+    return await new Promise(resolve=>chrome.permissions.request(query,value=>{ void chrome.runtime?.lastError; resolve(!!value); }));
+  }catch{ return typeof chrome==='undefined'; }
 }
 
 /* 必应每日壁纸：JSON 接口直接给出当天固定的图片路径，本身就是稳定 URL（非官方端点，服务方随时可能变） */
-export async function fetchBingImage(){
-  const ok = await ensurePermission('https://www.bing.com/HPImageArchive.aspx');
+export async function fetchBingImage(options={}){
+  const ok = await ensurePermission('https://www.bing.com/HPImageArchive.aspx',options);
   if(!ok) return null;
   try{
     const r = await fetch('https://www.bing.com/HPImageArchive.aspx?format=js&idx=0&n=1&mkt=zh-CN');
@@ -178,16 +124,16 @@ export const ONLINE_SOURCES = [
  * 还是 anime/photo 那种"请求会 301→302 重定向到随机图"，统一在这一步把图下载完存住——
  * 下载完之后这份 blob 就跟网络彻底脱钩了，不再关心解析出来的 URL 是否"稳定"，
  * 从根上避免"存下来的地址每次浏览器加载都命中新图"的问题（这正是这次要修的 bug 的根因）。 */
-async function sourceUrl(src){
+async function sourceUrl(src,options={}){
   let url;
-  if(src.fetch){ url = await src.fetch(); if(!url) return null; }
+  if(src.fetch){ url = await src.fetch(options); if(!url) return null; }
   else { url = src.endpoint + (src.endpoint.includes('?')?'&':'?') + 'r=' + Date.now(); }
   return url;
 }
 
-async function fetchImageBlob(url){
+async function fetchImageBlob(url,options={}){
   if(!url)return null;
-  const ok = await ensurePermission(url);
+  const ok = await ensurePermission(url,options);
   if(!ok) return null;
   try{
     const r = await fetch(url, { redirect:'follow', cache:'no-store' });
@@ -197,7 +143,7 @@ async function fetchImageBlob(url){
   }catch{ return null; }
 }
 
-export async function fetchSourceBlob(src){ return fetchImageBlob(await sourceUrl(src)); }
+export async function fetchSourceBlob(src,options={}){ return fetchImageBlob(await sourceUrl(src,options),options); }
 
 function validateDirectImage(url){ return new Promise(resolve=>{
   if(!previewMode() || typeof Image==='undefined'){resolve(false);return;}
@@ -217,23 +163,43 @@ function resolveSource(ref){
 }
 
 let fetchTicket=0;   // last-wins：大图下载要几秒，期间用户再点新源，旧请求完成后不许回头覆盖新选择
-export async function refreshOnlineBackground(core, sourceRef, options={}){
+export function cancelOnlineBackgroundRefresh(){ fetchTicket++; }
+export async function downloadOnlineBackground(sourceRef,options={}){
   const ticket=++fetchTicket;
   const src = resolveSource(sourceRef);
-  const url=await sourceUrl(src), blob = await fetchImageBlob(url);
+  const permissionOptions={requestPermission:options.requestPermission!==false};
+  const url=await sourceUrl(src,permissionOptions), blob = await fetchImageBlob(url,permissionOptions);
   const directOk=!blob && await validateDirectImage(url);
   if(ticket!==fetchTicket) return { ok:false, superseded:true, reason:'已切换其他源' };   // 结果作废：不落盘、不应用
-  if(!blob && !directOk) return { ok:false, reason:'该地址未返回图片，请检查' };   // 下载失败：不动 settings.background，当前壁纸保持不变
+  if(!blob && !directOk) return { ok:false, reason:'该地址未返回图片，请检查' };
+  const imageId=blob?await putBgImage(blob):'';
+  return {
+    ok:true,
+    imageId,
+    directUrl:directOk?url:'',
+    sourceRef:src.id==='custom'?{id:'custom',url:src.url}:{id:src.id},
+  };
+}
+
+export function applyOnlineBackgroundDownload(bg,download,now=Date.now()){
+  bg.mode='online';
+  bg.onlineSrc=download.sourceRef;
+  bg.onlineImageId=download.imageId;
+  if(download.directUrl)bg.onlineDirectUrl=download.directUrl; else delete bg.onlineDirectUrl;
+  bg.lastFetchAt=now;
+  delete bg.lastRefreshAttemptAt;
+}
+
+export async function refreshOnlineBackground(core, sourceRef, options={}){
+  const download=await downloadOnlineBackground(sourceRef,options);
+  if(!download.ok)return download; // 下载失败：不动 settings.background，当前壁纸保持不变
   const bg = core.settings.background;
   const oldId = bg.mode==='online' ? bg.onlineImageId : null;
-  const id = blob ? await putBgImage(blob) : '';
-  if(oldId && oldId!==id) await deleteBgImage(oldId);   // 换图后清掉旧的，避免 IndexedDB 无限堆积
-  bg.mode = 'online';
-  bg.onlineSrc = src.id==='custom'?{id:'custom',url:src.url}:{id:src.id};
-  bg.onlineImageId = id;
-  if(directOk)bg.onlineDirectUrl=url; else delete bg.onlineDirectUrl;
-  bg.lastFetchAt=Date.now();
-  core.save(true);
+  applyOnlineBackgroundDownload(bg,download);
+  await core.save(true);
+  const runtime=await clearWallpaperRefreshState();
+  if(runtime&&runtime.onlineImageId&&runtime.onlineImageId!==download.imageId&&runtime.onlineImageId!==oldId)await deleteBgImage(runtime.onlineImageId);
+  if(oldId && oldId!==download.imageId) await deleteBgImage(oldId);   // 新引用落盘后再删旧图，保存失败仍可回退
   if(options.apply!==false) await applyBackground(core, true);
   return { ok:true };
 }

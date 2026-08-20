@@ -8,7 +8,7 @@ import { lucide, hostOf, isPrivateHost, brandIcon, faviconCandidates, iconSearch
 import { createIconEditor } from './icon-editor.js?v=3.26.3';
 import { infinityToGroups, mergeInfinity } from './import-infinity.js';
 import { exportConfig as bmExport, importConfig as bmImport, cfgSignature as bmCfgSig, bmAvailable, ROOT_TITLE } from './bmsync.js';
-import { applyBackground, refreshOnlineBackground, effectiveTheme, DEFAULT_ONLINE_SOURCE } from './background.js';
+import { applyBackground, cancelOnlineBackgroundRefresh, refreshOnlineBackground, effectiveTheme, DEFAULT_ONLINE_SOURCE } from './background.js';
 import { ACCENTS, DEFAULT_ACCENT_ID } from './accent-presets.js';
 import { checkAllLinks as runLinkCheck, maybeAutoCheck } from './link-check.js';
 import { putBgImage, deleteBgImage } from './bg-storage.js';
@@ -98,7 +98,8 @@ class Core {
     try{ await this.recoverOriginalBookmarkStructure(); }catch(error){ console.warn('原收藏目录结构恢复失败，保留当前配置并等待下次启动重试',error); }
     if(!this.runtime.onboarding.completed) setTimeout(()=>this.openOnboarding(),80);
     // 远端变更：仅在 savedAt 严格更新时才回灌，杜绝"自己写入→读到旧/中间态覆盖内存→下次存旧值"的丢失循环
-    onRemoteChange(async ()=>{ await this.flushSave();   // 先落盘本地未保存的防抖改动，避免被旧快照整体覆盖(吞掉刚删的卡片)
+    onRemoteChange(async change=>{ if(change&&change.wallpaperChanged&&!change.configChanged){ if(this._onHome===true)await this.applyBackground(true); return; }
+      await this.flushSave();   // 先落盘本地未保存的防抖改动，避免被旧快照整体覆盖(吞掉刚删的卡片)
       if(await this._applyInbox()) await this.save(true);   // 兑现 popup 增删：即使 popup 的整份写入被上面 flush 盖掉，也能从收件箱找回
       await this._maybeAdoptLatest(); });
     // 本机 agent 数据（提醒/日历/AI日报）
@@ -423,6 +424,7 @@ class Core {
   async setBackgroundLocal(file){
     if(!file) return { ok:false, reason:'未选择文件' };
     if(file.size > 8*1024*1024) return { ok:false, reason:'图片请小于 8MB' };
+    cancelOnlineBackgroundRefresh();
     const bg = this.settings.background;
     const oldId = bg.mode==='local' ? bg.localImageId : null;
     const id = await putBgImage(file);
@@ -432,8 +434,8 @@ class Core {
     await this.applyBackground(true);
     return { ok:true };
   }
-  setBackgroundPreset(id){ const bg=this.settings.background; bg.mode='preset'; bg.presetId=id; this.save(true); this.applyBackground(true); }
-  clearBackground(){ const bg=this.settings.background; bg.mode='none'; this.save(true); this.applyBackground(true); }
+  setBackgroundPreset(id){ cancelOnlineBackgroundRefresh(); const bg=this.settings.background; bg.mode='preset'; bg.presetId=id; this.save(true); this.applyBackground(true); }
+  clearBackground(){ cancelOnlineBackgroundRefresh(); const bg=this.settings.background; bg.mode='none'; this.save(true); this.applyBackground(true); }
 
   openUrl(item, ev){ const t=this.settings.openIn==='_self'?'_self':'_blank'; if(ev){ev.preventDefault();} window.open(item.url, t, 'noopener'); }
   /* 首页常用：锁定段按 favOrder，自动段按 7 天半衰期 frecency；容量由用户选择的网格规格决定。 */

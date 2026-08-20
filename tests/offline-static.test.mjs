@@ -52,14 +52,28 @@ test('lock screen clock is a permanent hero above search and outside widget life
   assert.match(core, /自定义时钟/);
 });
 
-test('wallpaper refresh frequency changes resync the active homepage schedule', async () => {
-  const fusion = await read('layouts/fusion.js');
+test('wallpaper refresh is durably owned by the service worker', async () => {
+  const [fusion, core, pageBackground, worker, manifestText] = await Promise.all([
+    read('layouts/fusion.js'), read('shared/core.js'), read('shared/background.js'), read('background.js'), read('manifest.json'),
+  ]);
+  const manifest = JSON.parse(manifestText);
   const start = fusion.indexOf("const applyMinutes=core.btn('应用分钟数'");
   const end = fusion.indexOf("const refreshWrap=el('div','fx-bg-refresh')", start);
   assert.ok(start >= 0 && end > start, 'wallpaper refresh settings section is missing');
   const refreshSettings = fusion.slice(start, end);
-  assert.equal((refreshSettings.match(/core\.applyBackground\(true\)/g)||[]).length, 2,
-    'preset and custom refresh frequency saves must both resync the homepage scheduler');
+  assert.equal((refreshSettings.match(/core\.save\(true\)/g)||[]).length, 2,
+    'preset and custom refresh frequency saves must both notify storage');
+  assert.ok(manifest.permissions.includes('alarms'),'manifest must declare the alarms permission');
+  assert.match(worker,/chrome\.alarms\.onAlarm\.addListener/);
+  assert.match(worker,/WALLPAPER_REFRESH_ALARM/);
+  assert.match(worker,/reconcileWallpaperRefresh/);
+  assert.match(worker,/downloadOnlineBackground\([\s\S]*requestPermission:false/,
+    'service-worker refresh must never request a new host permission');
+  assert.doesNotMatch(pageBackground,/createOnlineRefreshScheduler|autoRefreshScheduler/,
+    'short-lived newtab pages must not own automatic wallpaper timers');
+  assert.match(core,/cancelOnlineBackgroundRefresh/);
+  assert.equal((core.match(/cancelOnlineBackgroundRefresh\(\)/g)||[]).length,3,
+    'local, preset and none paths must invalidate a pending online download');
 });
 
 test('core and arbitrary group icons resolve to bundled data URLs', async () => {

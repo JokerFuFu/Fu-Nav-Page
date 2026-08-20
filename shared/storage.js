@@ -1,4 +1,5 @@
 import { injectSecrets, splitSecrets } from './config-secrets.js';
+import { WALLPAPER_REFRESH_STATE } from './wallpaper-refresh.js';
 
 /* ============ 存储层 ============
  * 目标：本机编辑可靠优先，新设备仍能从账号快照初始化。
@@ -152,12 +153,16 @@ export async function drainInbox(){
    配合 core 里的 savedAt 守卫避免自我覆盖。 */
 export function onRemoteChange(cb){
   if(!isExtension || !chrome.storage.onChanged) return;
-  let t=null;
+  let t=null, pending={configChanged:false,wallpaperChanged:false};
   chrome.storage.onChanged.addListener((changes, area)=>{
     // 只响应本机 local 变化(同浏览器另一上下文，如工具栏一键收藏的 SW 写入)——用于刷新 UI；
     // 不再响应跨设备 sync 推送，杜绝远端旧快照在后台覆盖本地(那是幽灵复活的根源)。
-    const relevant = (area==='local' && changes[LOCAL]);
-    if(relevant){ clearTimeout(t); t=setTimeout(cb, 200); }
+    if(area!=='local')return;
+    pending.configChanged=pending.configChanged||!!changes[LOCAL];
+    pending.wallpaperChanged=pending.wallpaperChanged||!!changes[WALLPAPER_REFRESH_STATE];
+    if(pending.configChanged||pending.wallpaperChanged){ clearTimeout(t); t=setTimeout(()=>{
+      const change=pending; pending={configChanged:false,wallpaperChanged:false}; cb(change);
+    },200); }
   });
 }
 

@@ -5,6 +5,7 @@
   "scripts": {
     "test": "node --test",
     "verify:static": "node tools/verify-static.mjs",
-    "verify:e2e": "node tools/product-e2e-check.cjs ."
+    "verify:e2e": "node tools/product-e2e-check.cjs .",
+    "verify:wallpaper-background": "node tools/wallpaper-background-check.cjs ."
   }
 }
