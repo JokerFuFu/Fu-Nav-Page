@@ -1,12 +1,12 @@
 /* ============ 融合布局 v3.1：极简AI首页 + 锁屏时钟 + 右键编辑 + 拖拽 ============ */
-import { $, $$, el, safeHref } from '../shared/core.js?v=3.26.8';
+import { $, $$, el, safeHref } from '../shared/core.js?v=3.26.9';
 import { dashboardIcon, lucide } from '../shared/icon-map.js?v=3.26.3';
 import { fetchGlances } from '../shared/hwmon.js';
 import { PRESETS } from '../shared/bg-presets.js';
 import { effectiveTheme, ONLINE_SOURCES, DEFAULT_ONLINE_SOURCE } from '../shared/background.js';
 import { filterContent, filterKeyAction } from '../shared/provider-action.js';
-import { homeDensity, visibleWidgets } from '../shared/home-settings.js?v=3.26.8';
-import { formatHeroClock, normalizeHeroClock } from '../shared/hero-clock.js?v=3.26.8';
+import { homeDensity, visibleWidgets } from '../shared/home-settings.js?v=3.26.9';
+import { formatHeroClock, normalizeHeroClock } from '../shared/hero-clock.js?v=3.26.9';
 const picon = p => (p.icon && p.icon.startsWith('http')) ? p.icon : dashboardIcon(p.icon);
 let active='home', clockTimer=null, drag=null, clockEls=null, ctxMenu=null, ctxTrigger=null, askOutsideHandler=null, sidebarOpen=false;
 
@@ -65,7 +65,7 @@ function buildSidebar(core){
     if(!visibleGroups.length) nav.appendChild(el('div','fx-side-empty',am===null?'还没有分组 — 从「新建分组」开始':'这个模式还没有分组 — 到「管理模式」勾选分组'));
     if(core.editing){ const addG=el('button','fx-navitem fx-addgroup'); addG.innerHTML=`<span class="fx-ni-ico lucide-mask" style="-webkit-mask-image:url('${lucide('plus')}');mask-image:url('${lucide('plus')}')"></span><span class="fx-ni-nm">新建分组</span>`; addG.onclick=()=>core.openGroupEditor(null); nav.appendChild(addG); }
   }
-  if(core.editing) wireSidebarDnD(core,nav); side.appendChild(nav);
+  wireSidebarDnD(core,nav); side.appendChild(nav);
   const modeHub=el('div','fx-mode-hub');
   const modeCurrent=am==='privacy'?'隐私模式':am?am.name:'全部收藏';
   const modeSwitch=el('button','fx-mode-hub-main'+(am!==null?' on':'')); modeSwitch.type='button'; modeSwitch.dataset.tour='mode';
@@ -142,6 +142,7 @@ function navGroup(core,g){ const out=[]; const folders=(g.items||[]).filter(x=>c
   // 二级菜单：分组 → 其（顶层）文件夹子项，点击进入该子项页面（更深子文件夹在页内进入，不塞侧栏）
   if(folders.length && (isTreeOpen(core,g.id)||activeInGroup)) folders.forEach(fd=>{
     const r=el('button','fx-navitem fx-navfolder'); r.title=fd.name||'文件夹'; r.dataset.k=fd.id;
+    r.dataset.gid=g.id; r.dataset.folderId=fd.id;
     const ico=el('span','fx-ni-ico lucide-mask'); ico.style.webkitMaskImage=ico.style.maskImage=`url("${core.lucide('folder')}")`; ico.style.background='currentColor';
     r.append(ico, el('span','fx-ni-nm',fd.name||'文件夹'), el('span','fx-ni-ct',String((fd.items||[]).length)));
     r.onclick=()=>go(core,fd.id);   // 进入文件夹子页面
@@ -296,7 +297,7 @@ function buildAsk(core){
   const results=el('div','fx-ask-results'); results.hidden=true;
   const status=el('div','fx-ask-status'); status.hidden=true; status.setAttribute('role','status'); status.setAttribute('aria-live','polite');
   const cv=prov.querySelector('.fx-ask-prov-cv');
-  let feedbackTimer=null;
+  let feedbackTimer=null, searchEditing=false;
   const clearFeedback=()=>{ clearTimeout(feedbackTimer); status.hidden=true; status.textContent=''; prov.classList.remove('copied'); prov.setAttribute('aria-label','切换搜索引擎 / AI'); prov.title='切换搜索引擎 / AI'; };
   const showFeedback=(message,kind)=>{ const text=kind==='ok'?'已复制，请粘贴':message; status.textContent=text; status.className='fx-ask-status '+(kind||''); status.hidden=false; prov.classList.toggle('copied',kind==='ok'); prov.setAttribute('aria-label',text); prov.title=text; clearTimeout(feedbackTimer); feedbackTimer=setTimeout(clearFeedback,8000); };
   const setProv=()=>{ const p=core.PROVIDERS[core.activeProvider()]; cv.textContent=''; const img=new Image(); img.onerror=()=>{cv.textContent=p.name[0];}; img.src=picon(p); cv.appendChild(img);
@@ -315,14 +316,33 @@ function buildAsk(core){
     }); wireMenuKeyboard(menu,()=>closeMenu(true)); };
   prov.onclick=e=>{ e.stopPropagation(); if(menu.hidden){ buildMenu(); menu.hidden=false; prov.classList.add('open'); prov.setAttribute('aria-expanded','true'); setTimeout(()=>menu.querySelector('[role="menuitem"]')?.focus(),0); } else closeMenu(true); };
   setProv();
-  inp.addEventListener('input',()=>{ clearFeedback(); const q=inp.value.trim().toLowerCase(); results.textContent=''; if(!q){results.hidden=true;return;}
+  const clearSearchDrag=()=>{ $$('.fx-res.fx-dragging,.fx-droptarget').forEach(node=>node.classList.remove('fx-dragging','fx-droptarget')); if(drag&&drag.type==='search')drag=null; };
+  const pinSearchResult=iid=>{ const entry=core.allItems().find(row=>row.item.id===iid); if(!entry)return false; const already=entry.item.fav===true&&(core.cfg.favOrder||[]).includes(iid); core.pinFavorite(entry.item); core.rerender(); core.toast(already?'已在首页常用':'已固定到首页常用','ok'); return true; };
+  const renderResults=()=>{ clearFeedback(); const q=inp.value.trim().toLowerCase(); results.textContent=''; if(!q){results.hidden=true;clearSearchDrag();return;}
     const ms=[]; core.allItems().forEach(({item,group})=>{ if((item.name+' '+item.url+' '+(item.note||'')).toLowerCase().includes(q)) ms.push({it:item,g:group}); });
     if(!ms.length){results.hidden=true;return;}
-    results.appendChild(el('div','fx-res-h','我的收藏 · 点击打开'));
-    ms.slice(0,7).forEach(({it,g})=>{ const r=el('a','fx-res'); r.href=safeHref(it.url); r.target=core.settings.openIn==='_self'?'_self':'_blank'; r.rel='noopener';
-      const ico=el('span','fx-res-ico'); core.mountIcon(ico,it,32); r.append(ico, el('span','fx-res-nm',it.name), el('span','fx-res-g',g.name)); r.addEventListener('click',()=>core.recordVisit(it)); results.appendChild(r); });
-    results.hidden=false; });
-  inp.addEventListener('keydown',e=>{ if(e.key==='Escape'){inp.value='';results.hidden=true;closeMenu();} });
+    const head=el('div','fx-res-h'), copy=el('div','fx-res-h-copy'); copy.append(el('strong',null,'我的收藏'),el('span',null,'拖动结果到首页或左侧收藏夹'));
+    const tools=el('div','fx-res-tools');
+    const homeDrop=el('button','fx-res-home-drop'); homeDrop.type='button'; homeDrop.setAttribute('aria-label','固定第一条搜索结果到首页（也可拖放）'); homeDrop.append(mico('house',13),el('span',null,'首页'));
+    homeDrop.onclick=e=>{e.preventDefault();e.stopPropagation();pinSearchResult(ms[0].it.id);};
+    homeDrop.addEventListener('dragover',e=>{ if(drag?.type==='search'){e.preventDefault();homeDrop.classList.add('fx-droptarget');} });
+    homeDrop.addEventListener('dragleave',()=>homeDrop.classList.remove('fx-droptarget'));
+    homeDrop.addEventListener('drop',e=>{ if(drag?.type!=='search')return; e.preventDefault();e.stopPropagation(); const iid=drag.iid; clearSearchDrag(); pinSearchResult(iid); });
+    const editToggle=el('button','fx-res-edit-toggle'+(searchEditing?' on':'')); editToggle.type='button'; editToggle.setAttribute('aria-label','编辑搜索结果'); editToggle.setAttribute('aria-pressed',String(searchEditing)); editToggle.append(mico('pencil',13),el('span',null,'编辑'));
+    editToggle.onclick=e=>{e.preventDefault();e.stopPropagation();searchEditing=!searchEditing;renderResults();setTimeout(()=>results.querySelector('.fx-res-edit-toggle')?.focus(),0);};
+    tools.append(homeDrop,editToggle); head.append(copy,tools); results.appendChild(head);
+    ms.slice(0,7).forEach(({it,g})=>{ const row=el('div','fx-res'); row.dataset.iid=it.id; row.draggable=true; row.setAttribute('aria-label',`${it.name}，可拖动`);
+      const grip=el('span','fx-res-drag'); grip.appendChild(mico('grip-vertical',13)); grip.setAttribute('aria-hidden','true');
+      const link=el('a','fx-res-link'); link.href=safeHref(it.url); link.target=core.settings.openIn==='_self'?'_self':'_blank'; link.rel='noopener';
+      const ico=el('span','fx-res-ico'); core.mountIcon(ico,it,32); link.append(ico,el('span','fx-res-nm',it.name),el('span','fx-res-g',g.name)); link.addEventListener('click',()=>core.recordVisit(it));
+      row.append(grip,link);
+      if(searchEditing){ const edit=el('button','fx-res-edit'); edit.type='button'; edit.setAttribute('aria-label','编辑 '+it.name); edit.appendChild(mico('pencil',14)); edit.onclick=e=>{e.preventDefault();e.stopPropagation();const current=core.allItems().find(entry=>entry.item.id===it.id);if(current)core.openItemEditor(current.item,current.group.id);};row.appendChild(edit); }
+      row.addEventListener('dragstart',e=>{drag={type:'search',iid:it.id};row.classList.add('fx-dragging');e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain',it.id);}catch{}});
+      row.addEventListener('dragend',()=>clearSearchDrag());
+      results.appendChild(row); });
+    results.hidden=false; };
+  inp.addEventListener('input',renderResults);
+  inp.addEventListener('keydown',e=>{ if(e.key==='Escape'){inp.value='';searchEditing=false;results.hidden=true;clearSearchDrag();closeMenu();} });
   box.addEventListener('submit',e=>{e.preventDefault();core.submitAsk(inp.value,{feedback:showFeedback});});
   // D4: 单例外点监听——重挂前先解绑旧的，否则每次 rerender 累积一个持有游离 DOM 的监听器（泄漏）
   if(askOutsideHandler) document.removeEventListener('click', askOutsideHandler);
@@ -707,19 +727,26 @@ function wireFavDnD(core,row){
     drag=null; });
 }
 function wireSidebarDnD(core,nav){
-  if(!core.editing)return;
   const add=nav.querySelector('.fx-addgroup');
-  nav.addEventListener('dragover',e=>{ if(drag&&drag.type==='group'){ e.preventDefault(); const after=afterEl(nav,'.fx-navitem[data-gid]',e.clientX,e.clientY); const d=nav.querySelector('.fx-navitem.fx-dragging'); if(!d)return; if(after==null)nav.insertBefore(d,add); else nav.insertBefore(d,after); } });
-  nav.addEventListener('drop',e=>{ if(drag&&drag.type==='group'){ e.preventDefault(); const order=$$('.fx-navitem[data-gid]',nav).map(c=>c.dataset.gid); core.groups.sort((a,b)=>order.indexOf(a.id)-order.indexOf(b.id)); drag=null; core.save(true); } });
-  setTimeout(()=>$$('.fx-navitem[data-gid]',nav).forEach(item=>{
-    item.draggable=true;
-    item.addEventListener('dragstart',e=>{ drag={type:'group',gid:item.dataset.gid}; item.classList.add('fx-dragging'); e.dataTransfer.effectAllowed='move'; });
-    item.addEventListener('dragend',()=>{item.classList.remove('fx-dragging');drag=null;});
+  const clearSearchTargets=()=>$$('.fx-navitem.fx-droptarget',nav).forEach(node=>node.classList.remove('fx-droptarget'));
+  const searchEntry=()=>drag?.type==='search'?core.allItems().find(entry=>entry.item.id===drag.iid):null;
+  if(core.editing){ nav.addEventListener('dragover',e=>{ if(drag&&drag.type==='group'){ e.preventDefault(); const after=afterEl(nav,'.fx-navitem[data-gid]:not(.fx-navfolder)',e.clientX,e.clientY); const d=nav.querySelector('.fx-navitem.fx-dragging'); if(!d)return; if(after==null)nav.insertBefore(d,add); else nav.insertBefore(d,after); } });
+    nav.addEventListener('drop',e=>{ if(drag&&drag.type==='group'){ e.preventDefault(); const order=$$('.fx-navitem[data-gid]:not(.fx-navfolder)',nav).map(c=>c.dataset.gid); core.groups.sort((a,b)=>order.indexOf(a.id)-order.indexOf(b.id)); drag=null; core.save(true); } }); }
+  setTimeout(()=>$$('.fx-navitem[data-gid]:not(.fx-navfolder)',nav).forEach(item=>{
+    if(core.editing){ item.draggable=true;
+      item.addEventListener('dragstart',e=>{ drag={type:'group',gid:item.dataset.gid}; item.classList.add('fx-dragging'); e.dataTransfer.effectAllowed='move'; });
+      item.addEventListener('dragend',()=>{item.classList.remove('fx-dragging');drag=null;}); }
     // 卡片拖到分组上 → 归类
-    item.addEventListener('dragover',e=>{ if(drag&&drag.type==='card'){ e.preventDefault(); item.classList.add('fx-droptarget'); } });
+    item.addEventListener('dragover',e=>{ if(drag&&(drag.type==='card'||drag.type==='search')){ e.preventDefault(); item.classList.add('fx-droptarget'); } });
     item.addEventListener('dragleave',()=>item.classList.remove('fx-droptarget'));
-    item.addEventListener('drop',e=>{ if(drag&&drag.type==='card'){ e.preventDefault(); item.classList.remove('fx-droptarget'); const gid=item.dataset.gid, iid=drag.iid; if(core.moveItemToGroup(iid,gid)){ const gn=(core.groups.find(g=>g.id===gid)||{}).name; core.toast('已移动到「'+gn+'」','ok'); drag=null; core.rerender(); } } });
+    item.addEventListener('drop',e=>{ if(drag&&(drag.type==='card'||drag.type==='search')){ e.preventDefault(); const gid=item.dataset.gid,iid=drag.iid,entry=core.allItems().find(row=>row.item.id===iid),gn=(core.groups.find(g=>g.id===gid)||{}).name; clearSearchTargets();
+      if(entry&&entry.group.id===gid&&!entry.folder){ drag=null; core.toast('已经位于「'+gn+'」','ok'); return; }
+      if(core.moveItemToGroup(iid,gid)){core.toast('已移动到「'+gn+'」','ok');core.rerender();} drag=null; } });
   }),0);
+  setTimeout(()=>{
+    const home=nav.querySelector('.fx-navitem[data-k="home"]'); if(home){ home.addEventListener('dragover',e=>{if(drag?.type==='search'){e.preventDefault();home.classList.add('fx-droptarget');}}); home.addEventListener('dragleave',()=>home.classList.remove('fx-droptarget')); home.addEventListener('drop',e=>{if(drag?.type!=='search')return;e.preventDefault();const entry=searchEntry();clearSearchTargets();drag=null;if(entry){const already=entry.item.fav===true&&(core.cfg.favOrder||[]).includes(entry.item.id);core.pinFavorite(entry.item);core.rerender();core.toast(already?'已在首页常用':'已固定到首页常用','ok');}}); }
+    $$('.fx-navfolder[data-folder-id]',nav).forEach(folderNode=>{ folderNode.addEventListener('dragover',e=>{if(drag?.type==='search'){e.preventDefault();e.stopPropagation();folderNode.classList.add('fx-droptarget');}}); folderNode.addEventListener('dragleave',()=>folderNode.classList.remove('fx-droptarget')); folderNode.addEventListener('drop',e=>{if(drag?.type!=='search')return;e.preventDefault();e.stopPropagation();const entry=searchEntry(),group=core.groups.find(g=>g.id===folderNode.dataset.gid),folder=group&&findItemById(core,group,folderNode.dataset.folderId);clearSearchTargets();drag=null;if(entry&&folder&&entry.group.id===group.id&&entry.folder?.id===folder.id)core.toast('已经位于「'+folder.name+'」','ok');else if(entry&&folder&&core.moveItemToFolder(entry.item,folder,group))core.toast('已移入「'+folder.name+'」','ok');}); });
+  },0);
 }
 function afterEl(box,sel,x,y){ const els=$$(sel+':not(.fx-dragging)',box); let best=null,bestD=Infinity,before=true;
   for(const c of els){ const r=c.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2,d=Math.hypot(cx-x,cy-y); if(d<bestD){bestD=d;best=c;before=(y<cy-3)||(Math.abs(y-cy)<=3&&x<cx);} }

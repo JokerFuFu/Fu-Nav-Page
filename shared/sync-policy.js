@@ -87,6 +87,11 @@ export function applyInboxOps(input, operations, seenInput = new Set(), options 
         delete patch.id;
         Object.assign(hit.item, patch);
       }
+      if (op.favOrderAppend) {
+        const order = [...new Set(Array.isArray(config.favOrder) ? config.favOrder : [])];
+        if (!order.includes(op.favOrderAppend)) order.push(op.favOrderAppend);
+        config.favOrder = order;
+      }
       if ((op.tgid || op.tfid) && !tombstones.has(op.tgid) && !tombstones.has(op.tfid)) {
         const target = config.groups.find((group) => group.id === (op.tgid || hit.group.id));
         const folder = op.tfid ? locateItem(config.groups, op.tfid) : null;

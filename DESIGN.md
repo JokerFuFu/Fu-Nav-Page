@@ -203,6 +203,7 @@ background `#fafafb` · surface `#ffffff` · surface-raised `#f4f4f6` · surface
 ## Components
 
 - **search-box** — 英雄输入框。surface 底、lg 圆角、16 内距；左侧 provider 图标可点开下拉切换引擎/AI，右侧回车发送。聚焦时描边转 primary + ring 柔光。
+- **search-results-manager** — 搜索建议浮层内的收藏管理区。头部左侧为结果语义与拖放提示，右侧为 `首页` 投放 chip 和 `编辑` 开关；两者命中区 ≥32px，使用 Lucide 图标与 `aria-pressed`，不复用全局锁定状态。结果行仍以打开链接为主，整行可拖；拖动时源行降低透明度，首页/侧栏分组/已展开文件夹使用既有 accent + ring 投放高亮。普通态不常驻行级操作，局部编辑态才显示铅笔按钮。
 - **card** — widget 卡片基元（天气/待办/倒数日/硬件监控）。surface 底、md 圆角、16 内距、1px border；锁屏时钟不使用卡片基元。**card-hover**：升 surface-raised、上移 1px。
 - **tile** — 紧凑磁贴（分组页网站卡 `.fx-card`、首页常用 `.fx-fav`）。同 card 的 surface 底/md 圆角/1px border，但为高信息密度用 12 内距（比 widget 卡更紧）。
 - **button-primary** — 主操作。primary-strong 实心 + 白字（过 AA）、sm 圆角、纵 8 横 16 内距。

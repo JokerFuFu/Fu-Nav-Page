@@ -55,3 +55,4 @@
 - 2026-08-09 模态、菜单、抽屉和表单统一满足可访问基元：可访问名称、`role=dialog`、焦点约束/归还、Escape 关闭、背景 inert、密码字段不明文、390/760/1024 宽度无横向溢出；视觉改动后跑五宽度八表面的矩阵，不把人工验收转交给用户。
 - 2026-08-10 Chrome action popup 的首选尺寸不能写 `width:min(420px,100vw)` / `max-width:100vw`：popup 初始 viewport 依赖内容尺寸，`vw` 会形成尺寸协商循环并收缩到内容最小宽度；根页面用明确 `420px`，响应式只约束内部内容。
 - 2026-08-18 Manifest V3 的周期任务不能由新标签页 `setTimeout` 持有：页面导航、关闭或回收会让任务消失；必须由 Service Worker 的一次性 `chrome.alarms` 按持久化时间重建。后台任务只能查询既有 host 权限，不能在无用户手势时调用权限弹窗。
+- 2026-09-14 侧栏文件夹同时带 `data-gid` 与 `data-folder-id`，给分组装 drop listener 时必须排除 `.fx-navfolder`，否则同一 drop 会先被分组处理而落到顶层；移动端 flex 卡片必须 `min-width:0`，仅写 `flex:1 1 100%` 仍会被表单的 min-content 撑出视口。
