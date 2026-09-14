@@ -84,3 +84,7 @@ test('action popup declares a stable preferred width without viewport-unit negot
   assert.doesNotMatch(popupCss, /body\s*\{[^}]*\b(?:min-|max-)?width:[^;}]*vw/);
   assert.match(popupCss, /overflow-x:hidden/);
 });
+
+test('widget flex items can shrink to the mobile viewport',()=>{
+  assert.match(css,/\.fx-wcard\s*\{[^}]*min-width:0/);
+});

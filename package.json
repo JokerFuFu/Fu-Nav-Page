@@ -6,6 +6,7 @@
     "test": "node --test",
     "verify:static": "node tools/verify-static.mjs",
     "verify:e2e": "node tools/product-e2e-check.cjs .",
-    "verify:wallpaper-background": "node tools/wallpaper-background-check.cjs ."
+    "verify:wallpaper-background": "node tools/wallpaper-background-check.cjs .",
+    "verify:search-results": "node tools/search-results-check.cjs ."
   }
 }

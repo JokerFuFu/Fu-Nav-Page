@@ -12,8 +12,8 @@ import { applyBackground, cancelOnlineBackgroundRefresh, refreshOnlineBackground
 import { ACCENTS, DEFAULT_ACCENT_ID } from './accent-presets.js';
 import { checkAllLinks as runLinkCheck, maybeAutoCheck } from './link-check.js';
 import { putBgImage, deleteBgImage } from './bg-storage.js';
-import { readFavGrid, rankModeFavorites, visitItem, frecencyScore, rankByClicks, rankByFrecency } from './favorites.js?v=3.26.8';
-import { formatHeroClock, migrateHeroClock, normalizeHeroClock } from './hero-clock.js?v=3.26.8';
+import { readFavGrid, rankModeFavorites, visitItem, frecencyScore, rankByClicks, rankByFrecency } from './favorites.js?v=3.26.9';
+import { formatHeroClock, migrateHeroClock, normalizeHeroClock } from './hero-clock.js?v=3.26.9';
 import { setAskProvider as updateAskProvider, submitAsk as runSubmitAsk } from './provider-action.js';
 import { migrateConfig as migrateSchema } from './config-schema.js';
 import { injectSecrets } from './config-secrets.js';
@@ -384,8 +384,8 @@ class Core {
   async mountLayout(name){
     this.layout=name; this.settings.layout=name;
     if(!this.root){ this.root=$('#root'); }
-    try{ this.layoutMod = await import(`../layouts/${name}.js?v=3.26.8`); }
-    catch(e){ console.error('布局加载失败',name,e); if(name!=='fusion'){ this.layout='fusion'; this.settings.layout='fusion'; try{ this.layoutMod=await import('../layouts/fusion.js?v=3.26.8'); }catch{ this.layoutMod=null; } } else this.layoutMod=null; }
+    try{ this.layoutMod = await import(`../layouts/${name}.js?v=3.26.9`); }
+    catch(e){ console.error('布局加载失败',name,e); if(name!=='fusion'){ this.layout='fusion'; this.settings.layout='fusion'; try{ this.layoutMod=await import('../layouts/fusion.js?v=3.26.9'); }catch{ this.layoutMod=null; } } else this.layoutMod=null; }
     this.rerender();
     $$('.layout-switch [data-l]').forEach(b=>b.classList.toggle('on', b.dataset.l===name));
   }
@@ -469,7 +469,8 @@ class Core {
   /* 取消锁定后回到 frecency 自动段；历史 fav=false 排除语义仍由排序层尊重。 */
   unfavorite(item){ if(!item)return; delete item.fav; if(Array.isArray(this.cfg.favOrder)) this.cfg.favOrder=this.cfg.favOrder.filter(id=>id!==item.id); this.save(true); }
   /* 锁定到常用区 */
-  pinFavorite(item){ if(!item)return; item.fav=true; this.save(true); }
+  pinFavorite(item){ if(!item)return; item.fav=true; const order=[...new Set(Array.isArray(this.cfg.favOrder)?this.cfg.favOrder:[])]; if(!order.includes(item.id))order.push(item.id); this.cfg.favOrder=order;
+    this._queueLocalOp({op:'edit',id:item.id,patch:{fav:true},favOrderAppend:item.id}); this.save(true); }
   setFavOrder(ids){ this.cfg.favOrder=ids; this.save(true); }
   setEditing(value){ this.editing=!!value; this.settings.locked=!this.editing; document.body.classList.toggle('editing',this.editing); this.rerender(); return this.editing; }
   /* 递归定位（任意层级，含文件夹内）后移动到目标分组顶层；同组顶层为无操作，同组文件夹内=移出文件夹 */

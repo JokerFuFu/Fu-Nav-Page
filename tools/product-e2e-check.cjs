@@ -753,6 +753,82 @@ async function createSolidBackground(page, color) {
     assert(storedAfterAutoRefresh.fn_wallpaper_refresh_v1.lastFetchAt > oldFetchAt, 'scheduled wallpaper refresh did not persist its fetch time');
     evidence.wallpaperAutoRefresh = { frequencyMinutes: 1, sameDocument: true, imageChanged: true, fetchTimeAdvanced: true };
 
+    // 搜索结果管理：锁定态也能固定到首页、拖入已展开文件夹，并用局部编辑态复用网站编辑器。
+    await contextA.evaluate(({ baseUrl }) => new Promise(resolveSet => chrome.storage.local.get(['fn_config'], value => {
+      const cfg=value.fn_config;
+      cfg.settings={
+        ...cfg.settings,
+        activeMode:null,
+        modes:[],
+        locked:true,
+        treeOpen:{'g-search-target':true},
+        showClock:false,
+        showWeather:false,
+        showStatus:false,
+        widgets:[],
+        hiddenAgentCards:['reminder','calendar','digest'],
+        background:{enabled:false,mode:'none'},
+        bookmarkRecoveryV326:true,
+        bookmarkStructureRecoveryV327:true,
+      };
+      cfg.favOrder=[];
+      cfg.groups=[
+        {id:'g-search-source',name:'搜索源',icon:'search',color:'#4a55f3',items:[
+          {id:'i-search-manage',name:'搜索管理测试',url:`${baseUrl}/search-original`,note:'保留备注',tags:['保留标签'],aliases:['搜索别名'],icon:'',frame:true},
+        ]},
+        {id:'g-search-target',name:'目标收藏夹',icon:'folder',color:'#14b8a6',items:[
+          {id:'f-search-target',type:'folder',name:'目标文件夹',icon:'folder',items:[]},
+        ]},
+      ];
+      cfg.savedAt=Date.now()+9000;
+      chrome.storage.local.set({fn_config:cfg},resolveSet);
+    })),{baseUrl:base});
+    await contextA.goto(`chrome-extension://${extensionId}/newtab.html?e2e=search-result-management`,{waitUntil:'domcontentloaded'});
+    await contextA.waitForSelector('.lay-fusion');
+    const searchInput=contextA.getByLabel('搜索或询问');
+    await searchInput.fill('搜索管理测试');
+    let searchResult=contextA.locator('.fx-res[data-iid="i-search-manage"]');
+    await searchResult.waitFor();
+    await searchResult.dragTo(contextA.getByRole('button',{name:'固定第一条搜索结果到首页（也可拖放）'}));
+    await contextA.waitForFunction(()=>new Promise(resolveGet=>chrome.storage.local.get(['fn_config'],value=>{
+      const cfg=value.fn_config, item=cfg.groups.flatMap(group=>group.items).find(entry=>entry.id==='i-search-manage');
+      resolveGet(item?.fav===true&&cfg.favOrder.filter(id=>id==='i-search-manage').length===1);
+    })));
+    await contextA.locator('.fx-fav[data-iid="i-search-manage"]').waitFor();
+    await contextA.getByLabel('搜索或询问').fill('搜索管理测试');
+    searchResult=contextA.locator('.fx-res[data-iid="i-search-manage"]');
+    const folderTarget=contextA.locator('.fx-navfolder[data-folder-id="f-search-target"]');
+    await folderTarget.waitFor();
+    await searchResult.dragTo(folderTarget);
+    await contextA.waitForFunction(()=>new Promise(resolveGet=>chrome.storage.local.get(['fn_config'],value=>{
+      const group=value.fn_config.groups.find(entry=>entry.id==='g-search-target');
+      resolveGet(group?.items?.[0]?.items?.some(item=>item.id==='i-search-manage'));
+    })));
+
+    await contextA.getByLabel('搜索或询问').fill('搜索管理测试');
+    await contextA.getByRole('button',{name:'编辑搜索结果'}).click();
+    const localEditState=await contextA.evaluate(()=>({bodyEditing:document.body.classList.contains('editing')}));
+    assert(localEditState.bodyEditing===false,'local search edit mode unlocked the whole app');
+    await contextA.getByRole('button',{name:'编辑 搜索管理测试'}).click();
+    const itemEditor=contextA.getByRole('dialog',{name:'编辑网站'});
+    await itemEditor.getByRole('textbox',{name:'名称',exact:true}).fill('搜索管理已编辑');
+    await itemEditor.getByRole('textbox',{name:'网址',exact:true}).fill(`${base}/search-edited`);
+    await itemEditor.getByRole('textbox',{name:'备注',exact:true}).fill('编辑后的备注');
+    await itemEditor.getByRole('button',{name:'保存',exact:true}).click();
+    await contextA.waitForFunction(()=>new Promise(resolveGet=>chrome.storage.local.get(['fn_config'],value=>{
+      const matches=find=>{for(const group of value.fn_config.groups){const stack=[...(group.items||[])];while(stack.length){const item=stack.shift();if(item?.id==='i-search-manage')return item;if(item?.type==='folder')stack.push(...(item.items||[]));}}return null;};
+      resolveGet(matches()?.name==='搜索管理已编辑');
+    })));
+    const searchManagedState=await storage(contextA,['fn_config']);
+    const managedHits=findNodes(searchManagedState.fn_config,item=>item.id==='i-search-manage');
+    assert(managedHits.length===1,`search management duplicated the site: ${managedHits.length}`);
+    const managed=managedHits[0];
+    assert(managed.path.join('/')==='目标收藏夹/目标文件夹/搜索管理已编辑',`search drag target mismatch: ${managed.path.join('/')}`);
+    assert(managed.item.fav===true&&searchManagedState.fn_config.favOrder.filter(id=>id==='i-search-manage').length===1,'search home drop lost or duplicated favorite state');
+    assert(managed.item.url===`${base}/search-edited`&&managed.item.note==='编辑后的备注'&&managed.item.tags?.[0]==='保留标签'&&managed.item.frame===true,'search edit lost website metadata');
+    assert(searchManagedState.fn_config.settings.locked===true,'local search edit mode changed the global lock setting');
+    evidence.searchResultManagement={homePinned:true,targetPath:managed.path,edited:true,unique:true,globalLocked:true};
+
     assert(errors.length === 0, `console errors: ${errors.join(' | ')}`);
     console.log(JSON.stringify({ ok: true, extensionId, evidence, davRequests: davRequests.map(request => ({ method: request.method, url: request.url, bodyBytes: request.body.length })), consoleErrors: errors.length }, null, 2));
   } finally {

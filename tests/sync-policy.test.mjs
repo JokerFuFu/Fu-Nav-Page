@@ -39,6 +39,22 @@ test('stale editor rebases its local operation onto a newer cross-tab deletion',
   assert.equal(result.config.groups[0].items[0].name, 'edited in stale tab');
 });
 
+test('favorite pin replay preserves remote edits and appends order once',()=>{
+  const stale=makeConfig({groups:[makeGroup('g1',[makeSite('pin')]),makeGroup('g2',[])]});
+  stale.favOrder=[]; stale.savedAt=100;
+  const latest=makeConfig({groups:[makeGroup('g1',[makeSite('remote')]),makeGroup('g2',[makeSite('pin')])]});
+  latest.favOrder=[]; latest.savedAt=200;
+  const operation={opId:'pin-op',op:'edit',id:'pin',patch:{fav:true},favOrderAppend:'pin'};
+
+  const first=rebaseLocalOps(stale,latest,[operation]);
+  const second=applyInboxOps(first.config,[operation],first.seenOpIds);
+
+  assert.equal(first.config.groups[0].items.some(item=>item.id==='remote'),true);
+  assert.equal(first.config.groups[1].items.find(item=>item.id==='pin').fav,true);
+  assert.deepEqual(first.config.favOrder,['pin']);
+  assert.deepEqual(second.config.favOrder,['pin']);
+});
+
 test('add recreates a missing target group once and rejects duplicate URLs', () => {
   const config = makeConfig();
   const site = makeSite('new', { url: 'https://example.com/' });

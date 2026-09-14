@@ -103,7 +103,15 @@ body.editing .lay-fusion .fx-navitem[data-gid]{ cursor:grab; }
 .lay-fusion .fx-ask-box input::placeholder{ color:var(--text-3); }
 .lay-fusion .fx-ask-send{ width:34px; height:34px; border-radius:var(--r-sm); background:var(--accent-strong); color:#fff; font-size:17px; display:grid; place-items:center; flex:0 0 34px; }
 .lay-fusion .fx-ask-send:hover{ filter:brightness(1.08); }
-.lay-fusion .fx-res-h{ font-size:11px; color:var(--text-3); padding:var(--s1) var(--s2) var(--s1); }
+.lay-fusion .fx-res-h{ display:flex; align-items:center; gap:var(--s3); min-height:32px; color:var(--text-3); padding:var(--s1) var(--s2); }
+.lay-fusion .fx-res-h-copy{ min-width:0; flex:1; display:flex; flex-direction:column; gap:2px; }
+.lay-fusion .fx-res-h-copy strong{ color:var(--text-2); font-size:12px; font-weight:600; }
+.lay-fusion .fx-res-h-copy span{ font-size:11px; }
+.lay-fusion .fx-res-tools{ display:flex; align-items:center; gap:var(--s1); flex:0 0 auto; }
+.lay-fusion .fx-res-home-drop,.lay-fusion .fx-res-edit-toggle{ min-height:32px; display:flex; align-items:center; gap:var(--s1); padding:0 var(--s2); border:1px solid var(--border); border-radius:999px; background:var(--surface-2); color:var(--text-2); font-size:11px; }
+.lay-fusion .fx-res-home-drop{ cursor:copy; }
+.lay-fusion .fx-res-edit-toggle:hover,.lay-fusion .fx-res-edit-toggle.on{ color:var(--accent); border-color:var(--accent); }
+.lay-fusion .fx-res-home-drop.fx-droptarget{ color:#fff; border-color:var(--accent); background:var(--accent-strong); box-shadow:0 0 0 2px var(--ring); }
 /* provider 下拉 */
 .lay-fusion .fx-provmenu{ position:absolute; left:0; top:60px; z-index:25; min-width:208px; background:var(--surface-3); border:1px solid var(--border-2); border-radius:var(--r-md); box-shadow:var(--shadow); padding:var(--s2); animation:fnFade .1s ease; }   /* menu 组件: surface-overlay + 主题化阴影 */
 .lay-fusion .fx-provmenu-h{ font-size:11px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--text-3); padding:var(--s2) var(--s2) var(--s1); }
@@ -120,8 +128,13 @@ body.editing .lay-fusion .fx-navitem[data-gid]{ cursor:grab; }
 .lay-fusion .fx-ask-status{ position:absolute; top:calc(100% + var(--s2)); left:0; font-size:12px; color:var(--text-2); }
 .lay-fusion .fx-ask-status.ok{ color:var(--ok); }
 .lay-fusion .fx-ask-status.err{ color:var(--danger); }
-.lay-fusion .fx-res{ display:flex; align-items:center; gap:var(--s3); padding:var(--s2) var(--s3); border-radius:var(--r-sm); }
+.lay-fusion .fx-res{ display:flex; align-items:center; gap:var(--s2); min-height:44px; padding:var(--s1) var(--s2); border-radius:var(--r-sm); cursor:grab; }
 .lay-fusion .fx-res:hover{ background:var(--surface-2); }
+.lay-fusion .fx-res.fx-dragging{ opacity:.48; cursor:grabbing; }
+.lay-fusion .fx-res-drag{ width:14px; height:14px; color:var(--text-3); opacity:.5; flex:0 0 14px; }
+.lay-fusion .fx-res-link{ min-width:0; flex:1; display:flex; align-items:center; gap:var(--s3); }
+.lay-fusion .fx-res-edit{ width:32px; height:32px; display:grid; place-items:center; flex:0 0 32px; border-radius:var(--r-sm); color:var(--text-3); }
+.lay-fusion .fx-res-edit:hover{ color:var(--accent); background:var(--surface-3); }
 .lay-fusion .fx-res-ico{ width:24px; height:24px; border-radius:var(--r-sm); overflow:hidden; display:grid; place-items:center; background:var(--surface-2); flex:0 0 24px; }
 .lay-fusion .fx-res-ico img{ width:100%; height:100%; object-fit:contain; padding:var(--s1); }
 .lay-fusion .fx-res-ico.is-letter{ color:#fff; font-weight:700; font-size:11px; }
@@ -131,7 +144,7 @@ body.editing .lay-fusion .fx-navitem[data-gid]{ cursor:grab; }
 /* 卡片：天气/待办/倒数日/本机 —— 等宽网格平铺，不再有孤卡 */
 .lay-fusion .fx-wcards{ display:flex; flex-wrap:wrap; justify-content:center; gap:calc(var(--s3) * var(--home-scale)); width:100%; max-width:calc(900px * var(--home-scale)); }
 .lay-fusion .fx-wcards:empty{ display:none; }
-.lay-fusion .fx-wcard{ flex:0 1 calc(210px * var(--home-scale)); position:relative; min-height:calc(132px * var(--home-scale)); display:flex; flex-direction:column; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md); padding:calc(var(--s4) * var(--home-scale)); transition:border-color var(--t), background var(--t); }
+.lay-fusion .fx-wcard{ flex:0 1 calc(210px * var(--home-scale)); min-width:0; position:relative; min-height:calc(132px * var(--home-scale)); display:flex; flex-direction:column; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md); padding:calc(var(--s4) * var(--home-scale)); transition:border-color var(--t), background var(--t); }
 .lay-fusion .density-compact .fx-wcard{ min-height:calc(96px * var(--home-scale)); padding:calc(var(--s3) * var(--home-scale)); }
 body.bg-photo .lay-fusion .fx-wcard{
   background: var(--surface-glass);
@@ -407,6 +420,7 @@ body:not(.editing) .lay-fusion .fx-card:active{ transform:translateY(0) scale(.9
 /* 卡片拖到分组上的放置高亮 */
 .lay-fusion .fx-navitem.fx-droptarget{ background:var(--accent-strong); color:#fff; box-shadow:0 0 0 2px var(--accent); }
 .lay-fusion .fx-navitem.fx-droptarget .fx-ni-ico{ color:#fff; }
+.lay-fusion .fx-navfolder.fx-droptarget{ background:var(--accent-strong); color:#fff; box-shadow:0 0 0 2px var(--ring); }
 
 @media (max-width:760px){
   body.sidebar-open{ overflow:hidden; }
@@ -443,6 +457,7 @@ body:not(.editing) .lay-fusion .fx-card:active{ transform:translateY(0) scale(.9
 
 @media (prefers-reduced-motion: reduce){
   .lay-fusion .fx-side,.lay-fusion .fx-side-scrim{ transition-duration:.01ms !important; }
+  .lay-fusion .fx-res,.lay-fusion .fx-res-home-drop,.lay-fusion .fx-res-edit-toggle{ transition-duration:.01ms !important; }
 }
 
 /* 首页背景切换：悬浮入口 + 快捷面板 */
